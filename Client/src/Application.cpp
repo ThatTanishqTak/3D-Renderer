@@ -1,5 +1,7 @@
 #include "Application.h"
 
+#include <raylib/include/raylib.h>
+
 Application::Application()
 {
 	Init();
@@ -22,5 +24,10 @@ void Application::Shutdown()
 
 void Application::Run()
 {
-	m_Window.Run();
+	while (!WindowShouldClose())
+	{
+		m_InputManager.OnUpdate();
+
+		m_Renderer.Draw();
+	}
 }

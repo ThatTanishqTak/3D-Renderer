@@ -15,15 +15,13 @@ project "Engine"
     includedirs
 	{
 		"src",
-		"%{IncludeDir.glfw}",
-		"%{IncludeDir.glad}"
+		"%{IncludeDir.raylib}"
     }
 
     links
 	{
-		"GLFW",
-		"glad",
-        "opengl32.lib"
+        "%{LibraryDir.raylib}",
+        "winmm.lib"
     }
 
     filter "system:windows"

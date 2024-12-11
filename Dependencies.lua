@@ -1,4 +1,5 @@
 IncludeDir = {}
+IncludeDir["raylib"] = "%{wks.location}/Engine/vendor/raylib/include"
 
-IncludeDir["glfw"] = "%{wks.location}/Engine/vendor/glfw/include"
-IncludeDir["glad"] = "%{wks.location}/Engine/vendor/glad/include"
+LibraryDir = {}
+LibraryDir["raylib"] = "%{wks.location}/Engine/vendor/raylib/lib/raylib.lib"

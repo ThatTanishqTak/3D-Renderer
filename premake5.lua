@@ -17,11 +17,5 @@ workspace "3D Renderer"
 
 outputDir = "%{cfg.buildcfg}-%{cfg.system}-%{cfg.architecture}"
 
-group "Dependencies"
-	include "Engine/vendor/GLFW"
-	include "Engine/vendor/glad"
-group ""
-
-
 include "Engine"
 include "Client"
