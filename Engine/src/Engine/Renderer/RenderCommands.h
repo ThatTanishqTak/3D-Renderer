@@ -2,9 +2,9 @@
 
 namespace Engine
 {
-	class InputManager
+	class RenderCommands
 	{
 	public:
-		void OnUpdate();
+		void Draw();
 	};
 }

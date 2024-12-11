@@ -26,8 +26,6 @@ void Application::Run()
 {
 	while (!WindowShouldClose())
 	{
-		m_InputManager.OnUpdate();
-
 		m_Renderer.Draw();
 	}
 }

@@ -15,12 +15,14 @@ project "Engine"
     includedirs
 	{
 		"src",
-		"%{IncludeDir.raylib}"
+		"%{IncludeDir.raylib}",
+        "%{IncludeDir.ImGui}"
     }
 
     links
 	{
         "%{LibraryDir.raylib}",
+        "ImGui",
         "winmm.lib"
     }
 

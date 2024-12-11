@@ -19,3 +19,7 @@ outputDir = "%{cfg.buildcfg}-%{cfg.system}-%{cfg.architecture}"
 
 include "Engine"
 include "Client"
+
+group "Dependencies"
+	include "Engine/vendor/imgui"
+group ""

@@ -1,6 +1,6 @@
 #pragma once
 
-//#include "RenderCommand.h"
+#include "RenderCommands.h"
 
 namespace Engine
 {
@@ -10,6 +10,6 @@ namespace Engine
 		void Draw();
 
 	private:
-		//RenderCommand render;
+		RenderCommands render;
 	};
 }
