@@ -22,8 +22,8 @@ project "Engine"
     links
 	{
         "%{LibraryDir.raylib}",
-        "ImGui",
-        "winmm.lib"
+        "%{LibraryDir.Winmm}",
+        "ImGui"
     }
 
     filter "system:windows"

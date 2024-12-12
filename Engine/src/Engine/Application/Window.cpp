@@ -5,9 +5,9 @@
 
 namespace Engine
 {
-	Window::Window() : m_WindowWidth(specs.Width), m_WindowHeight(specs.Height), m_Title(specs.Title)
+	Window::Window() : m_WindowWidth(specs.Width), m_WindowHeight(specs.Height), m_Title(specs.Title), m_Running(true)
 	{
-
+		
 	}
 
 	void Window::Init()

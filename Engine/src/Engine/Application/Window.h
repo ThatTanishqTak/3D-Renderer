@@ -12,6 +12,9 @@ namespace Engine
 		void Init();
 		void Shutdown();
 
+	public:
+		bool m_Running;
+
 	private:
 		int m_WindowWidth;
 		int m_WindowHeight;

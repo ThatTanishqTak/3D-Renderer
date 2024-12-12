@@ -10,6 +10,9 @@ public:
 	~Application();
 
 	void Run();
+
+public:
+	bool m_Running = false;
 	
 private:
 	void Init();

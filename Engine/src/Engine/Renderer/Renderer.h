@@ -2,14 +2,17 @@
 
 #include "RenderCommands.h"
 
+//#include <raylib.h>
+
 namespace Engine
 {
 	class Renderer
 	{
 	public:
 		void Draw();
+		//Camera3D GetCamera();
 
 	private:
-		RenderCommands render;
+		RenderCommands m_RenderCommands;
 	};
 }

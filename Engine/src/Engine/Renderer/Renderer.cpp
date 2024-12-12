@@ -1,13 +1,13 @@
-#include <raylib.h>
-
 #include "Renderer.h"
+
+#include <raylib.h>
 
 namespace Engine
 {
-	Camera3D camera;
-
 	static Camera3D GetCamera()
 	{
+		Camera3D camera;
+
 		camera = { 0 };
 
 		camera.position = { 10.0f, 10.0f, 10.0f };  // Camera position
@@ -26,29 +26,7 @@ namespace Engine
 		BeginMode3D(GetCamera());
 
 		// Draw calls
-		render.Draw();
-
-
-
-		if (IsKeyPressed(KEY_W))
-		{
-
-		}
-
-		if (IsKeyPressed(KEY_A))
-		{
-
-		}
-
-		if (IsKeyPressed(KEY_S))
-		{
-
-		}
-
-		if (IsKeyPressed(KEY_D))
-		{
-
-		}
+		m_RenderCommands.Draw();
 
 		EndMode3D();
 		EndDrawing();
