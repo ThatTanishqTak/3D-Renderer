@@ -17,7 +17,7 @@ namespace Engine
 
 	void RenderCommands::DrawUI()
 	{
-		m_Gui.Update();
+		m_UserInterface.Update();
 	}
 
 	void RenderCommands::ModelLoading(std::filesystem::path filePath)

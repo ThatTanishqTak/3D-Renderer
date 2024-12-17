@@ -24,14 +24,14 @@ namespace Engine
 		//m_RenderCommands.ModelLoading("../Models/bugatti.obj");
 		//m_RenderCommands.TextureLoading("../");
 
-		m_Gui.Init();
+		m_UserInterface.Init();
 	}
 
 	void Renderer::Shutdown()
 	{
 		//m_RenderCommands.ModelUnloading();
 
-		m_Gui.Shutdown();
+		m_UserInterface.Shutdown();
 	}
 
 	void Renderer::Update()
@@ -41,13 +41,13 @@ namespace Engine
 		{
 			m_RenderCommands.DrawUI();
 
-			//BeginMode3D(GetCamera());
-			//{
-			//	//m_RenderCommands.DrawGame();
-			//	//m_RenderCommands.ModelDrawing();
-			//
-			//	EndMode3D();
-			//}
+			BeginMode3D(GetCamera());
+			{
+				//m_RenderCommands.DrawGame();
+				//m_RenderCommands.ModelDrawing();
+			
+				EndMode3D();
+			}
 			EndDrawing();
 		}
 	}

@@ -2,7 +2,7 @@
 
 namespace Engine
 {
-	class GUI
+	class UserInterface
 	{
 	public:
 		void Init();

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../GUI/GUI.h"
+#include "../GUI/UserInterface.h"
 
 #include <filesystem>
 
@@ -21,6 +21,6 @@ namespace Engine
 		void ModelUnloading();
 
 	public:
-		GUI m_Gui;
+		UserInterface m_UserInterface;
 	};
 }

@@ -1,4 +1,4 @@
-#include "GUI.h"
+#include "UserInterface.h"
 
 #include <raylib.h>
 #include <rlImGui.h>
@@ -7,17 +7,17 @@
 
 namespace Engine
 {
-	void GUI::Init()
+	void UserInterface::Init()
 	{
 		rlImGuiSetup(true);
 	}
 
-	void GUI::Shutdown()
+	void UserInterface::Shutdown()
 	{
 		rlImGuiShutdown();
 	}
 
-	void GUI::Update()
+	void UserInterface::Update()
 	{
 		rlImGuiBegin();
 		ImGui::ShowDemoWindow();
