@@ -1,16 +1,53 @@
 #include "RenderCommands.h"
 
+#include <filesystem>
 #include <raylib.h>
 
 namespace Engine
 {
-	Vector3 cubePosition = { 0.0f, 0.0f, 0.0f };
+	Vector3 g_Position = { 0.0f, 0.0f, 0.0f };
+	Model g_Model;
+	Texture2D g_Texture;
+	bool show = true;
 
-	void RenderCommands::Draw()
+	void RenderCommands::DrawGame()
 	{
-		DrawCube(cubePosition, 2.0f, 2.0f, 2.0f, RED);
-		DrawCubeWires(cubePosition, 2.0f, 2.0f, 2.0f, MAROON);
+		DrawGrid(1000, 1.0f);
+	}
 
-		DrawGrid(10, 1.0f);
+	void RenderCommands::DrawUI()
+	{
+		m_Gui.Update();
+	}
+
+	void RenderCommands::ModelLoading(std::filesystem::path filePath)
+	{
+		std::string temp = filePath.string();
+		const char* l_path = temp.c_str();
+		
+		g_Model = LoadModel(l_path);
+	}
+
+	void RenderCommands::ModelDrawing()
+	{
+		DrawModel(g_Model, g_Position, 1.0f, WHITE);
+	}
+
+	void RenderCommands::TextureLoading(std::filesystem::path filePath)
+	{
+		std::string temp = filePath.string();
+		const char* l_path = temp.c_str();
+
+		g_Texture = LoadTexture(l_path);
+	}
+
+	void RenderCommands::TextureUnloading()
+	{
+		UnloadTexture(g_Texture);
+	}
+
+	void RenderCommands::ModelUnloading()
+	{
+		UnloadModel(g_Model);
 	}
 }

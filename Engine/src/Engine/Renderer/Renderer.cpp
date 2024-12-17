@@ -19,16 +19,36 @@ namespace Engine
 		return camera;
 	}
 
-	void Renderer::Draw()
+	void Renderer::Init()
 	{
-		BeginDrawing();
+		//m_RenderCommands.ModelLoading("../Models/bugatti.obj");
+		//m_RenderCommands.TextureLoading("../");
+
+		m_Gui.Init();
+	}
+
+	void Renderer::Shutdown()
+	{
+		//m_RenderCommands.ModelUnloading();
+
+		m_Gui.Shutdown();
+	}
+
+	void Renderer::Update()
+	{
 		ClearBackground(BLACK);
-		BeginMode3D(GetCamera());
+		BeginDrawing();
+		{
+			m_RenderCommands.DrawUI();
 
-		// Draw calls
-		m_RenderCommands.Draw();
-
-		EndMode3D();
-		EndDrawing();
+			//BeginMode3D(GetCamera());
+			//{
+			//	//m_RenderCommands.DrawGame();
+			//	//m_RenderCommands.ModelDrawing();
+			//
+			//	EndMode3D();
+			//}
+			EndDrawing();
+		}
 	}
 }

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Engine/Application/Window.h"
 #include "Engine/Renderer/Renderer.h"
 
 namespace Engine
@@ -7,12 +8,10 @@ namespace Engine
 	class InputManager
 	{
 	public:
-		void OnUpdate();
-
-	public:
-		Renderer m_Renderer;
+		void Update();
 
 	private:
-
+		Window m_Window;
+		Renderer m_Renderer;
 	};
 }

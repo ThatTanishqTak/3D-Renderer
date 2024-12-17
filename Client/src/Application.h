@@ -1,7 +1,9 @@
 #pragma once
 
 #include "Engine/Application/Window.h"
+#include "Engine/Event/InputManager.h"
 #include "Engine/Renderer/Renderer.h"
+#include "Engine/Renderer/RenderCommands.h"
 
 class Application
 {
@@ -10,9 +12,6 @@ public:
 	~Application();
 
 	void Run();
-
-public:
-	bool m_Running = false;
 	
 private:
 	void Init();
@@ -20,5 +19,7 @@ private:
 
 private:
 	Engine::Window m_Window;
+	Engine::InputManager m_InputManager;
 	Engine::Renderer m_Renderer;
+	Engine::RenderCommands m_RenderCommands;
 };

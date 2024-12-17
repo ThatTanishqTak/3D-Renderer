@@ -1,10 +1,16 @@
 project "Client"
     kind "ConsoleApp"
     language "C++"
+    cppdialect "C++20"
     staticruntime "Off"
 
-    targetdir("%{wks.location}/bin/" .. outputDir .. "/%{prj.name}")
-	objdir("%{wks.location}/bin-int/" .. outputDir .. "/%{prj.name}")
+    targetdir ("%{wks.location}/bin/" .. outputDir .. "/%{prj.name}")
+	objdir ("%{wks.location}/bin-int/" .. outputDir .. "/%{prj.name}")
+
+    defines
+	{
+		"_CRT_SECURE_NO_WARNINGS"
+	}
 
     files
     {
@@ -24,7 +30,7 @@ project "Client"
     }
 
     filter "system:windows"
-    systemversion "latest"
+        systemversion "latest"
 
     filter "configurations:Debug"
         runtime "Debug"

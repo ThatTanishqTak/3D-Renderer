@@ -1,18 +1,20 @@
 #pragma once
 
 #include "RenderCommands.h"
-
-//#include <raylib.h>
+#include "../GUI/GUI.h"
 
 namespace Engine
 {
 	class Renderer
 	{
 	public:
-		void Draw();
-		//Camera3D GetCamera();
+		void Init();
+		void Shutdown();
+
+		void Update();
 
 	private:
 		RenderCommands m_RenderCommands;
+		GUI m_Gui;
 	};
 }

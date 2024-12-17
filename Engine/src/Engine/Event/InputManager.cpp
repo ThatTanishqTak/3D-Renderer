@@ -1,11 +1,11 @@
 #include "InputManager.h"
-#include "Engine/Renderer/Renderer.h"
 
 #include <raylib.h>
+#include <iostream>
 
 namespace Engine
 {
-	void InputManager::OnUpdate()
+	void InputManager::Update()
 	{
 
 	}
