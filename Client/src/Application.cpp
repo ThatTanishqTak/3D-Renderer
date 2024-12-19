@@ -1,7 +1,5 @@
 #include "Application.h"
 
-#include <raylib/include/raylib.h>
-
 Application::Application()
 {
 	Init();

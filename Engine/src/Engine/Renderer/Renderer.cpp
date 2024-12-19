@@ -21,17 +21,14 @@ namespace Engine
 
 	void Renderer::Init()
 	{
-		//m_RenderCommands.ModelLoading("../Models/bugatti.obj");
-		//m_RenderCommands.TextureLoading("../");
-
-		m_UserInterface.Init();
+		m_RenderCommands.ModelLoading("../../../../Client/Models/scene.gltf");
+		m_RenderCommands.TextureLoading("../../../../Client/Models/textures/color1_o_baseColor.png");
 	}
 
 	void Renderer::Shutdown()
 	{
-		//m_RenderCommands.ModelUnloading();
-
-		m_UserInterface.Shutdown();
+		m_RenderCommands.ModelUnloading();
+		m_RenderCommands.TextureUnloading();
 	}
 
 	void Renderer::Update()
@@ -43,8 +40,8 @@ namespace Engine
 
 			BeginMode3D(GetCamera());
 			{
-				//m_RenderCommands.DrawGame();
-				//m_RenderCommands.ModelDrawing();
+				m_RenderCommands.DrawGame();
+				m_RenderCommands.ModelDrawing();
 			
 				EndMode3D();
 			}

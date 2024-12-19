@@ -1,7 +1,6 @@
 #pragma once
 
 #include "RenderCommands.h"
-#include "../GUI/UserInterface.h"
 
 namespace Engine
 {
@@ -15,6 +14,5 @@ namespace Engine
 
 	private:
 		RenderCommands m_RenderCommands;
-		UserInterface m_UserInterface;
 	};
 }

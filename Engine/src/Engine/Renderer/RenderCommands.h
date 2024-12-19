@@ -1,7 +1,5 @@
 #pragma once
 
-#include "../GUI/UserInterface.h"
-
 #include <filesystem>
 
 namespace Engine
@@ -19,8 +17,5 @@ namespace Engine
 
 		void TextureUnloading();
 		void ModelUnloading();
-
-	public:
-		UserInterface m_UserInterface;
 	};
 }

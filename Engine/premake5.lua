@@ -7,9 +7,6 @@ project "Engine"
     targetdir("%{wks.location}/bin/" .. outputDir .. "/%{prj.name}")
 	objdir("%{wks.location}/bin-int/" .. outputDir .. "/%{prj.name}")
 
-    --pchheader("Core.h")
-    --pchsource("src/Core.h")
-
     files
     {
         "src/**.h",
@@ -20,22 +17,19 @@ project "Engine"
 	{
 		"src",
 		"%{IncludeDir.raylib}",
-        "%{IncludeDir.rlImGui}",
-        "%{IncludeDir.ImGui}"
+        "%{IncludeDir.rlImGui}"
     }
 
     links
 	{
-        "%{Library.Winmm}",
         "%{LibraryDir.raylib}",
         "%{LibraryDir.rlImGui}",
-        "ImGui"
+        "%{Library.Winmm}"
     }
 
     defines
     {
-        "RAYGUI_IMPLEMENTATION",
-        "_CRT_SECURE_NO_WARNINGS"
+        "_CRT_SECURE_NO_WARNINGS",
     }
 
     filter "system:windows"

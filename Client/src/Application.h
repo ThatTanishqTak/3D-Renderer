@@ -5,6 +5,8 @@
 #include "Engine/Renderer/Renderer.h"
 #include "Engine/Renderer/RenderCommands.h"
 
+#include <raylib/include/raylib.h>
+
 class Application
 {
 public:
