@@ -11,11 +11,6 @@ namespace Engine
 		DrawGrid(1000, 1.0f);
 	}
 
-	void RenderCommands::DrawUI()
-	{
-
-	}
-
 	void RenderCommands::ModelLoading(std::filesystem::path filePath)
 	{
 

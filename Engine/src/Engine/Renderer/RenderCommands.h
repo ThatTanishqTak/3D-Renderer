@@ -8,7 +8,6 @@ namespace Engine
 	{
 	public:
 		void DrawGame();
-		void DrawUI();
 
 		void ModelLoading(std::filesystem::path filePath);
 		void ModelDrawing();

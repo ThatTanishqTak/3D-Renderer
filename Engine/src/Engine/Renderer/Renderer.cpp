@@ -23,12 +23,14 @@ namespace Engine
 	{
 		m_RenderCommands.ModelLoading("../../../../Client/Models/scene.gltf");
 		m_RenderCommands.TextureLoading("../../../../Client/Models/textures/color1_o_baseColor.png");
+		m_Interface.Init();
 	}
 
 	void Renderer::Shutdown()
 	{
 		m_RenderCommands.ModelUnloading();
 		m_RenderCommands.TextureUnloading();
+		m_Interface.Shutdown();
 	}
 
 	void Renderer::Update()
@@ -36,7 +38,7 @@ namespace Engine
 		ClearBackground(BLACK);
 		BeginDrawing();
 		{
-			m_RenderCommands.DrawUI();
+			m_Interface.Update();
 
 			BeginMode3D(GetCamera());
 			{
