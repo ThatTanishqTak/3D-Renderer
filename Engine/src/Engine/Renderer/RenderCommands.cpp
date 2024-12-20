@@ -11,28 +11,4 @@ namespace Engine
 		DrawGrid(1000, 1.0f);
 	}
 
-	void RenderCommands::ModelLoading(std::filesystem::path filePath)
-	{
-
-	}
-
-	void RenderCommands::ModelDrawing()
-	{
-
-	}
-
-	void RenderCommands::TextureLoading(std::filesystem::path filePath)
-	{
-
-	}
-
-	void RenderCommands::TextureUnloading()
-	{
-
-	}
-
-	void RenderCommands::ModelUnloading()
-	{
-
-	}
 }

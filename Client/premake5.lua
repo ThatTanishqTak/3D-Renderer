@@ -32,6 +32,11 @@ project "Client"
     filter "system:windows"
         systemversion "latest"
 
+        postbuildcommands
+        {
+            "{COPYFILE} \"imgui.ini\" \"%{cfg.targetdir}\""
+        }
+
     filter "configurations:Debug"
         runtime "Debug"
         symbols "on"

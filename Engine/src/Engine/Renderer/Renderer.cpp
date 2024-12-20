@@ -21,32 +21,26 @@ namespace Engine
 
 	void Renderer::Init()
 	{
-		m_RenderCommands.ModelLoading("../../../../Client/Models/scene.gltf");
-		m_RenderCommands.TextureLoading("../../../../Client/Models/textures/color1_o_baseColor.png");
 		m_Interface.Init();
 	}
 
 	void Renderer::Shutdown()
 	{
-		m_RenderCommands.ModelUnloading();
-		m_RenderCommands.TextureUnloading();
 		m_Interface.Shutdown();
 	}
 
-	void Renderer::Update()
+	void Renderer::Render()
 	{
 		ClearBackground(BLACK);
 		BeginDrawing();
 		{
-			m_Interface.Update();
+			m_Interface.Render();
 
 			BeginMode3D(GetCamera());
-			{
-				m_RenderCommands.DrawGame();
-				m_RenderCommands.ModelDrawing();
-			
-				EndMode3D();
-			}
+		
+			m_RenderCommands.DrawGame();
+
+			EndMode3D();
 			EndDrawing();
 		}
 	}

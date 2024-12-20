@@ -11,7 +11,7 @@ namespace Engine
 		void Init();
 		void Shutdown();
 
-		void Update();
+		void Render();
 
 	private:
 		RenderCommands m_RenderCommands;

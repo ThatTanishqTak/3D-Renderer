@@ -23,7 +23,6 @@ project "Engine"
     links
 	{
         "%{LibraryDir.raylib}",
-        "%{LibraryDir.rlImGui}",
         "%{Library.Winmm}"
     }
 
@@ -39,6 +38,16 @@ project "Engine"
         runtime "Debug"
         symbols "on"
 
+        links
+        {
+            "%{LibraryDir.rlImGuiDebug}"
+        }
+
     filter "configurations:Release"
         runtime "Release"
         optimize "on"
+
+        links
+        {
+            "%{LibraryDir.rlImGuiRelese}"
+        }

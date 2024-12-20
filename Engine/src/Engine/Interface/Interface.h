@@ -8,7 +8,7 @@ namespace Engine
 		void Init();
 		void Shutdown();
 
-		void Update();
+		void Render();
 
 	};
 }

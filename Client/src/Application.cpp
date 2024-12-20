@@ -27,6 +27,6 @@ void Application::Run()
 	while (!WindowShouldClose())
 	{
 		m_InputManager.Update();
-		m_Renderer.Update();
+		m_Renderer.Render();
 	}
 }

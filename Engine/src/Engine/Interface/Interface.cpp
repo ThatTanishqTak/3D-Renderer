@@ -1,8 +1,8 @@
 #include "Interface.h"
 
-#include <raylib.h>
 #include <rlImGui.h>
 #include <imgui_impl_raylib.h>
+#include <raylib.h>
 
 namespace Engine
 {
@@ -18,11 +18,13 @@ namespace Engine
 		rlImGuiShutdown();
 	}
 
-	void Interface::Update()
+	void Interface::Render()
 	{
 		rlImGuiBegin();
 
-		ImGui::ShowDemoWindow(&show);
+		ImGui::Begin("Test Window");
+
+		ImGui::End();
 
 		rlImGuiEnd();
 	}
