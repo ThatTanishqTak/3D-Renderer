@@ -13,6 +13,7 @@ namespace Engine
 		void Shutdown();
 
 	public:
+		bool m_IsRunning;
 
 	private:
 		int m_WindowWidth;

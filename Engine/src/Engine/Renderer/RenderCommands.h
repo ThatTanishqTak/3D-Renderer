@@ -7,6 +7,6 @@ namespace Engine
 	class RenderCommands
 	{
 	public:
-		void DrawGame();
+		void DrawBackground();
 	};
 }

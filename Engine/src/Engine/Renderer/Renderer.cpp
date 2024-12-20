@@ -38,10 +38,10 @@ namespace Engine
 
 			BeginMode3D(GetCamera());
 		
-			m_RenderCommands.DrawGame();
+			m_RenderCommands.DrawBackground();
 
 			EndMode3D();
-			EndDrawing();
 		}
+		EndDrawing();
 	}
 }

@@ -7,6 +7,9 @@ namespace Engine
 {
 	void InputManager::Update()
 	{
-
+		if (IsKeyPressed(KEY_ESCAPE))
+		{
+			m_Window.m_IsRunning = false;
+		}
 	}
 }

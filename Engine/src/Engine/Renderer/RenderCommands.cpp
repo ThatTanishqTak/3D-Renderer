@@ -6,7 +6,7 @@
 
 namespace Engine
 {
-	void RenderCommands::DrawGame()
+	void RenderCommands::DrawBackground()
 	{
 		DrawGrid(1000, 1.0f);
 	}
