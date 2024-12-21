@@ -2,9 +2,9 @@
 
 int main()
 {
-	Application application;
+	Application application; // Call the constructor
 
-	application.Run();
+	application.Run(); // Run application
 
-	return 0;
+	return 0; // Exit code
 }
