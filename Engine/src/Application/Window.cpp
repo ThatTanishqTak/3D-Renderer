@@ -13,7 +13,7 @@ namespace Engine
 	void Window::Init()
 	{
 		InitWindow(m_WindowWidth, m_WindowHeight, m_Title.c_str());
-		SetTargetFPS(60);
+		SetTargetFPS(30);
 	}
 
 	void Window::Shutdown()

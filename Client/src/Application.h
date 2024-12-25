@@ -1,6 +1,9 @@
 #pragma once
 
 #include "Window.h"
+#include "Renderer.h"
+
+#include <raylib.h>
 
 class Application
 {
@@ -16,4 +19,5 @@ private:
 
 private:
 	Engine::Window m_Window;
+	Engine::Renderer m_Renderer;
 };
