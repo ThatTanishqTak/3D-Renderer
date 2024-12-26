@@ -37,5 +37,7 @@ project "Client"
 		    symbols "on"
 
         filter "configurations:Release"
+			kind "WindowedApp"
+			entrypoint "mainCRTStartup" 
 		    runtime "Release"
 		    optimize "on"
