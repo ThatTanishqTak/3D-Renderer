@@ -2,6 +2,9 @@
 
 #include <raylib.h>
 
+#include "RenderCommand.h"
+#include "../Camera/Camera.h"
+
 namespace Engine
 {
 	class Renderer
@@ -13,6 +16,7 @@ namespace Engine
 		void Update();
 
 	public:
-		Camera3D camera;
+		Camera m_Camera;
+		RenderCommnad m_RenderCommand;
 	};
 }
