@@ -15,6 +15,9 @@ namespace Engine
 
 	void Renderer::Update()
 	{
+		// Update
+		m_Camera.Update();
+
 		BeginDrawing();
 		ClearBackground(BLACK);
 

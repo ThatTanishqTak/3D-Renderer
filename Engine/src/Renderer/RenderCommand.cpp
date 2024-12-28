@@ -18,6 +18,7 @@ namespace Engine
 	void RenderCommnad::Render()
 	{
 		DrawGrid(100, 1.0f);
+		DrawCube({ 0.0f, 0.0f, 0.0f }, 10.0f, 10.0f, 10.0f, RED);
 	}
 
 	void RenderCommnad::RenderUI()

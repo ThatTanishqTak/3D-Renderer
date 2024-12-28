@@ -13,6 +13,11 @@ namespace Engine
 		Camera3D GetCamera() { return m_Camera; }
 
 	private:
+		void CameraControl();
+
+	private:
 		Camera3D m_Camera;
+
+		float m_MoveSpeed;
 	};
 }
