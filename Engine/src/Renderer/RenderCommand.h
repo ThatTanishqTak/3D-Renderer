@@ -11,5 +11,6 @@ namespace Engine
 		void Shutdown();
 
 		void Render();
+		void RenderUI();
 	};
 }

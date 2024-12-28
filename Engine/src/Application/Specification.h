@@ -1,15 +1,19 @@
 #pragma once
 
+#include <raylib.h>
 #include <string>
 
 namespace Engine
 {
-	struct WindowSpecification
+	struct ApplicationSpecification
 	{
 		int Width = 1920;
 		int Height = 1080;
+		
 		std::string Title = "3D Renderer";
+		
+		Image Icon = LoadImage("");
 	};
 
-	WindowSpecification specs;
+	ApplicationSpecification specs;
 }

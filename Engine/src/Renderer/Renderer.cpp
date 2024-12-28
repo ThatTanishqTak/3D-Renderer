@@ -17,6 +17,9 @@ namespace Engine
 	{
 		BeginDrawing();
 		ClearBackground(BLACK);
+
+		m_RenderCommand.RenderUI();
+
 		BeginMode3D(m_Camera.GetCamera());
 
 		m_RenderCommand.Render();

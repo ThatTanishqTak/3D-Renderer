@@ -15,13 +15,15 @@ project "Engine"
 
     defines
 	{
-
+        "_CRT_SECURE_NO_DEPRECATE",
+        "_CRT_SECURE_NO_WARNINGS"
 	}
 
     includedirs
 	{
 		"src",
-        "%{IncludeDir.Raylib}"
+        "%{IncludeDir.Raylib}",
+        "%{IncludeDir.Raygui}"
     }
 
     links

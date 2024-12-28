@@ -7,15 +7,15 @@ project "Client"
     targetdir ("%{wks.location}/bin/" .. outputDir .. "/%{prj.name}")
 	objdir ("%{wks.location}/bin-int/" .. outputDir .. "/%{prj.name}")
 
-	defines
-	{
-
-	}
-
 	files
 	{
 		"src/**.h",
 		"src/**.cpp"
+	}
+
+	defines
+	{
+
 	}
 
     includedirs
@@ -38,6 +38,6 @@ project "Client"
 
         filter "configurations:Release"
 			kind "WindowedApp"
-			entrypoint "mainCRTStartup" 
+			entrypoint "mainCRTStartup"
 		    runtime "Release"
 		    optimize "on"
