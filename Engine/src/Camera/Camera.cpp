@@ -20,11 +20,34 @@ namespace Engine
 
 	void Camera::CameraControl()
 	{
-		if (IsKeyDown(KEY_W)) { m_Camera.position.z += m_MoveSpeed * GetFrameTime(); }
-		if (IsKeyDown(KEY_S)) { m_Camera.position.z -= m_MoveSpeed * GetFrameTime(); }
-		if (IsKeyDown(KEY_A)) { m_Camera.position.x -= m_MoveSpeed * GetFrameTime(); }
-		if (IsKeyDown(KEY_D)) { m_Camera.position.x += m_MoveSpeed * GetFrameTime(); }
-		if (IsKeyDown(KEY_E)) { m_Camera.position.y += m_MoveSpeed * GetFrameTime(); }
-		if (IsKeyDown(KEY_Q)) { m_Camera.position.y -= m_MoveSpeed * GetFrameTime(); }
+		if (IsKeyDown(KEY_W))
+		{
+			m_Camera.up.z += m_MoveSpeed * GetFrameTime(); 
+		}
+
+		if (IsKeyDown(KEY_S))
+		{
+			m_Camera.up.z -= m_MoveSpeed * GetFrameTime(); 
+		}
+
+		if (IsKeyDown(KEY_A))
+		{
+			m_Camera.up.x -= m_MoveSpeed * GetFrameTime();
+		}
+		
+		if (IsKeyDown(KEY_D))
+		{
+			m_Camera.up.x += m_MoveSpeed * GetFrameTime();
+		}
+
+		if (IsKeyDown(KEY_E))
+		{
+			m_Camera.up.y += m_MoveSpeed * GetFrameTime();
+		}
+
+		if (IsKeyDown(KEY_Q))
+		{
+			m_Camera.up.y -= m_MoveSpeed * GetFrameTime();
+		}
 	}
 }

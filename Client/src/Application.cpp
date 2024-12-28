@@ -26,7 +26,7 @@ void Application::Run()
 {
 	while (!WindowShouldClose())
 	{
-		// Render
 		m_Renderer.Update();
+		m_Renderer.Render();
 	}
 }

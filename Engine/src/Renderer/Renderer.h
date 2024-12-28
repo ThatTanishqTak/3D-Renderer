@@ -14,6 +14,7 @@ namespace Engine
 		void Shutdown();
 
 		void Update();
+		void Render();
 
 	public:
 		Camera m_Camera;

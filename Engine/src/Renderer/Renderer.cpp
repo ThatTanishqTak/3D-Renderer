@@ -17,15 +17,18 @@ namespace Engine
 	{
 		// Update
 		m_Camera.Update();
+	}
 
+	void Renderer::Render()
+	{
 		BeginDrawing();
 		ClearBackground(BLACK);
 
-		m_RenderCommand.RenderUI();
+		m_RenderCommand.RenderUI(); // UI before 3D (ofcourse)
 
 		BeginMode3D(m_Camera.GetCamera());
 
-		m_RenderCommand.Render();
+		m_RenderCommand.Render(); // 3D models (right now just a generic red cube )
 
 		EndMode3D();
 		EndDrawing();
