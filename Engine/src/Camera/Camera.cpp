@@ -4,8 +4,6 @@ namespace Engine
 {
 	void Camera::Init()
 	{
-		m_MoveSpeed = 10.0f;
-
 		m_Camera.position = { 10.0f, 10.0f, 10.0f };
 		m_Camera.target = { 0.0f, 0.0f, 0.0f };
 		m_Camera.up = { 0.0f, 1.0f, 0.0f };
@@ -20,6 +18,6 @@ namespace Engine
 
 	void Camera::CameraControl()
 	{
-		UpdateCamera(&m_Camera, CAMERA_FIRST_PERSON); // This feels like cheating... but whatever I don't give a fuck at this point
+		UpdateCamera(&m_Camera, CAMERA_FIRST_PERSON); // This feels like cheating but whatever.... I don't give a fuck at this point
 	}
 }

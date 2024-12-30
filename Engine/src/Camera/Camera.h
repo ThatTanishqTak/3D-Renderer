@@ -17,7 +17,5 @@ namespace Engine
 
 	private:
 		Camera3D m_Camera;
-
-		float m_MoveSpeed;
 	};
 }
