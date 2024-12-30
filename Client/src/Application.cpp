@@ -18,8 +18,8 @@ void Application::Init()
 
 void Application::Shutdown()
 {
-	m_Window.Shutdown();
 	m_Renderer.Shutdown();
+	m_Window.Shutdown();
 }
 
 void Application::Run()

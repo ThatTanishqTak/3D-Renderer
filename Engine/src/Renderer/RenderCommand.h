@@ -2,6 +2,8 @@
 
 #include <raylib.h>
 
+#include "../Camera/Camera.h"
+
 namespace Engine
 {
 	class RenderCommnad
@@ -10,7 +12,11 @@ namespace Engine
 		void Init();
 		void Shutdown();
 
-		void Render();
+		void RenderGrid();
 		void RenderUI();
+		void RenderScene();
+
+	private:
+		Camera m_Camera;
 	};
 }
