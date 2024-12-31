@@ -27,12 +27,26 @@ namespace Engine
 	{
 		if (GuiButton({ 24, 24, 120, 100 }, "#191#Show Message"))
 		{
+			showMessageBox = true;
+		}
+
+		if (showMessageBox)
+		{
 			int result = GuiMessageBox({ 85, 70, 250, 100 }, "#191#Message Box", "Hi! This is a message!", "Nice;Cool");
+			if (result == 0)
+			{
+				showMessageBox = false;
+			}
 		}
 	}
 
 	void RenderCommnad::RenderScene()
 	{
 		DrawCube({ 0.0f, 0.0f, 0.0f }, 10.0f, 10.0f, 10.0f, RED);
+	}
+
+	void RenderCommnad::ModelLoader()
+	{
+		m_Model = LoadModel("");
 	}
 }

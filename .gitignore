@@ -9,9 +9,13 @@ bin-int/
 **.vcxproj.filters
 **.vcxproj.user
 
+# Model and texture files
 **.obj
-**.fbx
-**.stl
-**.usdz
 **.gltf
-**.glb
+**.iqm
+**.vox
+**.m3d
+**.png
+**.exr
+**.psd
+**.tif

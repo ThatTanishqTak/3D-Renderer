@@ -16,7 +16,14 @@ namespace Engine
 		void RenderUI();
 		void RenderScene();
 
+	public:
+		bool showMessageBox = false;
+
+	private:
+		void ModelLoader();
+
 	private:
 		Camera m_Camera;
+		Model m_Model;
 	};
 }
