@@ -7,7 +7,8 @@ namespace Engine
 {
 	void RenderCommnad::Init()
 	{
-
+		//ModelLoader("Model/1.obj");
+		TextureLoader("Model/1.png");
 	}
 
 	void RenderCommnad::Shutdown()
@@ -17,36 +18,33 @@ namespace Engine
 
 	void RenderCommnad::RenderGrid()
 	{
-		if (m_Camera.GetCamera().position.x)
-		{
-			DrawGrid(100, 1.0f);
-		}
+		DrawGrid(100, 1.0f);
 	}
 
 	void RenderCommnad::RenderUI()
 	{
-		if (GuiButton({ 24, 24, 120, 100 }, "#191#Show Message"))
-		{
-			showMessageBox = true;
-		}
-
-		if (showMessageBox)
-		{
-			int result = GuiMessageBox({ 85, 70, 250, 100 }, "#191#Message Box", "Hi! This is a message!", "Nice;Cool");
-			if (result == 0)
-			{
-				showMessageBox = false;
-			}
-		}
+		DrawTextureEx(m_Texture, TextureSpecs.Position, TextureSpecs.Rotation, TextureSpecs.Scale, TextureSpecs.Tint);
 	}
 
 	void RenderCommnad::RenderScene()
 	{
-		DrawCube({ 0.0f, 0.0f, 0.0f }, 10.0f, 10.0f, 10.0f, RED);
+		//DrawCube({ 0.0f, 0.0f, 0.0f }, 10.0f, 10.0f, 10.0f, RED);
+		DrawModelEx(m_Model, ModelSpecs.Position, ModelSpecs.RotationAxis, ModelSpecs.RotationAngle, ModelSpecs.Scale, ModelSpecs.Tint);
 	}
 
-	void RenderCommnad::ModelLoader()
+	void RenderCommnad::ModelLoader(std::filesystem::path filePath)
 	{
-		m_Model = LoadModel("");
+		std::string string = filePath.string();
+		const char* constChar = string.c_str();
+
+		m_Model = LoadModel(constChar);
+	}
+
+	void RenderCommnad::TextureLoader(std::filesystem::path filePath)
+	{
+		std::string string = filePath.string();
+		const char* constCahr = string.c_str();
+
+		m_Texture = LoadTexture(constCahr);
 	}
 }
