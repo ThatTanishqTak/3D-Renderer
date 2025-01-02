@@ -12,7 +12,7 @@ namespace Engine
 	{
 		SetConfigFlags(FLAG_WINDOW_RESIZABLE);
 		InitWindow(m_WindowWidth, m_WindowHeight, m_Title.c_str());
-		SetTargetFPS(144);
+		SetTargetFPS(60);
 	}
 
 	void Window::Shutdown()

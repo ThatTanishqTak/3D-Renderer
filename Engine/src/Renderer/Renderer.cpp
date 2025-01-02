@@ -24,14 +24,15 @@ namespace Engine
 		BeginDrawing();
 		ClearBackground(BLACK);
 
-		m_RenderCommand.RenderUI(); // UI before 3D (ofcourse)
-
 		BeginMode3D(m_Camera.GetCamera());
 
 		m_RenderCommand.RenderGrid();
 		m_RenderCommand.RenderScene(); // 3D models (right now just a generic red cube )
 
 		EndMode3D();
+
+		m_RenderCommand.RenderUI(); // UI after 3D (so that it overlaps the scene)
+
 		EndDrawing();
 	}
 }

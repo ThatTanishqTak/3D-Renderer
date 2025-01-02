@@ -8,7 +8,7 @@ namespace Engine
 	void RenderCommnad::Init()
 	{
 		//ModelLoader("Model/1.obj");
-		TextureLoader("Model/1.png");
+		//TextureLoader("Model/1.png");
 	}
 
 	void RenderCommnad::Shutdown()
@@ -23,13 +23,13 @@ namespace Engine
 
 	void RenderCommnad::RenderUI()
 	{
-		DrawTextureEx(m_Texture, TextureSpecs.Position, TextureSpecs.Rotation, TextureSpecs.Scale, TextureSpecs.Tint);
+		PropertiesPanel();
 	}
 
 	void RenderCommnad::RenderScene()
 	{
-		//DrawCube({ 0.0f, 0.0f, 0.0f }, 10.0f, 10.0f, 10.0f, RED);
-		DrawModelEx(m_Model, ModelSpecs.Position, ModelSpecs.RotationAxis, ModelSpecs.RotationAngle, ModelSpecs.Scale, ModelSpecs.Tint);
+		DrawCube(ModelSpecs.Position, 10.0f, 10.0f, 10.0f, RED);
+		//DrawModelEx(m_Model, ModelSpecs.Position, ModelSpecs.RotationAxis, ModelSpecs.RotationAngle, ModelSpecs.Scale, ModelSpecs.Tint);
 	}
 
 	void RenderCommnad::ModelLoader(std::filesystem::path filePath)
@@ -46,5 +46,10 @@ namespace Engine
 		const char* constCahr = string.c_str();
 
 		m_Texture = LoadTexture(constCahr);
+	}
+
+	void RenderCommnad::PropertiesPanel()
+	{
+		GuiPanel({ 0.0f, 0.0f, 100.0f, 500.0f }, "TEST");
 	}
 }

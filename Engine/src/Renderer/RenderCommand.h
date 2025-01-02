@@ -24,6 +24,8 @@ namespace Engine
 		void ModelLoader(std::filesystem::path filePath);
 		void TextureLoader(std::filesystem::path filePath);
 
+		void PropertiesPanel();
+
 	private:
 		Camera m_Camera;
 
