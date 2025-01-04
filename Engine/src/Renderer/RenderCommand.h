@@ -3,6 +3,7 @@
 #include <raylib.h>
 #include <filesystem>
 
+#include "../Application/Window.h"
 #include "../Camera/Camera.h"
 
 namespace Engine
@@ -50,5 +51,7 @@ namespace Engine
 			Color Tint = WHITE;
 		};
 		TextureSpecification TextureSpecs;
+
+		Window m_Window;
 	};
 }

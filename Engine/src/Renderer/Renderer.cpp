@@ -27,7 +27,7 @@ namespace Engine
 		BeginMode3D(m_Camera.GetCamera());
 
 		m_RenderCommand.RenderGrid();
-		m_RenderCommand.RenderScene(); // 3D models (right now just a generic red cube )
+		m_RenderCommand.RenderScene(); // 3D models (right now just a generic red cube)
 
 		EndMode3D();
 

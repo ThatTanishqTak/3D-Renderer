@@ -13,9 +13,11 @@ namespace Engine
 		void Init();
 		void Shutdown();
 
-	private:
+	public:
 		int m_WindowWidth;
 		int m_WindowHeight;
+
+	private:
 		std::string m_Title;
 
 		Image m_Icon;

@@ -50,6 +50,6 @@ namespace Engine
 
 	void RenderCommnad::PropertiesPanel()
 	{
-		GuiPanel({ 0.0f, 0.0f, 100.0f, 500.0f }, "TEST");
+		GuiPanel({ 0.0f, 0.0f, 250.0f, (float)m_Window.m_WindowHeight }, "Properties Panel");
 	}
 }

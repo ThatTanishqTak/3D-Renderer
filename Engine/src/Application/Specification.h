@@ -12,7 +12,7 @@ namespace Engine
 		
 		std::string Title = "3D Renderer";
 		
-		Image Icon = LoadImage("");
+		Image Icon = LoadImage("Icon/icon-1.png");
 	};
 
 	ApplicationSpecification specs;

@@ -11,6 +11,7 @@ namespace Engine
 	void Window::Init()
 	{
 		SetConfigFlags(FLAG_WINDOW_RESIZABLE);
+		SetWindowIcon(m_Icon);
 		InitWindow(m_WindowWidth, m_WindowHeight, m_Title.c_str());
 		SetTargetFPS(60);
 	}
