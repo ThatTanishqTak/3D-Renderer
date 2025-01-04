@@ -9,13 +9,22 @@ bin-int/
 **.vcxproj.filters
 **.vcxproj.user
 
-# Model and texture files
-**.obj
-**.gltf
-**.iqm
-**.vox
-**.m3d
-**.png
-**.exr
-**.psd
-**.tif
+# Model and texture files and folder
+Model/**.obj
+Model/**.gltf
+Model/**.iqm
+Model/**.vox
+Model/**.m3d
+Texture/**.png
+Texture/**.bmp
+Texture/**.tga
+Texture/**.jpg
+Texture/**.gif
+Texture/**.qoi
+Texture/**.psd
+Texture/**.dds
+Texture/**.hdr
+Texture/**.ktx
+Texture/**.astc
+Texture/**.pkm
+Texture/**.pvr
