@@ -3,7 +3,7 @@
 #include <raylib.h>
 #include <filesystem>
 
-#include "../Application/Window.h"
+#include "../Application/Specification.h"
 #include "../Camera/Camera.h"
 
 namespace Engine
@@ -29,29 +29,10 @@ namespace Engine
 
 	private:
 		Camera m_Camera;
-
-		Model m_Model;
-		struct ModelSpecification
-		{
-
-			Vector3 Position = { 0.0f, 0.0f, 0.0f };
-			Vector3 RotationAxis = { 0.0f, 0.0f, 0.0f };
-			float RotationAngle = 0.0f;
-			Vector3 Scale = { 1.0f, 1.0f, 1.0f };
-			Color Tint = WHITE;
-		};
-		ModelSpecification ModelSpecs;
+		ModelSpecification m_ModelSpecs;
+		ApplicationSpecification m_ApplicationSpecs;
 
 		Texture2D m_Texture;
-		struct TextureSpecification
-		{
-			Vector2 Position = { 0.0f, 0.0f };
-			float Rotation = 0.0f;
-			float Scale = 1.0f;
-			Color Tint = WHITE;
-		};
-		TextureSpecification TextureSpecs;
-
-		Window m_Window;
+		Model m_Model;
 	};
 }

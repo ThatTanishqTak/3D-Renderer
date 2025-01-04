@@ -18,6 +18,11 @@ namespace Engine
 
 	void Camera::CameraControl()
 	{
-		UpdateCamera(&m_Camera, CAMERA_FIRST_PERSON); // This feels like cheating but whatever.... I don't give a fuck at this point
+		//UpdateCamera(&m_Camera, CAMERA_FIRST_PERSON); // This feels like cheating but whatever.... I don't give a fuck at this point
+
+		UpdateCameraPro(&m_Camera,
+			{ (IsKeyDown(KEY_W)) * 0.1f - (IsKeyDown(KEY_S)) * 0.1f, (IsKeyDown(KEY_D)) * 0.1f - (IsKeyDown(KEY_A)) * 0.1f, 0.0f },
+			{ GetMouseDelta().x * 0.05f, GetMouseDelta().y * 0.05f, 0.0f },
+			  GetMouseWheelMove() * -2.0f);
 	}
 }

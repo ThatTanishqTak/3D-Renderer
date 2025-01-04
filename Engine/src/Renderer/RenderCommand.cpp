@@ -28,7 +28,7 @@ namespace Engine
 
 	void RenderCommnad::RenderScene()
 	{
-		DrawCube(ModelSpecs.Position, 10.0f, 10.0f, 10.0f, RED);
+		DrawCube(m_ModelSpecs.Position, 10.0f, 10.0f, 10.0f, RED);
 		//DrawModelEx(m_Model, ModelSpecs.Position, ModelSpecs.RotationAxis, ModelSpecs.RotationAngle, ModelSpecs.Scale, ModelSpecs.Tint);
 	}
 
@@ -50,6 +50,6 @@ namespace Engine
 
 	void RenderCommnad::PropertiesPanel()
 	{
-		GuiPanel({ 0.0f, 0.0f, 250.0f, (float)m_Window.m_WindowHeight }, "Properties Panel");
+		GuiPanel({ 0.0f, 0.0f, 250.0f, (float)m_ApplicationSpecs.Height }, "Properties Panel");
 	}
 }

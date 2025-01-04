@@ -10,7 +10,7 @@ namespace Engine
 		void Init();
 		void Update();
 
-		Camera3D GetCamera() { return m_Camera; }
+		Camera3D GetCamera() const { return m_Camera; }
 
 	private:
 		void CameraControl();

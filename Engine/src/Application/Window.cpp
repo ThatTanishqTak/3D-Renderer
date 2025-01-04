@@ -1,11 +1,11 @@
 #include "Window.h"
-#include "Specification.h"
 
 namespace Engine
 {
-	Window::Window() : m_WindowWidth(specs.Width), m_WindowHeight(specs.Height), m_Title(specs.Title), m_Icon(specs.Icon)
+	Window::Window() : m_Title(m_ApplicationSpecs.Title), m_Icon(m_ApplicationSpecs.Icon)
 	{
-
+		m_WindowWidth = m_ApplicationSpecs.Width;
+		m_WindowHeight = m_ApplicationSpecs.Height;
 	}
 
 	void Window::Init()
