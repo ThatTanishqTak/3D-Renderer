@@ -31,6 +31,20 @@ project "Client"
 
 	filter "system:windows"
 		systemversion "latest"
+		postbuildcommands
+		{
+			"{MKDIR} \"%{cfg.targetdir}/Resources\"",
+			"{MKDIR} \"%{cfg.targetdir}/Resources/Icon\"",
+			"{MKDIR} \"%{cfg.targetdir}/Resources/Assets\"",
+
+			"{COPYDIR} ../Client/Resources/ %{cfg.targetdir}/Resources",
+			"{COPYDIR} ../Client/Resources/Icon/ %{cfg.targetdir}/Resources/Icon",
+			"{COPYDIR} ../Client/Resources/Assets/ %{cfg.targetdir}/Resources/Assets",
+
+			--if _ACTION == "build" or "rebuild" or "clean" then
+			--	os.remove("%{wks.location}/bin/" .. outputDir .. "/%{prj.name}/*.pdb")
+			--end
+		}
 
 	    filter "configurations:Debug"
 		    runtime "Debug"
