@@ -1,7 +1,6 @@
 #include "RenderCommand.h"
-
-#define RAYGUI_IMPLEMENTATION
-#include <raygui.h>
+#include "raygui.h"
+#include <raygui-cpp.h>
 
 namespace Engine
 {
@@ -53,12 +52,7 @@ namespace Engine
 
 	void RenderCommnad::PropertiesPanel()
 	{
-		GuiPanel({ 0.0f, 0.0f, m_PanelWidth, m_PanelHeight }, "Settings");
-		{
-			if (GuiButton({ 5.0f, 40.0f, 50.0f, 50.0f }, "..."))
-			{
-				
-			}
-		}
+		rgc::Panel panel;
+		panel.SetBounds(rgc::Bounds::WithText("TEST", 22, { 25, 25 }));
 	}
 }

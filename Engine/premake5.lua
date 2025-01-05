@@ -39,7 +39,15 @@ project "Engine"
         filter "configurations:Debug"
             runtime "Debug"
             symbols "on"
+            links
+            {
+                "%{LibraryDir.RayguicppD}"
+            }
 
         filter "configurations:Release"
             runtime "Release"
             optimize "on"
+            links
+            {
+                "%{LibraryDir.RayguicppR}"
+            }
