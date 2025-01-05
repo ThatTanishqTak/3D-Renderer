@@ -3,8 +3,6 @@
 #include "Window.h"
 #include "Renderer.h"
 
-#include <raylib.h>
-
 class Application
 {
 public:

@@ -1,5 +1,9 @@
 #include "Application.h"
 
+#define GUI_WINDOW_FILE_DIALOG_IMPLEMENTATION
+#include "gui_window_file_dialog.h"
+
+
 Application::Application()
 {
 	Init();
@@ -24,8 +28,10 @@ void Application::Shutdown()
 
 void Application::Run()
 {
-	while (!WindowShouldClose())
+	while (m_Window.m_IsRunning)
 	{
+		m_Window.Update();
+
 		m_Renderer.Update();
 		m_Renderer.Render();
 	}

@@ -15,9 +15,13 @@ namespace Engine
 		void Init();
 		void Shutdown();
 
+		void Update();
+
 	public:
 		int m_WindowWidth;
 		int m_WindowHeight;
+
+		bool m_IsRunning;
 
 	private:
 		ApplicationSpecification m_ApplicationSpecs;

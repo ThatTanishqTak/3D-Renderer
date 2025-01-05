@@ -27,8 +27,8 @@ namespace Engine
 		},
 			// Camera rotation 
 		{
-			GetMouseDelta().x * 0.05f,
-		    GetMouseDelta().y * 0.05f,                              
+			GetMouseDelta().x * 0.1f,
+		    GetMouseDelta().y * 0.1f,                              
 		    0.0f
 		},
 			// Camera zoom

@@ -19,3 +19,5 @@ outputDir = "%{cfg.buildcfg}-%{cfg.system}-%{cfg.architecture}"
 
 include "Engine"
 include "Client"
+
+include "Engine/vendor/raygui-cpp"

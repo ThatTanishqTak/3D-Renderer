@@ -23,7 +23,8 @@ project "Engine"
 	{
 		"src",
         "%{IncludeDir.Raylib}",
-        "%{IncludeDir.Raygui}"
+        "%{IncludeDir.Raygui}",
+        "%{IncludeDir.Rayguicpp}",
     }
 
     links

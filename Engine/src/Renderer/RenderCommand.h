@@ -34,5 +34,8 @@ namespace Engine
 
 		Texture2D m_Texture;
 		Model m_Model;
+
+		float m_PanelWidth;
+		float m_PanelHeight;
 	};
 }

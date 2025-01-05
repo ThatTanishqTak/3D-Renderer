@@ -8,8 +8,8 @@ namespace Engine
 	class ApplicationSpecification
 	{
 	public:
-		int Width = 1080;
-		int Height = 720;
+		int Width = 1920;
+		int Height = 1080;
 		
 		std::string Title = "3D Renderer";
 		

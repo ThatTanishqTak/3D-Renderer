@@ -9,6 +9,9 @@ namespace Engine
 	{
 		//ModelLoader("Model/1.obj");
 		//TextureLoader("Model/1.png");
+
+		m_PanelWidth = 250.0f;
+		m_PanelHeight = m_ApplicationSpecs.Height;
 	}
 
 	void RenderCommnad::Shutdown()
@@ -50,6 +53,12 @@ namespace Engine
 
 	void RenderCommnad::PropertiesPanel()
 	{
-		GuiPanel({ 0.0f, 0.0f, 250.0f, (float)m_ApplicationSpecs.Height }, "Properties Panel");
+		GuiPanel({ 0.0f, 0.0f, m_PanelWidth, m_PanelHeight }, "Settings");
+		{
+			if (GuiButton({ 5.0f, 40.0f, 50.0f, 50.0f }, "..."))
+			{
+				
+			}
+		}
 	}
 }

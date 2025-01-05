@@ -2,7 +2,7 @@
 
 namespace Engine
 {
-	Window::Window() : m_Title(m_ApplicationSpecs.Title), m_Icon(m_ApplicationSpecs.Icon)
+	Window::Window() : m_IsRunning(true), m_Title(m_ApplicationSpecs.Title), m_Icon(m_ApplicationSpecs.Icon)
 	{
 		m_WindowWidth = m_ApplicationSpecs.Width;
 		m_WindowHeight = m_ApplicationSpecs.Height;
@@ -19,5 +19,10 @@ namespace Engine
 	void Window::Shutdown()
 	{
 		CloseWindow();
+	}
+
+	void Window::Update()
+	{
+		m_IsRunning = !WindowShouldClose();
 	}
 }
