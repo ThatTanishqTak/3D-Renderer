@@ -1,5 +1,4 @@
 #include "RenderCommand.h"
-#include "raygui.h"
 #include <raygui-cpp.h>
 
 namespace Engine
@@ -10,7 +9,7 @@ namespace Engine
 		//TextureLoader("Model/1.png");
 
 		m_PanelWidth = 250.0f;
-		m_PanelHeight = m_ApplicationSpecs.Height;
+		m_PanelHeight = static_cast<float>(m_ApplicationSpecs.Height);
 	}
 
 	void RenderCommnad::Shutdown()
@@ -25,7 +24,7 @@ namespace Engine
 
 	void RenderCommnad::RenderUI()
 	{
-		PropertiesPanel();
+		
 	}
 
 	void RenderCommnad::RenderScene()
@@ -34,25 +33,21 @@ namespace Engine
 		//DrawModelEx(m_Model, ModelSpecs.Position, ModelSpecs.RotationAxis, ModelSpecs.RotationAngle, ModelSpecs.Scale, ModelSpecs.Tint);
 	}
 
-	void RenderCommnad::ModelLoader(std::filesystem::path filePath)
+	void RenderCommnad::UpdateUI()
 	{
-		std::string string = filePath.string();
-		const char* constChar = string.c_str();
 
-		m_Model = LoadModel(constChar);
 	}
 
-	void RenderCommnad::TextureLoader(std::filesystem::path filePath)
-	{
-		std::string string = filePath.string();
-		const char* constCahr = string.c_str();
+	//void RenderCommnad::PropertiesPanel()
+	//{
+	//	auto button = rgc::Button(rgc::Bounds::WithText("TEST", 22, { 15, 15 }), "TEST");
+	//	button.SetStyle(rgc::Style(rgc::Style::Position::TOP_LEFT, { 0, 0 }));
+	//	button.OnClick([&button]()
+	//		{
 
-		m_Texture = LoadTexture(constCahr);
-	}
+	//		});
 
-	void RenderCommnad::PropertiesPanel()
-	{
-		rgc::Panel panel;
-		panel.SetBounds(rgc::Bounds::WithText("TEST", 22, { 25, 25 }));
-	}
+	//	button.Update();
+	//	button.Show();
+	//}
 }

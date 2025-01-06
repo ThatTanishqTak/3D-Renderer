@@ -16,6 +16,7 @@ namespace Engine
 	void Renderer::Update()
 	{
 		m_Camera.Update();
+		m_RenderCommand.UpdateUI();
 	}
 
 	void Renderer::Render()

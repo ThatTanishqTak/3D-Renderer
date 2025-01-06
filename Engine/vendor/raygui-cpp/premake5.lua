@@ -1,4 +1,4 @@
-project "Rayguicpp"
+project "RayguiWrapper"
 	kind "StaticLib"
 	language "C++"
 	cppdialect "C++17"
@@ -22,7 +22,7 @@ project "Rayguicpp"
     {
         "%{IncludeDir.Raylib}",
         "%{IncludeDir.Raygui}",
-        "%{IncludeDir.Rayguicpp}"
+        "%{IncludeDir.RayguiWrapper}"
     }
     
     filter "system:windows"

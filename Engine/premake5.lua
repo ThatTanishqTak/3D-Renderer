@@ -24,7 +24,7 @@ project "Engine"
 		"src",
         "%{IncludeDir.Raylib}",
         "%{IncludeDir.Raygui}",
-        "%{IncludeDir.Rayguicpp}",
+        "%{IncludeDir.RayguiWrapper}",
     }
 
     links
@@ -41,7 +41,7 @@ project "Engine"
             symbols "on"
             links
             {
-                "%{LibraryDir.RayguicppD}"
+                "%{LibraryDir.RayguiWrapperD}"
             }
 
         filter "configurations:Release"
@@ -49,5 +49,5 @@ project "Engine"
             optimize "on"
             links
             {
-                "%{LibraryDir.RayguicppR}"
+                "%{LibraryDir.RayguiWrapperR}"
             }
