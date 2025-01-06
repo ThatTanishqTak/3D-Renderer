@@ -1,4 +1,5 @@
 #include "ModelLoader.h"
+#include <iostream>
 
 namespace Engine
 {
@@ -29,6 +30,6 @@ namespace Engine
 
 	void ModelLoader::OpenFileDialog()
 	{
-
+		std::cout << "File Open" << std::endl;
 	}
 }

@@ -1,7 +1,6 @@
 #pragma once
 
 #include <raylib.h>
-#include <raygui-cpp.h>
 
 namespace Engine
 {
@@ -12,10 +11,10 @@ namespace Engine
 		void SHutdown();
 
 		void Update();
+		void OpenFileDialog();
 
 	private:
 		void Load();
 		void Unload();
-		void OpenFileDialog();
 	};
 }

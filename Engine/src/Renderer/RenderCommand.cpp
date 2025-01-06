@@ -3,6 +3,8 @@
 
 namespace Engine
 {
+	rgc::Button button;
+
 	void RenderCommnad::Init()
 	{
 		//ModelLoader("Model/1.obj");
@@ -24,7 +26,7 @@ namespace Engine
 
 	void RenderCommnad::RenderUI()
 	{
-		
+		button.Show();
 	}
 
 	void RenderCommnad::RenderScene()
@@ -35,19 +37,12 @@ namespace Engine
 
 	void RenderCommnad::UpdateUI()
 	{
+		ModelLoader m_ModelLoader;
 
+		button = rgc::Button(rgc::Bounds(0.0f, 0.0f, 100.0f, 100.0f), "TEST");
+		button.OnClick([&m_ModelLoader]()
+			{
+				m_ModelLoader.OpenFileDialog();
+			});
 	}
-
-	//void RenderCommnad::PropertiesPanel()
-	//{
-	//	auto button = rgc::Button(rgc::Bounds::WithText("TEST", 22, { 15, 15 }), "TEST");
-	//	button.SetStyle(rgc::Style(rgc::Style::Position::TOP_LEFT, { 0, 0 }));
-	//	button.OnClick([&button]()
-	//		{
-
-	//		});
-
-	//	button.Update();
-	//	button.Show();
-	//}
 }

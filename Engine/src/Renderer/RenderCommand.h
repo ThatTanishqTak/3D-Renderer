@@ -4,6 +4,7 @@
 #include <filesystem>
 
 #include "../Application/Specification.h"
+#include "../UserInterface/ModelLoader.h"
 #include "../Camera/Camera.h"
 
 namespace Engine
@@ -24,11 +25,10 @@ namespace Engine
 		bool showMessageBox = false;
 
 	private:
-
-	private:
 		Camera m_Camera;
 		ModelSpecification m_ModelSpecs;
 		ApplicationSpecification m_ApplicationSpecs;
+		ModelLoader m_ModelLoader;
 
 		Texture2D m_Texture;
 		Model m_Model;
