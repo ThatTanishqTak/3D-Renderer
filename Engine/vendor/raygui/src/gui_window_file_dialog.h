@@ -117,7 +117,7 @@ void GuiWindowFileDialog(GuiWindowFileDialogState *state);
 ************************************************************************************/
 #if defined(GUI_WINDOW_FILE_DIALOG_IMPLEMENTATION)
 
-#include "../../src/raygui.h"
+#include "raygui.h"
 
 #include <string.h>     // Required for: strcpy()
 
