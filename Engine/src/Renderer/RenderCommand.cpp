@@ -1,10 +1,9 @@
 #include "RenderCommand.h"
-#include <raygui-cpp.h>
+#include "rlImGui.h"
+#include "imgui-master/imgui.h"
 
 namespace Engine
 {
-	rgc::Button button;
-
 	void RenderCommnad::Init()
 	{
 		//ModelLoader("Model/1.obj");
@@ -12,11 +11,13 @@ namespace Engine
 
 		m_PanelWidth = 250.0f;
 		m_PanelHeight = static_cast<float>(m_ApplicationSpecs.Height);
+
+		rlImGuiSetup(true);
 	}
 
 	void RenderCommnad::Shutdown()
 	{
-
+		rlImGuiShutdown();
 	}
 
 	void RenderCommnad::RenderGrid()
@@ -26,7 +27,12 @@ namespace Engine
 
 	void RenderCommnad::RenderUI()
 	{
-		button.Show();
+		rlImGuiBegin();
+
+		bool open = true;
+		ImGui::ShowDemoWindow(&open);
+	
+		rlImGuiEnd();
 	}
 
 	void RenderCommnad::RenderScene()
@@ -37,12 +43,6 @@ namespace Engine
 
 	void RenderCommnad::UpdateUI()
 	{
-		ModelLoader m_ModelLoader;
 
-		button = rgc::Button(rgc::Bounds(0.0f, 0.0f, 100.0f, 100.0f), "TEST");
-		button.OnClick([&m_ModelLoader]()
-			{
-				m_ModelLoader.OpenFileDialog();
-			});
 	}
 }
