@@ -9,6 +9,10 @@ namespace Engine
 	void UserInterface::Init()
 	{
 		rlImGuiSetup(true);
+
+#ifdef IMGUI_HAS_DOCK
+		ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+#endif
 	}
 
 	void UserInterface::Shutdown()
