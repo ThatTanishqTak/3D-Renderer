@@ -5,6 +5,7 @@
 
 #include "../Application/Specification.h"
 #include "../UserInterface/ModelLoader.h"
+#include "../UserInterface/UserInterface.h"
 #include "../Camera/Camera.h"
 
 namespace Engine
@@ -29,6 +30,7 @@ namespace Engine
 		ModelSpecification m_ModelSpecs;
 		ApplicationSpecification m_ApplicationSpecs;
 		ModelLoader m_ModelLoader;
+		UserInterface m_UserInterface;
 
 		Texture2D m_Texture;
 		Model m_Model;

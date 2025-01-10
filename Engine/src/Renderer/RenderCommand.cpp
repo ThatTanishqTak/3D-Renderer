@@ -1,6 +1,6 @@
 #include "RenderCommand.h"
-#include "rlImGui.h"
 #include "imgui-master/imgui.h"
+#include "rlImGui.h"
 
 namespace Engine
 {
@@ -12,12 +12,12 @@ namespace Engine
 		m_PanelWidth = 250.0f;
 		m_PanelHeight = static_cast<float>(m_ApplicationSpecs.Height);
 
-		rlImGuiSetup(true);
+		m_UserInterface.Init();
 	}
 
 	void RenderCommnad::Shutdown()
 	{
-		rlImGuiShutdown();
+		m_UserInterface.Shutdown();
 	}
 
 	void RenderCommnad::RenderGrid()
@@ -27,12 +27,7 @@ namespace Engine
 
 	void RenderCommnad::RenderUI()
 	{
-		rlImGuiBegin();
-
-		bool open = true;
-		ImGui::ShowDemoWindow(&open);
-	
-		rlImGuiEnd();
+		m_UserInterface.Update();
 	}
 
 	void RenderCommnad::RenderScene()
