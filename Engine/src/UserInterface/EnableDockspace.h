@@ -12,7 +12,6 @@ namespace Engine
 	class EnableDockspace
 	{
 	public:
-
 		EnableDockspace()
 		{
 			ImGui::DockSpaceOverViewport(0, NULL, ImGuiDockNodeFlags_PassthruCentralNode);
