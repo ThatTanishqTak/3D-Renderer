@@ -3,15 +3,13 @@
 #include <string>
 #include <raylib.h>
 
-#include "Specification.h"
+#include "WindowSpecification.h"
 
 namespace Engine
 {
 	class Window
 	{
 	public:
-		Window();
-
 		void Init();
 		void Shutdown();
 
@@ -24,7 +22,7 @@ namespace Engine
 		bool m_IsRunning;
 
 	private:
-		ApplicationSpecification m_ApplicationSpecs;
+		WindowSpecification m_WindowSpecs;
 
 		std::string m_Title;
 

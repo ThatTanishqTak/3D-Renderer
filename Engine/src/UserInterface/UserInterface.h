@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../Application/Specification.h"
+#include "../Renderer/ModelSpecification.h"
 
 namespace Engine
 {

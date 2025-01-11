@@ -2,14 +2,15 @@
 
 namespace Engine
 {
-	Window::Window() : m_IsRunning(true), m_Title(m_ApplicationSpecs.Title), m_Icon(m_ApplicationSpecs.Icon)
-	{
-		m_WindowWidth = m_ApplicationSpecs.Width;
-		m_WindowHeight = m_ApplicationSpecs.Height;
-	}
-
 	void Window::Init()
 	{
+		m_WindowWidth = m_WindowSpecs.Width;
+		m_WindowHeight = m_WindowSpecs.Height;
+
+		m_IsRunning = true;
+		m_Title = m_WindowSpecs.Title;
+		m_Icon = m_WindowSpecs.Icon;
+
 		SetConfigFlags(FLAG_WINDOW_RESIZABLE);
 		SetWindowIcon(m_Icon);
 		InitWindow(m_WindowWidth, m_WindowHeight, m_Title.c_str());

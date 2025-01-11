@@ -6,12 +6,6 @@ namespace Engine
 {
 	void RenderCommnad::Init()
 	{
-		//ModelLoader("Model/1.obj");
-		//TextureLoader("Model/1.png");
-
-		m_PanelWidth = 250.0f;
-		m_PanelHeight = static_cast<float>(m_ApplicationSpecs.Height);
-
 		m_UserInterface.Init();
 	}
 

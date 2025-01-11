@@ -9,10 +9,7 @@ namespace Engine
 	void UserInterface::Init()
 	{
 		rlImGuiSetup(true);
-
-#ifdef IMGUI_HAS_DOCK
 		ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-#endif
 	}
 
 	void UserInterface::Shutdown()
@@ -25,14 +22,6 @@ namespace Engine
 		rlImGuiBegin();
 
 		EnableDockspace enableDockspace;
-
-		ImGui::Begin("Settings");
-
-		ImGui::DragFloat("X", &m_ModelSpecification.Position.x);
-		ImGui::DragFloat("Y", &m_ModelSpecification.Position.y);
-		ImGui::DragFloat("Z", &m_ModelSpecification.Position.z);
-
-		ImGui::End();
 
 		rlImGuiEnd();
 	}
