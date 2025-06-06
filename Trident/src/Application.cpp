@@ -154,6 +154,13 @@ namespace Trident
 
         auto a_Function = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(m_Instance, "vkCreateDebugUtilsMessengerEXT");
 
+        if (!a_Function)
+        {
+            TR_CORE_ERROR("vkCreateDebugUtilsMessengerEXT not found");
+
+            return;
+        }
+
         VkDebugUtilsMessengerCreateInfoEXT dbgInfo{};
         dbgInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
         dbgInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
