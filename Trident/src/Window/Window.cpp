@@ -22,7 +22,7 @@ namespace Trident
 
     void Window::InitWindow(uint32_t width, uint32_t height, const std::string& title)
     {
-        TR_CORE_INFO("Creating GLFW Window");
+        TR_CORE_TRACE("Creating GLFW Window");
         
         glfwInit();
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
@@ -35,17 +35,17 @@ namespace Trident
             TR_CORE_ERROR("Failed to create GLFW window");
         }
 
-        TR_CORE_INFO("GLFW Window Created");
+        TR_CORE_TRACE("GLFW Window Created");
     }
 
     void Window::Shutdown()
     {
-        TR_CORE_INFO("Shutting Down Window");
+        TR_CORE_TRACE("Shutting Down Window");
 
         glfwDestroyWindow(m_Window);
         glfwTerminate();
 
-        TR_CORE_INFO("Window Shutdown");
+        TR_CORE_TRACE("Window Shutdown");
     }
 
     bool Window::ShouldClose() const

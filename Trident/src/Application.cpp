@@ -30,7 +30,7 @@ namespace Trident
     {
         CleanupVulkan();
         
-        TR_CORE_INFO("Vulkan Shutdown.");
+        TR_CORE_TRACE("Vulkan Shutdown.");
     }
 
     //------------------------------------------------------------------------------------------------------------------------------------------------------//
@@ -94,7 +94,7 @@ namespace Trident
 
     void Application::CreateInstance()
     {
-        TR_CORE_INFO("Creating Vulkan Instance");
+        TR_CORE_TRACE("Creating Vulkan Instance");
 
         // VkApplicationInfo
         VkApplicationInfo l_AppInfo{};
@@ -106,15 +106,6 @@ namespace Trident
         l_AppInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
         l_AppInfo.apiVersion = VK_API_VERSION_1_2;
 
-        std::vector<const char*> extensions =
-        {
-            VK_KHR_SURFACE_EXTENSION_NAME
-        };
-
-#ifndef NDEBUG
-        extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-#endif
-
         std::vector<const char*> l_Layers;
 #ifndef NDEBUG
         l_Layers.push_back("VK_LAYER_KHRONOS_validation");
@@ -123,6 +114,10 @@ namespace Trident
         // VkInstanceCreateInfo
         VkInstanceCreateInfo l_CreateInfo{};
         auto l_Extensions = GetRequiredExtensions();
+
+#ifndef NDEBUG
+        l_Extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+#endif
 
         l_CreateInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
         l_CreateInfo.pApplicationInfo = &l_AppInfo;
@@ -136,7 +131,7 @@ namespace Trident
             TR_CORE_CRITICAL("Failed to create Vulkan instance");
         }
 
-        TR_CORE_INFO("Vulkan Instance Created");
+        TR_CORE_TRACE("Vulkan Instance Created");
     }
 
 #ifndef NDEBUG
@@ -150,7 +145,7 @@ namespace Trident
 
     void Application::SetupDebugMessenger()
     {
-        TR_CORE_INFO("Setting Up Debug Messenger");
+        TR_CORE_TRACE("Setting Up Debug Messenger");
 
         auto a_Function = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(m_Instance, "vkCreateDebugUtilsMessengerEXT");
 
@@ -174,25 +169,25 @@ namespace Trident
             return;
         }
 
-        TR_CORE_INFO("Debug Messenger Setup");
+        TR_CORE_TRACE("Debug Messenger Setup");
     }
 #endif
 
     void Application::CreateSurface()
     {
-        TR_CORE_INFO("Creating GLFW Window Surface");
+        TR_CORE_TRACE("Creating GLFW Window Surface");
 
         if (glfwCreateWindowSurface(m_Instance, m_Window.GetNativeWindow(), nullptr, &m_Surface) != VK_SUCCESS)
         {
             TR_CORE_CRITICAL("Failed to create window surface");
         }
 
-        TR_CORE_INFO("Window Surface Created");
+        TR_CORE_TRACE("Window Surface Created");
     }
 
     void Application::PickPhysicalDevice()
     {
-        TR_CORE_INFO("Selecting Physical Device (GPU)");
+        TR_CORE_TRACE("Selecting Physical Device (GPU)");
         
         uint32_t l_DeviceCount = 0;
         vkEnumeratePhysicalDevices(m_Instance, &l_DeviceCount, nullptr);
@@ -210,6 +205,7 @@ namespace Trident
             if (IsDeviceSuitable(it_Device))
             {
                 m_PhysicalDevice = it_Device;
+                m_QueueFamilyIndices = FindQueueFamilies(it_Device);
 
                 break;
             }
@@ -223,15 +219,21 @@ namespace Trident
         VkPhysicalDeviceProperties l_Properties{};
         vkGetPhysicalDeviceProperties(m_PhysicalDevice, &l_Properties);
         
-        TR_CORE_INFO("Selected GPU: {}", l_Properties.deviceName);
+        TR_CORE_TRACE("Selected GPU: {}", l_Properties.deviceName);
     }
 
     void Application::CreateLogicalDevice()
     {
-        TR_CORE_INFO("Creating Logical Device And Queues");
+        TR_CORE_TRACE("Creating Logical Device And Queues");
 
         auto a_QueueFamily = m_QueueFamilyIndices;
-        std::set<uint32_t> uniqueFamilies = { *a_QueueFamily.GraphicsFamily, *a_QueueFamily.PresentFamily };
+        if (!a_QueueFamily.IsComplete())
+        {
+            TR_CORE_CRITICAL("Queue family indices not set");
+            
+            return;
+        }
+        std::set<uint32_t> uniqueFamilies = { a_QueueFamily.GraphicsFamily.value(), a_QueueFamily.PresentFamily.value() };
 
         float prio = 1.0f;
         std::vector<VkDeviceQueueCreateInfo> l_QueueCreateInfo;
@@ -266,7 +268,7 @@ namespace Trident
         vkGetDeviceQueue(m_Device, *a_QueueFamily.GraphicsFamily, 0, &m_GraphicsQueue);
         vkGetDeviceQueue(m_Device, *a_QueueFamily.PresentFamily, 0, &m_PresentQueue);
 
-        TR_CORE_INFO("Logical Device And Queues ready (GFX = {}, Present = {})", *a_QueueFamily.GraphicsFamily, *a_QueueFamily.PresentFamily);
+        TR_CORE_TRACE("Logical Device And Queues ready (GFX = {}, Present = {})", *a_QueueFamily.GraphicsFamily, *a_QueueFamily.PresentFamily);
     }
 
     //----------------------------------------------------------------------------------------------------------------------------------------------------------//
@@ -315,7 +317,7 @@ namespace Trident
 
     bool Application::CheckValidationLayerSupport()
     {
-        TR_CORE_INFO("Checking Validation Layer Support");
+        TR_CORE_TRACE("Checking Validation Layer Support");
 
         uint32_t layerCount = 0;
         vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
@@ -340,12 +342,12 @@ namespace Trident
 
             if (!layerFound)
             {
-                TR_CORE_INFO("Validation layer {} not present", layerName);
+                TR_CORE_TRACE("Validation layer {} not present", layerName);
                 return false;
             }
         }
 
-        TR_CORE_INFO("All requested validation layers are available");
+        TR_CORE_TRACE("All requested validation layers are available");
         return true;
     }
 

@@ -28,7 +28,7 @@ namespace Trident
 
     void Renderer::Shutdown()
     {
-        TR_CORE_INFO("Shutting Down Renderer");
+        TR_CORE_TRACE("Shutting Down Renderer");
 
         vkDeviceWaitIdle(Application::GetDevice());
 
@@ -148,7 +148,7 @@ namespace Trident
             m_VertexBufferMemory = VK_NULL_HANDLE;
         }
 
-        TR_CORE_INFO("Renderer Shutdown Complete");
+        TR_CORE_TRACE("Renderer Shutdown Complete");
     }
 
     void Renderer::DrawFrame()
@@ -208,7 +208,7 @@ namespace Trident
 
     void Renderer::CreateSwapchain()
     {
-        TR_CORE_INFO("Creating Swapchain");
+        TR_CORE_TRACE("Creating Swapchain");
 
         // Query swapchain support details
         auto l_Details = QuerySwapchainSupport(Application::GetPhysicalDevice(), Application::GetSurface());
@@ -272,12 +272,12 @@ namespace Trident
         m_SwapchainImageFormat = l_SurfaceFormat.format;
         m_SwapchainExtent = l_Extent;
 
-        TR_CORE_INFO("Swapchain Created");
+        TR_CORE_TRACE("Swapchain Created");
     }
 
     void Renderer::CreateImageViews()
     {
-        TR_CORE_INFO("Creating Image Views");
+        TR_CORE_TRACE("Creating Image Views");
 
         m_SwapchainImageViews.resize(m_SwapchainImages.size());
 
@@ -304,12 +304,12 @@ namespace Trident
             }
         }
 
-        TR_CORE_INFO("Image Views Created");
+        TR_CORE_TRACE("Image Views Created");
     }
 
     void Renderer::CreateRenderPass()
     {
-        TR_CORE_INFO("Creating Renderpass");
+        TR_CORE_TRACE("Creating Renderpass");
 
         VkAttachmentDescription l_ColorAttachment{};
         l_ColorAttachment.format = m_SwapchainImageFormat;
@@ -352,12 +352,12 @@ namespace Trident
             TR_CORE_CRITICAL("Failed to create render pass");
         }
 
-        TR_CORE_INFO("Renderpass Created");
+        TR_CORE_TRACE("Renderpass Created");
     }
 
     void Renderer::CreateFramebuffers()
     {
-        TR_CORE_INFO("Creating Framebuffers");
+        TR_CORE_TRACE("Creating Framebuffers");
 
         m_SwapchainFramebuffers.resize(m_SwapchainImageViews.size());
 
@@ -380,7 +380,7 @@ namespace Trident
             }
         }
 
-        TR_CORE_INFO("Framebuffers Created");
+        TR_CORE_TRACE("Framebuffers Created");
     }
 
     void Renderer::CreateDescriptorSetLayout()
@@ -402,12 +402,12 @@ namespace Trident
             TR_CORE_CRITICAL("Failed to create descriptor set layout");
         }
 
-        TR_CORE_INFO("Descriptor Set Layout Created");
+        TR_CORE_TRACE("Descriptor Set Layout Created");
     }
 
     void Renderer::CreateGraphicsPipeline()
     {
-        TR_CORE_INFO("Creating Graphics Pipeline");
+        TR_CORE_TRACE("Creating Graphics Pipeline");
 
         auto a_VertexCode = Utilities::FileManagement::ReadFile("Assets/Shaders/Cube.vert.spv");
         auto a_FragmentCode = Utilities::FileManagement::ReadFile("Assets/Shaders/Cube.frag.spv");
@@ -526,12 +526,12 @@ namespace Trident
         vkDestroyShaderModule(Application::GetDevice(), l_FragmentModule, nullptr);
         vkDestroyShaderModule(Application::GetDevice(), l_VertexModule, nullptr);
 
-        TR_CORE_INFO("Graphics Pipeline Created");
+        TR_CORE_TRACE("Graphics Pipeline Created");
     }
 
     void Renderer::CreateCommandPool()
     {
-        TR_CORE_INFO("Creating Command Pool");
+        TR_CORE_TRACE("Creating Command Pool");
 
         VkCommandPoolCreateInfo poolInfo{ VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
         poolInfo.queueFamilyIndex = Application::GetQueueFamilyIndices().GraphicsFamily.value();
@@ -542,12 +542,12 @@ namespace Trident
             TR_CORE_CRITICAL("Failed to create command pool");
         }
 
-        TR_CORE_INFO("Command Pool Created");
+        TR_CORE_TRACE("Command Pool Created");
     }
 
     void Renderer::CreateCommandBuffer()
     {
-        TR_CORE_INFO("Creating Command Buffer");
+        TR_CORE_TRACE("Creating Command Buffer");
 
         m_CommandBuffers.resize(m_SwapchainFramebuffers.size());
 
@@ -586,6 +586,7 @@ namespace Trident
 
             vkCmdBeginRenderPass(m_CommandBuffers[i], &l_RenderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
             vkCmdBindPipeline(m_CommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_GraphicsPipeline);
+            vkCmdBindDescriptorSets(m_CommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_PipelineLayout, 0, 1, &m_DescriptorSets[i], 0, nullptr);
 
             VkBuffer l_VertexBuffers[] = { m_VertexBuffer };
             VkDeviceSize l_Offsets[] = { 0 };
@@ -593,7 +594,6 @@ namespace Trident
             vkCmdBindIndexBuffer(m_CommandBuffers[i], m_IndexBuffer, 0, VK_INDEX_TYPE_UINT16);
 
             vkCmdDrawIndexed(m_CommandBuffers[i], m_IndexCount, 1, 0, 0, 0);
-
             vkCmdEndRenderPass(m_CommandBuffers[i]);
 
             if (vkEndCommandBuffer(m_CommandBuffers[i]) != VK_SUCCESS)
@@ -602,12 +602,12 @@ namespace Trident
             }
         }
 
-        TR_CORE_INFO("Command Buffer Created");
+        TR_CORE_TRACE("Command Buffer Created");
     }
 
     void Renderer::CreateSyncObjects()
     {
-        TR_CORE_INFO("Creating Sync Objects");
+        TR_CORE_TRACE("Creating Sync Objects");
 
         size_t l_Count = m_SwapchainImages.size();
         m_ImageAvailableSemaphores.resize(l_Count);
@@ -631,7 +631,7 @@ namespace Trident
             }
         }
 
-        TR_CORE_INFO("Sync Objects Created");
+        TR_CORE_TRACE("Sync Objects Created");
     }
 
     //------------------------------------------------------------------------------------------------------------------------------------------------------//
