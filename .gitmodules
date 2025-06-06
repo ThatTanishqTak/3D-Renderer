@@ -1,0 +1,6 @@
+[submodule "Trident/vendor/glm"]
+	path = Trident/vendor/glm
+	url = https://github.com/ThatTanishqTak/glm.git
+[submodule "Trident/vendor/spdlog"]
+	path = Trident/vendor/spdlog
+	url = https://github.com/ThatTanishqTak/spdlog.git

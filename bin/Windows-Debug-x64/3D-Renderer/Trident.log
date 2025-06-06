@@ -1,0 +1,39 @@
+[16:50:09] [info] TRIDENT: -------INITIALIZING WINDOW-------
+[16:50:09] [info] TRIDENT: Creating GLFW Window
+[16:50:09] [info] TRIDENT: GLFW Window Created
+[16:50:09] [info] TRIDENT: -------WINDOW INITIALIZED-------
+[16:50:09] [info] TRIDENT: -------INITIALIZING VULKAN-------
+[16:50:09] [info] TRIDENT: Creating Vulkan Instance
+[16:50:11] [info] TRIDENT: Vulkan Instance Created
+[16:50:11] [info] TRIDENT: Setting Up Debug Messenger
+[16:50:11] [info] TRIDENT: Creating GLFW Window Surface
+[16:50:11] [info] TRIDENT: Window Surface Created
+[16:50:11] [info] TRIDENT: Selecting Physical Device (GPU)
+[16:50:11] [info] TRIDENT: Selected GPU: Intel(R) UHD Graphics
+[16:50:11] [info] TRIDENT: Creating Logical Device And Queues
+[16:50:11] [info] TRIDENT: Logical Device And Queues ready (GFX = 0, Present = 0)
+[16:50:11] [info] TRIDENT: -------VULKAN INITIALIZED-------
+[16:50:11] [info] TRIDENT: -------INITIALIZING RENDERER-------
+[16:50:11] [info] TRIDENT: Creating Swapchain
+[16:50:11] [info] TRIDENT: Swapchain Created
+[16:50:11] [info] TRIDENT: Creating Image Views
+[16:50:11] [info] TRIDENT: Image Views Created
+[16:50:11] [info] TRIDENT: Creating Renderpass
+[16:50:11] [info] TRIDENT: Renderpass Created
+[16:50:11] [info] TRIDENT: Descriptor Set Layout Created
+[16:50:11] [info] TRIDENT: Creating Graphics Pipeline
+[16:50:11] [info] TRIDENT: Graphics Pipeline Created
+[16:50:11] [info] TRIDENT: Creating Framebuffers
+[16:50:11] [info] TRIDENT: Framebuffers Created
+[16:50:11] [info] TRIDENT: Creating Command Pool
+[16:50:11] [info] TRIDENT: Command Pool Created
+[16:50:11] [info] TRIDENT: Creating Command Buffer
+[16:50:11] [info] TRIDENT: Command Buffer Created
+[16:50:11] [info] TRIDENT: Creating Sync Objects
+[16:50:11] [info] TRIDENT: Sync Objects Created
+[16:50:11] [info] TRIDENT: -------RENDERER INITIALIZED-------
+[16:50:18] [info] TRIDENT: Shutting Down Renderer
+[16:50:18] [info] TRIDENT: Renderer Shutdown Complete
+[16:50:18] [info] TRIDENT: Vulkan Shutdown.
+[16:50:18] [info] TRIDENT: Shutting Down Window
+[16:50:18] [info] TRIDENT: Window Shutdown

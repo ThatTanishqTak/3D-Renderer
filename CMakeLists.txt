@@ -1,0 +1,38 @@
+﻿cmake_minimum_required(VERSION 3.20)
+project(3D-Renderer LANGUAGES CXX)
+
+get_property(IS_MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+
+if(IS_MULTI_CONFIG)
+  set(OUTPUT_CONFIG "$<CONFIG>")
+else()
+  set(OUTPUT_CONFIG "${CMAKE_BUILD_TYPE}")
+endif()
+
+if(MSVC)
+  add_compile_options(/MP)
+  add_compile_options(/utf-8)
+endif()
+
+set(OS_NAME ${CMAKE_SYSTEM_NAME})
+
+if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+  set(ARCH "x64")
+else()
+  set(ARCH "x86")
+endif()
+
+set(OUTPUT_DIR "${OS_NAME}-${OUTPUT_CONFIG}-${ARCH}/${PROJECT_NAME}")
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/bin/${OUTPUT_DIR}")
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/bin/${OUTPUT_DIR}")
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/bin/${OUTPUT_DIR}")
+
+foreach(CONFIG IN LISTS CMAKE_CONFIGURATION_TYPES)
+  string(TOUPPER "${CONFIG}" UP)
+  set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_${UP} "${CMAKE_BINARY_DIR}/bin/${OS_NAME}-${CONFIG}-${ARCH}/${PROJECT_NAME}")
+  set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_${UP} "${CMAKE_BINARY_DIR}/bin/${OS_NAME}-${CONFIG}-${ARCH}/${PROJECT_NAME}")
+  set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_${UP} "${CMAKE_BINARY_DIR}/bin/${OS_NAME}-${CONFIG}-${ARCH}/${PROJECT_NAME}")
+endforeach()
+
+add_subdirectory(Trident)
+add_subdirectory(Trident-Forge)

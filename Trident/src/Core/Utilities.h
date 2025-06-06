@@ -1,0 +1,53 @@
+#pragma once
+
+#include <fstream>
+
+#define GLM_ENABLE_EXPERIMENTAL
+#include "glm/gtx/string_cast.hpp"
+
+// This ignores all warnings raised inside External headers
+#pragma warning(push, 0)
+#include <spdlog/spdlog.h>
+#include <spdlog/fmt/ostr.h>
+#pragma warning(pop)
+
+namespace Trident
+{
+	namespace Utilities
+	{
+		class Log
+		{
+		public:
+			static void Init();
+
+			static std::shared_ptr<spdlog::logger>& GetCoreLogger() { return s_CoreLogger; }
+			static std::shared_ptr<spdlog::logger>& GetClientLogger() { return s_ClientLogger; }
+
+		private:
+			static std::shared_ptr<spdlog::logger> s_CoreLogger;
+			static std::shared_ptr<spdlog::logger> s_ClientLogger;
+		};
+
+		//------------------------------------------------------------------------------------------------------------------------------------------------------//
+
+		class FileManagement
+		{
+		public:
+			static std::vector<char> ReadFile(const std::string& filePath);
+		};
+	}
+}
+
+// Core log macros
+#define TR_CORE_TRACE(...) ::Trident::Utilities::Log::GetCoreLogger()->trace(__VA_ARGS__)
+#define TR_CORE_INFO(...) ::Trident::Utilities::Log::GetCoreLogger()->info(__VA_ARGS__)
+#define TR_CORE_WARN(...) ::Trident::Utilities::Log::GetCoreLogger()->warn(__VA_ARGS__)
+#define TR_CORE_ERROR(...) ::Trident::Utilities::Log::GetCoreLogger()->error(__VA_ARGS__)
+#define TR_CORE_CRITICAL(...) ::Trident::Utilities::Log::GetCoreLogger()->critical(__VA_ARGS__)
+
+// Client log macros
+#define TR_TRACE(...) ::Trident::Utilities::Log::GetClientLogger()->trace(__VA_ARGS__)
+#define TR_INFO(...) ::Trident::Utilities::Log::GetClientLogger()->info(__VA_ARGS__)
+#define TR_WARN(...) ::Trident::Utilities::Log::GetClientLogger()->warn(__VA_ARGS__)
+#define TR_ERROR(...) ::Trident::Utilities::Log::GetClientLogger()->error(__VA_ARGS__)
+#define TR_CRITICAL(...) ::Trident::Utilities::Log::GetClientLogger()->critical(__VA_ARGS__)
