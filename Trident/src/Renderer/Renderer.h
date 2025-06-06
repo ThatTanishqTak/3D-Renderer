@@ -79,6 +79,8 @@ namespace Trident
         void CreateVertexBuffer();
         void CreateIndexBuffer();
         void CreateUniformBuffer();
+        void CreateDescriptorPool();
+        void CreateDescriptorSets();
         void CreateCommandBuffer();
         void CreateSyncObjects();
 

@@ -28,9 +28,11 @@ namespace Trident
 
     void Application::Shutdown()
     {
+        TR_CORE_TRACE("Shuting down Vulkan");
+
         CleanupVulkan();
         
-        TR_CORE_TRACE("Vulkan Shutdown.");
+        TR_CORE_TRACE("Vulkan Shutdown Complete");
     }
 
     //------------------------------------------------------------------------------------------------------------------------------------------------------//

@@ -19,8 +19,10 @@ namespace Trident
         CreateCommandPool();
         CreateVertexBuffer();
         CreateIndexBuffer();
-        CreateCommandBuffer();
         CreateUniformBuffer();
+        CreateDescriptorPool();
+        CreateDescriptorSets();
+        CreateCommandBuffer();
         CreateSyncObjects();
 
         TR_CORE_INFO("-------RENDERER INITIALIZED-------");
@@ -30,23 +32,24 @@ namespace Trident
     {
         TR_CORE_TRACE("Shutting Down Renderer");
 
-        vkDeviceWaitIdle(Application::GetDevice());
+        VkDevice l_Device = Application::GetDevice();
+        vkDeviceWaitIdle(l_Device);
 
         for (size_t i = 0; i < m_RenderFinishedSemaphores.size(); ++i)
         {
             if (m_RenderFinishedSemaphores[i] != VK_NULL_HANDLE)
             {
-                vkDestroySemaphore(Application::GetDevice(), m_RenderFinishedSemaphores[i], nullptr);
+                vkDestroySemaphore(l_Device, m_RenderFinishedSemaphores[i], nullptr);
             }
 
             if (m_ImageAvailableSemaphores[i] != VK_NULL_HANDLE)
             {
-                vkDestroySemaphore(Application::GetDevice(), m_ImageAvailableSemaphores[i], nullptr);
+                vkDestroySemaphore(l_Device, m_ImageAvailableSemaphores[i], nullptr);
             }
 
             if (m_InFlightFences[i] != VK_NULL_HANDLE)
             {
-                vkDestroyFence(Application::GetDevice(), m_InFlightFences[i], nullptr);
+                vkDestroyFence(l_Device, m_InFlightFences[i], nullptr);
             }
         }
 
@@ -56,33 +59,38 @@ namespace Trident
 
         if (!m_CommandBuffers.empty())
         {
-            vkFreeCommandBuffers(Application::GetDevice(), m_CommandPool, static_cast<uint32_t>(m_CommandBuffers.size()), m_CommandBuffers.data());
+            vkFreeCommandBuffers(l_Device, m_CommandPool, static_cast<uint32_t>(m_CommandBuffers.size()), m_CommandBuffers.data());
+
             m_CommandBuffers.clear();
         }
 
         if (m_CommandPool != VK_NULL_HANDLE)
         {
-            vkDestroyCommandPool(Application::GetDevice(), m_CommandPool, nullptr);
+            vkDestroyCommandPool(l_Device, m_CommandPool, nullptr);
+            
             m_CommandPool = VK_NULL_HANDLE;
         }
-
+        
         if (m_DescriptorSetLayout != VK_NULL_HANDLE)
         {
-            vkDestroyDescriptorSetLayout(Application::GetDevice(), m_DescriptorSetLayout, nullptr);
+            vkDestroyDescriptorSetLayout(l_Device, m_DescriptorSetLayout, nullptr);
+            
             m_DescriptorSetLayout = VK_NULL_HANDLE;
         }
-
+        
         if (m_DescriptorPool != VK_NULL_HANDLE)
         {
-            vkDestroyDescriptorPool(Application::GetDevice(), m_DescriptorPool, nullptr);
+            vkDestroyDescriptorPool(l_Device, m_DescriptorPool, nullptr);
             m_DescriptorPool = VK_NULL_HANDLE;
         }
+        
+        m_DescriptorSets.clear();
 
         for (VkFramebuffer fb : m_SwapchainFramebuffers)
         {
             if (fb != VK_NULL_HANDLE)
             {
-                vkDestroyFramebuffer(Application::GetDevice(), fb, nullptr);
+                vkDestroyFramebuffer(l_Device, fb, nullptr);
             }
         }
         
@@ -91,62 +99,85 @@ namespace Trident
         for (VkImageView view : m_SwapchainImageViews)
         {
             if (view != VK_NULL_HANDLE)
-            {
-                vkDestroyImageView(Application::GetDevice(), view, nullptr);
-            }
+                vkDestroyImageView(l_Device, view, nullptr);
         }
-
+        
         m_SwapchainImageViews.clear();
 
         if (m_Swapchain != VK_NULL_HANDLE)
         {
-            vkDestroySwapchainKHR(Application::GetDevice(), m_Swapchain, nullptr);
+            vkDestroySwapchainKHR(l_Device, m_Swapchain, nullptr);
             m_Swapchain = VK_NULL_HANDLE;
         }
-
+        
         m_SwapchainImages.clear();
 
         if (m_GraphicsPipeline != VK_NULL_HANDLE)
         {
-            vkDestroyPipeline(Application::GetDevice(), m_GraphicsPipeline, nullptr);
+            vkDestroyPipeline(l_Device, m_GraphicsPipeline, nullptr);
+            
             m_GraphicsPipeline = VK_NULL_HANDLE;
         }
 
         if (m_PipelineLayout != VK_NULL_HANDLE)
         {
-            vkDestroyPipelineLayout(Application::GetDevice(), m_PipelineLayout, nullptr);
+            vkDestroyPipelineLayout(l_Device, m_PipelineLayout, nullptr);
+            
             m_PipelineLayout = VK_NULL_HANDLE;
         }
 
         if (m_RenderPass != VK_NULL_HANDLE)
         {
-            vkDestroyRenderPass(Application::GetDevice(), m_RenderPass, nullptr);
+            vkDestroyRenderPass(l_Device, m_RenderPass, nullptr);
+            
             m_RenderPass = VK_NULL_HANDLE;
         }
 
         if (m_IndexBuffer != VK_NULL_HANDLE)
         {
-            vkDestroyBuffer(Application::GetDevice(), m_IndexBuffer, nullptr);
+            vkDestroyBuffer(l_Device, m_IndexBuffer, nullptr);
+            
             m_IndexBuffer = VK_NULL_HANDLE;
         }
-
+        
         if (m_IndexBufferMemory != VK_NULL_HANDLE)
         {
-            vkFreeMemory(Application::GetDevice(), m_IndexBufferMemory, nullptr);
+            vkFreeMemory(l_Device, m_IndexBufferMemory, nullptr);
+            
             m_IndexBufferMemory = VK_NULL_HANDLE;
         }
-
+        
         if (m_VertexBuffer != VK_NULL_HANDLE)
         {
-            vkDestroyBuffer(Application::GetDevice(), m_VertexBuffer, nullptr);
+            vkDestroyBuffer(l_Device, m_VertexBuffer, nullptr);
+            
             m_VertexBuffer = VK_NULL_HANDLE;
         }
-
+        
         if (m_VertexBufferMemory != VK_NULL_HANDLE)
         {
-            vkFreeMemory(Application::GetDevice(), m_VertexBufferMemory, nullptr);
+            vkFreeMemory(l_Device, m_VertexBufferMemory, nullptr);
+            
             m_VertexBufferMemory = VK_NULL_HANDLE;
         }
+
+        for (size_t i = 0; i < m_UniformBuffers.size(); ++i)
+        {
+            if (m_UniformBuffers[i] != VK_NULL_HANDLE)
+            {
+                vkDestroyBuffer(l_Device, m_UniformBuffers[i], nullptr);
+                m_UniformBuffers[i] = VK_NULL_HANDLE;
+            }
+        
+            if (m_UniformBuffersMemory[i] != VK_NULL_HANDLE)
+            {
+                vkFreeMemory(l_Device, m_UniformBuffersMemory[i], nullptr);
+                m_UniformBuffersMemory[i] = VK_NULL_HANDLE;
+            }
+        }
+
+        m_UniformBuffers.clear();
+        m_UniformBuffersMemory.clear();
 
         TR_CORE_TRACE("Renderer Shutdown Complete");
     }
@@ -690,6 +721,64 @@ namespace Trident
         {
             CreateBuffer(l_BufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, m_UniformBuffers[i], m_UniformBuffersMemory[i]);
+        }
+    }
+
+    void Renderer::CreateDescriptorPool()
+    {
+        VkDevice device = Application::GetDevice();
+
+        VkDescriptorPoolSize poolSize{};
+        poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        poolSize.descriptorCount = static_cast<uint32_t>(m_SwapchainImages.size());
+
+        VkDescriptorPoolCreateInfo poolInfo{};
+        poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        poolInfo.poolSizeCount = 1;
+        poolInfo.pPoolSizes = &poolSize;
+        poolInfo.maxSets = static_cast<uint32_t>(m_SwapchainImages.size());
+
+        if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &m_DescriptorPool) != VK_SUCCESS)
+        {
+            TR_CORE_CRITICAL("Failed to create descriptor pool");
+        }
+    }
+
+    void Renderer::CreateDescriptorSets()
+    {
+        VkDevice l_Device = Application::GetDevice();
+
+        std::vector<VkDescriptorSetLayout> l_Layout(m_SwapchainImages.size(), m_DescriptorSetLayout);
+
+        VkDescriptorSetAllocateInfo l_AllocateInfo{};
+        l_AllocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        l_AllocateInfo.descriptorPool = m_DescriptorPool;
+        l_AllocateInfo.descriptorSetCount = static_cast<uint32_t>(m_SwapchainImages.size());
+        l_AllocateInfo.pSetLayouts = l_Layout.data();
+
+        m_DescriptorSets.resize(m_SwapchainImages.size());
+        if (vkAllocateDescriptorSets(l_Device, &l_AllocateInfo, m_DescriptorSets.data()) != VK_SUCCESS)
+        {
+            TR_CORE_CRITICAL("Failed to allocate descriptor sets");
+        }
+
+        for (size_t i = 0; i < m_SwapchainImages.size(); ++i)
+        {
+            VkDescriptorBufferInfo l_BufferInfo{};
+            l_BufferInfo.buffer = m_UniformBuffers[i];
+            l_BufferInfo.offset = 0;
+            l_BufferInfo.range = sizeof(UniformBufferObject);
+
+            VkWriteDescriptorSet l_DiscriptorWrite{};
+            l_DiscriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            l_DiscriptorWrite.dstSet = m_DescriptorSets[i];
+            l_DiscriptorWrite.dstBinding = 0; // binding = 0 in the shader
+            l_DiscriptorWrite.dstArrayElement = 0;
+            l_DiscriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            l_DiscriptorWrite.descriptorCount = 1;
+            l_DiscriptorWrite.pBufferInfo = &l_BufferInfo;
+
+            vkUpdateDescriptorSets(l_Device, 1, &l_DiscriptorWrite, 0, nullptr);
         }
     }
 
