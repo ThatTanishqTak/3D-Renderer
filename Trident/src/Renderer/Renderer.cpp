@@ -153,7 +153,55 @@ namespace Trident
 
     void Renderer::DrawFrame()
     {
+        static size_t s_CurrentFrame = 0;
 
+        vkWaitForFences(Application::GetDevice(), 1, &m_InFlightFences[s_CurrentFrame], VK_TRUE, UINT64_MAX);
+
+        uint32_t l_ImageIndex;
+        VkResult l_Result = vkAcquireNextImageKHR(Application::GetDevice(), m_Swapchain, UINT64_MAX,
+            m_ImageAvailableSemaphores[s_CurrentFrame], VK_NULL_HANDLE, &l_ImageIndex);
+
+        if (l_Result != VK_SUCCESS)
+        {
+            TR_CORE_ERROR("Failed to acquire swapchain image (code {})", static_cast<int>(l_Result));
+            return;
+        }
+
+        VkSubmitInfo l_SubmitInfo{};
+        l_SubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+
+        VkSemaphore l_WaitSemaphores[] = { m_ImageAvailableSemaphores[s_CurrentFrame] };
+        VkPipelineStageFlags l_WaitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+        l_SubmitInfo.waitSemaphoreCount = 1;
+        l_SubmitInfo.pWaitSemaphores = l_WaitSemaphores;
+        l_SubmitInfo.pWaitDstStageMask = l_WaitStages;
+
+        l_SubmitInfo.commandBufferCount = 1;
+        l_SubmitInfo.pCommandBuffers = &m_CommandBuffers[l_ImageIndex];
+
+        VkSemaphore l_SignalSemaphores[] = { m_RenderFinishedSemaphores[s_CurrentFrame] };
+        l_SubmitInfo.signalSemaphoreCount = 1;
+        l_SubmitInfo.pSignalSemaphores = l_SignalSemaphores;
+
+        vkResetFences(Application::GetDevice(), 1, &m_InFlightFences[s_CurrentFrame]);
+
+        if (vkQueueSubmit(Application::GetGraphicsQueue(), 1, &l_SubmitInfo, m_InFlightFences[s_CurrentFrame]) != VK_SUCCESS)
+        {
+            TR_CORE_ERROR("Failed to submit draw command buffer");
+            return;
+        }
+
+        VkPresentInfoKHR l_PresentInfo{};
+        l_PresentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+        l_PresentInfo.waitSemaphoreCount = 1;
+        l_PresentInfo.pWaitSemaphores = l_SignalSemaphores;
+        l_PresentInfo.swapchainCount = 1;
+        l_PresentInfo.pSwapchains = &m_Swapchain;
+        l_PresentInfo.pImageIndices = &l_ImageIndex;
+
+        vkQueuePresentKHR(Application::GetPresentQueue(), &l_PresentInfo);
+
+        s_CurrentFrame = (s_CurrentFrame + 1) % m_InFlightFences.size();
     }
 
     //------------------------------------------------------------------------------------------------------------------------------------------------------//
@@ -501,12 +549,87 @@ namespace Trident
     {
         TR_CORE_INFO("Creating Command Buffer");
 
+        m_CommandBuffers.resize(m_SwapchainFramebuffers.size());
+
+        VkCommandBufferAllocateInfo l_AllocateInfo{};
+        l_AllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        l_AllocateInfo.commandPool = m_CommandPool;
+        l_AllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        l_AllocateInfo.commandBufferCount = static_cast<uint32_t>(m_CommandBuffers.size());
+
+        if (vkAllocateCommandBuffers(Application::GetDevice(), &l_AllocateInfo, m_CommandBuffers.data()) != VK_SUCCESS)
+        {
+            TR_CORE_CRITICAL("Failed to allocate command buffers");
+        }
+
+        for (size_t i = 0; i < m_CommandBuffers.size(); ++i)
+        {
+            VkCommandBufferBeginInfo l_BeginInfo{};
+            l_BeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+
+            if (vkBeginCommandBuffer(m_CommandBuffers[i], &l_BeginInfo) != VK_SUCCESS)
+            {
+                TR_CORE_CRITICAL("Failed to begin recording command buffer");
+            }
+
+            VkRenderPassBeginInfo l_RenderPassInfo{};
+            l_RenderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+            l_RenderPassInfo.renderPass = m_RenderPass;
+            l_RenderPassInfo.framebuffer = m_SwapchainFramebuffers[i];
+            l_RenderPassInfo.renderArea.offset = { 0, 0 };
+            l_RenderPassInfo.renderArea.extent = m_SwapchainExtent;
+
+            VkClearValue l_ClearColor{};
+            l_ClearColor.color = { {0.0f, 0.0f, 0.0f, 1.0f} };
+            l_RenderPassInfo.clearValueCount = 1;
+            l_RenderPassInfo.pClearValues = &l_ClearColor;
+
+            vkCmdBeginRenderPass(m_CommandBuffers[i], &l_RenderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+            vkCmdBindPipeline(m_CommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_GraphicsPipeline);
+
+            VkBuffer l_VertexBuffers[] = { m_VertexBuffer };
+            VkDeviceSize l_Offsets[] = { 0 };
+            vkCmdBindVertexBuffers(m_CommandBuffers[i], 0, 1, l_VertexBuffers, l_Offsets);
+            vkCmdBindIndexBuffer(m_CommandBuffers[i], m_IndexBuffer, 0, VK_INDEX_TYPE_UINT16);
+
+            vkCmdDrawIndexed(m_CommandBuffers[i], m_IndexCount, 1, 0, 0, 0);
+
+            vkCmdEndRenderPass(m_CommandBuffers[i]);
+
+            if (vkEndCommandBuffer(m_CommandBuffers[i]) != VK_SUCCESS)
+            {
+                TR_CORE_CRITICAL("Failed to record command buffer");
+            }
+        }
+
         TR_CORE_INFO("Command Buffer Created");
     }
 
     void Renderer::CreateSyncObjects()
     {
         TR_CORE_INFO("Creating Sync Objects");
+
+        size_t l_Count = m_SwapchainImages.size();
+        m_ImageAvailableSemaphores.resize(l_Count);
+        m_RenderFinishedSemaphores.resize(l_Count);
+        m_InFlightFences.resize(l_Count);
+
+        VkSemaphoreCreateInfo l_SemaphoreInfo{};
+        l_SemaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+        VkFenceCreateInfo l_FenceInfo{};
+        l_FenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+        l_FenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+        for (size_t i = 0; i < l_Count; ++i)
+        {
+            if (vkCreateSemaphore(Application::GetDevice(), &l_SemaphoreInfo, nullptr, &m_ImageAvailableSemaphores[i]) != VK_SUCCESS ||
+                vkCreateSemaphore(Application::GetDevice(), &l_SemaphoreInfo, nullptr, &m_RenderFinishedSemaphores[i]) != VK_SUCCESS ||
+                vkCreateFence(Application::GetDevice(), &l_FenceInfo, nullptr, &m_InFlightFences[i]) != VK_SUCCESS)
+            {
+                TR_CORE_CRITICAL("Failed to create synchronization objects for frame {}", i);
+            }
+        }
 
         TR_CORE_INFO("Sync Objects Created");
     }

@@ -23,8 +23,6 @@ namespace Trident
         bool IsComplete() const { return GraphicsFamily.has_value() && PresentFamily.has_value(); }
     };
 
-    extern QueueFamilyIndices m_QueueFamilyIndicies;
-
     class Application
     {
     public:
@@ -41,8 +39,8 @@ namespace Trident
         static VkSurfaceKHR GetSurface() { return Get().m_Surface; }
         static VkQueue GetGraphicsQueue() { return Get().m_GraphicsQueue; }
         static VkQueue GetPresentQueue() { return Get().m_PresentQueue; }
-        static QueueFamilyIndices GetQueueFamilyIndices() { return Get().FindQueueFamilies(Get().m_PhysicalDevice); }
-        static bool IsDeviceSuitable(VkPhysicalDevice device) { return true; }
+        static QueueFamilyIndices GetQueueFamilyIndices() { return Get().m_QueueFamilyIndices; }
+        static bool IsDeviceSuitable(VkPhysicalDevice device);
 
     private:
         Window& m_Window;
@@ -53,6 +51,7 @@ namespace Trident
         VkDevice m_Device = VK_NULL_HANDLE;
         VkQueue m_GraphicsQueue = VK_NULL_HANDLE;
         VkQueue m_PresentQueue = VK_NULL_HANDLE;
+        QueueFamilyIndices m_QueueFamilyIndices;
 
         std::unique_ptr<Renderer> m_Renderer;
 

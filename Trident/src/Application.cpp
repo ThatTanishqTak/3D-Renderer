@@ -1,9 +1,10 @@
 ﻿#include "Application.h"
 
+#include <string>
+
 namespace Trident
 {
     Application* Application::s_Instance = nullptr;
-    QueueFamilyIndices m_QueueFamilyIndicies;
 
     Application::Application(Window& window) : m_Window(window)
     {
@@ -153,16 +154,18 @@ namespace Trident
 
         auto a_Function = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(m_Instance, "vkCreateDebugUtilsMessengerEXT");
 
-        if (!a_Function)
-        {
-            return;
-        }
-
         VkDebugUtilsMessengerCreateInfoEXT dbgInfo{};
         dbgInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
         dbgInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
         dbgInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT  | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
         dbgInfo.pfnUserCallback = DebugCallback;
+
+        if (a_Function(m_Instance, &dbgInfo, nullptr, &m_DebugMessenger) != VK_SUCCESS)
+        {
+            TR_CORE_ERROR("Failed to create debug messenger");
+            
+            return;
+        }
 
         TR_CORE_INFO("Debug Messenger Setup");
     }
@@ -220,7 +223,7 @@ namespace Trident
     {
         TR_CORE_INFO("Creating Logical Device And Queues");
 
-        auto a_QueueFamily = FindQueueFamilies(m_PhysicalDevice);
+        auto a_QueueFamily = m_QueueFamilyIndices;
         std::set<uint32_t> uniqueFamilies = { *a_QueueFamily.GraphicsFamily, *a_QueueFamily.PresentFamily };
 
         float prio = 1.0f;
@@ -301,5 +304,77 @@ namespace Trident
         }
 
         return l_Indices;
+    }
+
+    bool Application::CheckValidationLayerSupport()
+    {
+        TR_CORE_INFO("Checking Validation Layer Support");
+
+        uint32_t layerCount = 0;
+        vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
+
+        std::vector<VkLayerProperties> availableLayers(layerCount);
+        vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
+
+        const std::vector<const char*> validationLayers = { "VK_LAYER_KHRONOS_validation" };
+
+        for (const char* layerName : validationLayers)
+        {
+            bool layerFound = false;
+
+            for (const auto& layerProps : availableLayers)
+            {
+                if (strcmp(layerName, layerProps.layerName) == 0)
+                {
+                    layerFound = true;
+                    break;
+                }
+            }
+
+            if (!layerFound)
+            {
+                TR_CORE_INFO("Validation layer {} not present", layerName);
+                return false;
+            }
+        }
+
+        TR_CORE_INFO("All requested validation layers are available");
+        return true;
+    }
+
+    bool Application::IsDeviceSuitable(VkPhysicalDevice device)
+    {
+        VkPhysicalDeviceProperties properties{};
+        vkGetPhysicalDeviceProperties(device, &properties);
+
+        auto indices = FindQueueFamilies(device);
+
+        // Check required device extensions
+        uint32_t extensionCount = 0;
+        vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);
+        std::vector<VkExtensionProperties> availableExtensions(extensionCount);
+        vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, availableExtensions.data());
+
+        std::set<std::string> requiredExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
+        for (const auto& ext : availableExtensions)
+        {
+            requiredExtensions.erase(ext.extensionName);
+        }
+
+        bool extensionsSupported = requiredExtensions.empty();
+
+        bool swapChainAdequate = false;
+        if (extensionsSupported)
+        {
+            uint32_t formatCount = 0;
+            vkGetPhysicalDeviceSurfaceFormatsKHR(device, GetSurface(), &formatCount, nullptr);
+
+            uint32_t presentModeCount = 0;
+            vkGetPhysicalDeviceSurfacePresentModesKHR(device, GetSurface(), &presentModeCount, nullptr);
+
+            swapChainAdequate = formatCount > 0 && presentModeCount > 0;
+        }
+
+        return indices.IsComplete() && extensionsSupported && swapChainAdequate;
     }
 }
