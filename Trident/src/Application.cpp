@@ -113,6 +113,13 @@ namespace Trident
         l_Layers.push_back("VK_LAYER_KHRONOS_validation");
 #endif
 
+#ifndef NDEBUG
+        if (!CheckValidationLayerSupport())
+        {
+            TR_CORE_CRITICAL("Validation layers requested, but not available!");
+        }
+#endif
+
         // VkInstanceCreateInfo
         VkInstanceCreateInfo l_CreateInfo{};
         auto l_Extensions = GetRequiredExtensions();

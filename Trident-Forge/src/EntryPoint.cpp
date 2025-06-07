@@ -19,10 +19,10 @@ int main()
         if (l_Description)
         {
             TR_CRITICAL("[GLFW error {}] {}", l_Code, l_Description);
-
-            return EXIT_FAILURE;
         }
 
-        return EXIT_SUCCESS;
+        return EXIT_FAILURE;
     }
+
+    return EXIT_SUCCESS;
 }

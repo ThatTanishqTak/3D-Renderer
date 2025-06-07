@@ -6,9 +6,8 @@
 #include "Geometry/Cube.h"
 
 #include <vulkan/vulkan.h>
-
 #include <vector>
-#include <optional>
+#include <array>
 
 namespace Trident
 {
@@ -26,6 +25,8 @@ namespace Trident
         void Shutdown();
         void DrawFrame();
 
+        void RecreateSwapchain();
+
     private:
         // Swapchain
         VkSwapchainKHR m_Swapchain = VK_NULL_HANDLE;
@@ -41,7 +42,7 @@ namespace Trident
         VkDeviceMemory m_IndexBufferMemory;
         uint32_t m_IndexCount;
 
-        // Pipeline objects
+        // Pipeline
         VkRenderPass m_RenderPass;
         VkPipelineLayout m_PipelineLayout;
         VkPipeline m_GraphicsPipeline;
@@ -49,23 +50,26 @@ namespace Trident
         // Framebuffers
         std::vector<VkFramebuffer> m_SwapchainFramebuffers;
 
-        // Command buffers
+        // Command pool & buffers
         VkCommandPool m_CommandPool = VK_NULL_HANDLE;
         std::vector<VkCommandBuffer> m_CommandBuffers;
 
-        // Synchronization
-        std::vector<VkSemaphore> m_ImageAvailableSemaphores;
-        std::vector<VkSemaphore> m_RenderFinishedSemaphores;
-        std::vector<VkFence> m_InFlightFences;
+        // Synchronization (frames-in-flight pattern)
+        static constexpr int MAX_FRAMES_IN_FLIGHT = 2;
+        std::array<VkSemaphore, MAX_FRAMES_IN_FLIGHT> m_ImageAvailableSemaphores;
+        std::array<VkSemaphore, MAX_FRAMES_IN_FLIGHT> m_RenderFinishedSemaphores;
+        std::array<VkFence, MAX_FRAMES_IN_FLIGHT> m_InFlightFences;
 
+        // Track which fence is using each swapchain image
+        std::vector<VkFence> m_ImagesInFlight;
+        size_t m_CurrentFrame = 0;
+
+        // Descriptor sets & uniform buffers
         VkDescriptorSetLayout m_DescriptorSetLayout = VK_NULL_HANDLE;
         VkDescriptorPool m_DescriptorPool = VK_NULL_HANDLE;
-        VkDescriptorSet m_Descriptor = VK_NULL_HANDLE;
-
+        std::vector<VkDescriptorSet> m_DescriptorSets;
         std::vector<VkBuffer> m_UniformBuffers;
         std::vector<VkDeviceMemory> m_UniformBuffersMemory;
-
-        std::vector<VkDescriptorSet> m_DescriptorSets;
 
     private:
         // Core setup
@@ -84,11 +88,12 @@ namespace Trident
         void CreateCommandBuffer();
         void CreateSyncObjects();
 
-        // Helpers
-        VkShaderModule CreateShaderModule(VkDevice device, const std::vector<char>& shaderCode);
+        // Utility helpers
+        VkShaderModule CreateShaderModule(VkDevice device, const std::vector<char>& code);
         uint32_t FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
         void CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory);
         void CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
+
         SwapchainSupportDetails QuerySwapchainSupport(VkPhysicalDevice device, VkSurfaceKHR surface);
         VkSurfaceFormatKHR ChooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats);
         VkPresentModeKHR ChooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes);

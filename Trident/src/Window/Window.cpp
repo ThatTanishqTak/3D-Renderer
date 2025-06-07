@@ -26,7 +26,7 @@ namespace Trident
         
         glfwInit();
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-        glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+        glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 
         m_Window = glfwCreateWindow(static_cast<int>(width), static_cast<int>(height), title.c_str(), nullptr, nullptr);
 
@@ -45,7 +45,7 @@ namespace Trident
         glfwDestroyWindow(m_Window);
         glfwTerminate();
 
-        TR_CORE_TRACE("Window Shutdown");
+        TR_CORE_TRACE("Window Shutdown Complete");
     }
 
     bool Window::ShouldClose() const
