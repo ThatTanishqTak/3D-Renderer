@@ -50,5 +50,22 @@ namespace Trident
 			
 			return l_Buffer;
 		}
+
+		std::chrono::time_point<std::chrono::high_resolution_clock> Time::s_LastFrameTime;
+		float Time::s_DeltaTime = 0.0f;
+
+		void Time::Init()
+		{
+			s_LastFrameTime = std::chrono::high_resolution_clock::now();
+			s_DeltaTime = 0.0f;
+		}
+
+		void Time::Update()
+		{
+			auto a_CurrentTime = std::chrono::high_resolution_clock::now();
+
+			s_DeltaTime = std::chrono::duration<float, std::chrono::seconds::period>(a_CurrentTime - s_LastFrameTime).count();
+			s_LastFrameTime = a_CurrentTime;
+		}
 	}
 }

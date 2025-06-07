@@ -13,6 +13,8 @@ namespace Trident
 
     void Application::Init()
     {
+        Utilities::Time::Init();
+
         InitVulkan();
 
         m_Renderer = std::make_unique<Renderer>();
@@ -21,6 +23,8 @@ namespace Trident
 
     void Application::Update()
     {
+        Utilities::Time::Update();
+
         m_Window.PollEvents();
 
         m_Renderer->DrawFrame();

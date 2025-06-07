@@ -6,6 +6,8 @@
 #include <algorithm>
 #include <limits>
 
+#include <glm/gtc/matrix_transform.hpp>
+
 namespace Trident
 {
     void Renderer::Init()
@@ -78,6 +80,7 @@ namespace Trident
         if (m_DescriptorPool != VK_NULL_HANDLE)
         {
             vkDestroyDescriptorPool(Application::GetDevice(), m_DescriptorPool, nullptr);
+
             m_DescriptorPool = VK_NULL_HANDLE;
         }
         
@@ -93,11 +96,11 @@ namespace Trident
         
         m_SwapchainFramebuffers.clear();
 
-        for (VkImageView view : m_SwapchainImageViews)
+        for (VkImageView l_View : m_SwapchainImageViews)
         {
-            if (view != VK_NULL_HANDLE)
+            if (l_View != VK_NULL_HANDLE)
             {
-                vkDestroyImageView(Application::GetDevice(), view, nullptr);
+                vkDestroyImageView(Application::GetDevice(), l_View, nullptr);
             }
         }
         
@@ -190,6 +193,7 @@ namespace Trident
 
         uint32_t l_ImageIndex;
         VkResult l_Result = vkAcquireNextImageKHR(Application::GetDevice(), m_Swapchain, UINT64_MAX, m_ImageAvailableSemaphores[m_CurrentFrame], VK_NULL_HANDLE, &l_ImageIndex);
+
         if (l_Result == VK_ERROR_OUT_OF_DATE_KHR || l_Result == VK_SUBOPTIMAL_KHR)
         {
             RecreateSwapchain();
@@ -209,8 +213,11 @@ namespace Trident
 
         m_ImagesInFlight[l_ImageIndex] = m_InFlightFences[m_CurrentFrame];
 
+        static float s_DeltaTime = 0.0f;
+        s_DeltaTime += Utilities::Time::GetDeltaTime();
+
         UniformBufferObject l_UniformBufferObject{};
-        l_UniformBufferObject.Model = glm::mat4(1.0f);
+        l_UniformBufferObject.Model = glm::rotate(glm::mat4(1.0f), s_DeltaTime * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
         l_UniformBufferObject.View = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
         l_UniformBufferObject.Projection = glm::perspective(glm::radians(45.0f), m_SwapchainExtent.width / float(m_SwapchainExtent.height), 0.1f, 10.0f);
         l_UniformBufferObject.Projection[1][1] *= -1.0f;
@@ -263,16 +270,16 @@ namespace Trident
     {
         TR_CORE_TRACE("Recreating Swapchain");
 
-        uint32_t width = 0;
-        uint32_t height = 0;
+        uint32_t l_Width = 0;
+        uint32_t l_Height = 0;
 
-        Application::GetWindow().GetFramebufferSize(width, height);
+        Application::GetWindow().GetFramebufferSize(l_Width, l_Height);
 
-        while (width == 0 || height == 0)
+        while (l_Width == 0 || l_Height == 0)
         {
             glfwWaitEvents();
 
-            Application::GetWindow().GetFramebufferSize(width, height);
+            Application::GetWindow().GetFramebufferSize(l_Width, l_Height);
         }
 
         vkDeviceWaitIdle(Application::GetDevice());
@@ -282,18 +289,21 @@ namespace Trident
             if (m_RenderFinishedSemaphores[i] != VK_NULL_HANDLE)
             {
                 vkDestroySemaphore(Application::GetDevice(), m_RenderFinishedSemaphores[i], nullptr);
+
                 m_RenderFinishedSemaphores[i] = VK_NULL_HANDLE;
             }
 
             if (m_ImageAvailableSemaphores[i] != VK_NULL_HANDLE)
             {
                 vkDestroySemaphore(Application::GetDevice(), m_ImageAvailableSemaphores[i], nullptr);
+
                 m_ImageAvailableSemaphores[i] = VK_NULL_HANDLE;
             }
 
             if (m_InFlightFences[i] != VK_NULL_HANDLE)
             {
                 vkDestroyFence(Application::GetDevice(), m_InFlightFences[i], nullptr);
+
                 m_InFlightFences[i] = VK_NULL_HANDLE;
             }
         }
@@ -302,6 +312,7 @@ namespace Trident
         m_RenderFinishedSemaphores.clear();
         m_InFlightFences.clear();
         m_ImagesInFlight.clear();
+
         m_CurrentFrame = 0;
 
         for (VkFramebuffer l_FrameBuffer : m_SwapchainFramebuffers)
@@ -311,9 +322,9 @@ namespace Trident
 
         m_SwapchainFramebuffers.clear();
 
-        for (VkImageView view : m_SwapchainImageViews)
+        for (VkImageView l_View : m_SwapchainImageViews)
         {
-            vkDestroyImageView(Application::GetDevice(), view, nullptr);
+            vkDestroyImageView(Application::GetDevice(), l_View, nullptr);
         }
 
         m_SwapchainImageViews.clear();
@@ -506,11 +517,11 @@ namespace Trident
     {
         TR_CORE_TRACE("Creating Graphics Pipeline");
 
-        auto l_VertexShaderCode = Utilities::FileManagement::ReadFile("Assets/Shaders/Cube.vert.spv");
-        auto l_FragmentShaderCode = Utilities::FileManagement::ReadFile("Assets/Shaders/Cube.frag.spv");
+        auto a_VertexShaderCode = Utilities::FileManagement::ReadFile("Assets/Shaders/Cube.vert.spv");
+        auto a_FragmentShaderCode = Utilities::FileManagement::ReadFile("Assets/Shaders/Cube.frag.spv");
 
-        VkShaderModule l_VertexModule = CreateShaderModule(Application::GetDevice(), l_VertexShaderCode);
-        VkShaderModule l_FragmentModule = CreateShaderModule(Application::GetDevice(), l_FragmentShaderCode);
+        VkShaderModule l_VertexModule = CreateShaderModule(Application::GetDevice(), a_VertexShaderCode);
+        VkShaderModule l_FragmentModule = CreateShaderModule(Application::GetDevice(), a_FragmentShaderCode);
 
         VkPipelineShaderStageCreateInfo l_VertexStage{};
         l_VertexStage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -526,15 +537,15 @@ namespace Trident
 
         VkPipelineShaderStageCreateInfo l_ShaderStages[] = { l_VertexStage, l_FragmentStage };
 
-        auto l_BindingDescription = Vertex::GetBindingDescription();
-        auto l_AttributeDescriptions = Vertex::GetAttributeDescriptions();
+        auto a_BindingDescription = Vertex::GetBindingDescription();
+        auto a_AttributeDescriptions = Vertex::GetAttributeDescriptions();
 
         VkPipelineVertexInputStateCreateInfo l_VertexInputInfo{};
         l_VertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
         l_VertexInputInfo.vertexBindingDescriptionCount = 1;
-        l_VertexInputInfo.pVertexBindingDescriptions = &l_BindingDescription;
-        l_VertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(l_AttributeDescriptions.size());
-        l_VertexInputInfo.pVertexAttributeDescriptions = l_AttributeDescriptions.data();
+        l_VertexInputInfo.pVertexBindingDescriptions = &a_BindingDescription;
+        l_VertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(a_AttributeDescriptions.size());
+        l_VertexInputInfo.pVertexAttributeDescriptions = a_AttributeDescriptions.data();
 
         VkPipelineInputAssemblyStateCreateInfo l_InputAssembly{};
         l_InputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;

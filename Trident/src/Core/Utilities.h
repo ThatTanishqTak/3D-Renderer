@@ -1,6 +1,7 @@
 #pragma once
 
 #include <fstream>
+#include <chrono>
 
 #define GLM_ENABLE_EXPERIMENTAL
 #include "glm/gtx/string_cast.hpp"
@@ -34,6 +35,18 @@ namespace Trident
 		{
 		public:
 			static std::vector<char> ReadFile(const std::string& filePath);
+		};
+
+		class Time
+		{
+		public:
+			static void Init();
+			static void Update();
+			static float GetDeltaTime() { return s_DeltaTime; }
+
+		private:
+			static std::chrono::time_point<std::chrono::high_resolution_clock> s_LastFrameTime;
+			static float s_DeltaTime;
 		};
 	}
 }
