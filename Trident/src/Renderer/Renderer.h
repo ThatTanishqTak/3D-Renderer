@@ -55,9 +55,14 @@ namespace Trident
         std::vector<VkCommandBuffer> m_CommandBuffers;
 
         // Synchronization (frames-in-flight pattern)
+        static constexpr int MAX_FRAMES_IN_FLIGHT = 2;
+        //std::array<VkSemaphore, MAX_FRAMES_IN_FLIGHT> m_ImageAvailableSemaphores;
+        //std::array<VkSemaphore, MAX_FRAMES_IN_FLIGHT> m_RenderFinishedSemaphores;
+        //std::array<VkFence, MAX_FRAMES_IN_FLIGHT> m_InFlightFences;
+
         std::vector<VkSemaphore> m_ImageAvailableSemaphores;
         std::vector<VkSemaphore> m_RenderFinishedSemaphores;
-        std::vector<VkFence> m_InFlightFences;
+        std::vector<VkFence>     m_InFlightFences;
 
         // Track which fence is using each swapchain image
         std::vector<VkFence> m_ImagesInFlight;

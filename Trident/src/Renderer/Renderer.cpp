@@ -37,7 +37,8 @@ namespace Trident
         VkDevice l_Device = Application::GetDevice();
         vkDeviceWaitIdle(l_Device);
 
-        for (int i = 0; i < 2; ++i)
+        size_t count = m_ImageAvailableSemaphores.size();
+        for (size_t i = 0; i < count; ++i)
         {
             if (m_RenderFinishedSemaphores[i] != VK_NULL_HANDLE)
             {
@@ -191,7 +192,7 @@ namespace Trident
 
         vkWaitForFences(device, 1, &m_InFlightFences[m_CurrentFrame], VK_TRUE, UINT64_MAX);
 
-        uint32_t imageIndex{};
+        uint32_t imageIndex;
         VkResult result = vkAcquireNextImageKHR(device, m_Swapchain, UINT64_MAX, m_ImageAvailableSemaphores[m_CurrentFrame], VK_NULL_HANDLE, &imageIndex);
         if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
         {
@@ -209,6 +210,7 @@ namespace Trident
         {
             vkWaitForFences(device, 1, &m_ImagesInFlight[imageIndex], VK_TRUE, UINT64_MAX);
         }
+
         m_ImagesInFlight[imageIndex] = m_InFlightFences[m_CurrentFrame];
 
         UniformBufferObject ubo{};
@@ -253,22 +255,59 @@ namespace Trident
         {
             RecreateSwapchain();
         }
-        
         else if (result != VK_SUCCESS)
         {
             TR_CORE_CRITICAL("Failed to present swapchain image (code {})", static_cast<int>(result));
         }
 
-        m_CurrentFrame = (m_CurrentFrame + 1) % 2;
+        m_CurrentFrame = (m_CurrentFrame + 1) % m_ImageAvailableSemaphores.size();
     }
 
     void Renderer::RecreateSwapchain()
     {
         TR_CORE_TRACE("Recreating Swapchain");
 
+        uint32_t width = 0;
+        uint32_t height = 0;
+        auto& window = Application::GetWindow();
+        window.GetFramebufferSize(width, height);
+
+        while (width == 0 || height == 0)
+        {
+            glfwWaitEvents();
+            window.GetFramebufferSize(width, height);
+        }
+
         VkDevice device = Application::GetDevice();
 
         vkDeviceWaitIdle(device);
+
+        for (size_t i = 0; i < m_ImageAvailableSemaphores.size(); ++i)
+        {
+            if (m_RenderFinishedSemaphores[i] != VK_NULL_HANDLE)
+            {
+                vkDestroySemaphore(device, m_RenderFinishedSemaphores[i], nullptr);
+                m_RenderFinishedSemaphores[i] = VK_NULL_HANDLE;
+            }
+
+            if (m_ImageAvailableSemaphores[i] != VK_NULL_HANDLE)
+            {
+                vkDestroySemaphore(device, m_ImageAvailableSemaphores[i], nullptr);
+                m_ImageAvailableSemaphores[i] = VK_NULL_HANDLE;
+            }
+
+            if (m_InFlightFences[i] != VK_NULL_HANDLE)
+            {
+                vkDestroyFence(device, m_InFlightFences[i], nullptr);
+                m_InFlightFences[i] = VK_NULL_HANDLE;
+            }
+        }
+
+        m_ImageAvailableSemaphores.clear();
+        m_RenderFinishedSemaphores.clear();
+        m_InFlightFences.clear();
+        m_ImagesInFlight.clear();
+        m_CurrentFrame = 0;
 
         for (VkFramebuffer fb : m_SwapchainFramebuffers)
         {
@@ -293,6 +332,7 @@ namespace Trident
 
         vkFreeCommandBuffers(device, m_CommandPool, static_cast<uint32_t>(m_CommandBuffers.size()), m_CommandBuffers.data());
         CreateCommandBuffer();
+        CreateSyncObjects();
 
         TR_CORE_TRACE("Swapchain Recreated");
     }
@@ -784,12 +824,15 @@ namespace Trident
         TR_CORE_TRACE("Creating Sync Objects");
 
         size_t count = m_SwapchainImages.size();
+        
         m_ImageAvailableSemaphores.resize(count);
         m_RenderFinishedSemaphores.resize(count);
         m_InFlightFences.resize(count);
+        m_ImagesInFlight.resize(count);
+        std::fill(m_ImagesInFlight.begin(), m_ImagesInFlight.end(), VK_NULL_HANDLE);
 
         VkSemaphoreCreateInfo semInfo{ VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
-        VkFenceCreateInfo     fenceInfo{ VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
+        VkFenceCreateInfo fenceInfo{ VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
         fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
         for (size_t i = 0; i < count; ++i)
@@ -1015,7 +1058,11 @@ namespace Trident
 
         else
         {
-            VkExtent2D actualExtent = { 1920, 1080 };
+            uint32_t width = 0;
+            uint32_t height = 0;
+            Application::GetWindow().GetFramebufferSize(width, height);
+
+            VkExtent2D actualExtent = { width, height };
 
             actualExtent.width = std::max(capabilities.minImageExtent.width, std::min(capabilities.maxImageExtent.width, actualExtent.width));
             actualExtent.height = std::max(capabilities.minImageExtent.height, std::min(capabilities.maxImageExtent.height, actualExtent.height));

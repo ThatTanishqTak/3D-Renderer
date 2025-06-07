@@ -41,7 +41,7 @@ namespace Trident
         static VkQueue GetGraphicsQueue() { return Get().m_GraphicsQueue; }
         static VkQueue GetPresentQueue() { return Get().m_PresentQueue; }
         static QueueFamilyIndices GetQueueFamilyIndices() { return Get().m_QueueFamilyIndices; }
-        static Window GetWindow() { return Get().m_Window; }
+        static Window& GetWindow() { return Get().m_Window; }
         bool IsDeviceSuitable(VkPhysicalDevice device);
 
     private:

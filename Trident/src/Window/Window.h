@@ -13,11 +13,16 @@ namespace Trident
         Window(uint32_t width, uint32_t height, const std::string& title);
         ~Window();
 
+        Window(const Window&) = delete;
+        Window& operator=(const Window&) = delete;
+
         bool ShouldClose() const;
         
         void PollEvents() const;
 
         GLFWwindow* GetNativeWindow() const { return m_Window; }
+
+        void GetFramebufferSize(uint32_t& width, uint32_t& height) const;
 
     private:
         void InitWindow(uint32_t width, uint32_t height, const std::string& title);
