@@ -213,11 +213,8 @@ namespace Trident
 
         m_ImagesInFlight[l_ImageIndex] = m_InFlightFences[m_CurrentFrame];
 
-        static float s_DeltaTime = 0.0f;
-        s_DeltaTime += Utilities::Time::GetDeltaTime();
-
         UniformBufferObject l_UniformBufferObject{};
-        l_UniformBufferObject.Model = glm::rotate(glm::mat4(1.0f), s_DeltaTime * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+        l_UniformBufferObject.Model = glm::rotate(glm::mat4(1.0f), Utilities::Time::GetTime() * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
         l_UniformBufferObject.View = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
         l_UniformBufferObject.Projection = glm::perspective(glm::radians(45.0f), m_SwapchainExtent.width / float(m_SwapchainExtent.height), 0.1f, 10.0f);
         l_UniformBufferObject.Projection[1][1] *= -1.0f;

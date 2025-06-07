@@ -1,7 +1,6 @@
 #pragma once
 
 #include <fstream>
-#include <chrono>
 
 #define GLM_ENABLE_EXPERIMENTAL
 #include "glm/gtx/string_cast.hpp"
@@ -11,6 +10,8 @@
 #include <spdlog/spdlog.h>
 #include <spdlog/fmt/ostr.h>
 #pragma warning(pop)
+
+#include <GLFW/glfw3.h>
 
 namespace Trident
 {
@@ -37,15 +38,20 @@ namespace Trident
 			static std::vector<char> ReadFile(const std::string& filePath);
 		};
 
+		//------------------------------------------------------------------------------------------------------------------------------------------------------//
+
 		class Time
 		{
 		public:
 			static void Init();
 			static void Update();
+
 			static float GetDeltaTime() { return s_DeltaTime; }
+			static float GetTime() { return static_cast<float>(glfwGetTime()); }
+			static float GetFPS() { return s_DeltaTime > 0.0f ? 1.0f / s_DeltaTime : 0.0f; }
 
 		private:
-			static std::chrono::time_point<std::chrono::high_resolution_clock> s_LastFrameTime;
+			static double s_LastTime;
 			static float s_DeltaTime;
 		};
 	}

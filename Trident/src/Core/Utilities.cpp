@@ -36,7 +36,7 @@ namespace Trident
 			
 			if (!l_File.is_open())
 			{
-				TR_CORE_CRITICAL("Failed to open file: " + filePath);
+				TR_CORE_CRITICAL("Failed to open file: {}", filePath);
 				
 				return {};
 			}
@@ -51,21 +51,23 @@ namespace Trident
 			return l_Buffer;
 		}
 
-		std::chrono::time_point<std::chrono::high_resolution_clock> Time::s_LastFrameTime;
+		double Time::s_LastTime = 0.0;
 		float Time::s_DeltaTime = 0.0f;
 
 		void Time::Init()
 		{
-			s_LastFrameTime = std::chrono::high_resolution_clock::now();
+			glfwSetTime(0.0);
+			
+			s_LastTime = 0.0;
 			s_DeltaTime = 0.0f;
 		}
 
 		void Time::Update()
 		{
-			auto a_CurrentTime = std::chrono::high_resolution_clock::now();
+			double current = glfwGetTime();
 
-			s_DeltaTime = std::chrono::duration<float, std::chrono::seconds::period>(a_CurrentTime - s_LastFrameTime).count();
-			s_LastFrameTime = a_CurrentTime;
+			s_DeltaTime = static_cast<float>(current - s_LastTime);
+			s_LastTime = current;
 		}
 	}
 }
