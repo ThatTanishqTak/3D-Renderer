@@ -60,10 +60,11 @@ namespace Trident
 
     void Window::GetFramebufferSize(uint32_t& width, uint32_t& height) const
     {
-        int w = 0;
-        int h = 0;
-        glfwGetFramebufferSize(m_Window, &w, &h);
-        width = static_cast<uint32_t>(w);
-        height = static_cast<uint32_t>(h);
+        int l_Width = 0;
+        int l_Height = 0;
+        
+        glfwGetFramebufferSize(m_Window, &l_Width, &l_Height);
+        width = static_cast<uint32_t>(l_Width);
+        height = static_cast<uint32_t>(l_Height);
     }
 }

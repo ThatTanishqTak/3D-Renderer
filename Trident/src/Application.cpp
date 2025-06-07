@@ -147,7 +147,7 @@ namespace Trident
     static VKAPI_ATTR VkBool32 VKAPI_CALL DebugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT severity, VkDebugUtilsMessageTypeFlagsEXT type,
         const VkDebugUtilsMessengerCallbackDataEXT* data, void*)
     {
-        TR_CORE_CRITICAL("Validation: {}\n", data->pMessage);
+        TR_CORE_CRITICAL("Validation: {}", data->pMessage);
 
         return VK_FALSE;
     }
@@ -165,13 +165,13 @@ namespace Trident
             return;
         }
 
-        VkDebugUtilsMessengerCreateInfoEXT dbgInfo{};
-        dbgInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-        dbgInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-        dbgInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT  | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-        dbgInfo.pfnUserCallback = DebugCallback;
+        VkDebugUtilsMessengerCreateInfoEXT l_DebugInfo{};
+        l_DebugInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+        l_DebugInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+        l_DebugInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT  | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+        l_DebugInfo.pfnUserCallback = DebugCallback;
 
-        if (a_Function(m_Instance, &dbgInfo, nullptr, &m_DebugMessenger) != VK_SUCCESS)
+        if (a_Function(m_Instance, &l_DebugInfo, nullptr, &m_DebugMessenger) != VK_SUCCESS)
         {
             TR_CORE_ERROR("Failed to create debug messenger");
             
@@ -238,23 +238,23 @@ namespace Trident
         auto a_QueueFamily = m_QueueFamilyIndices;
         if (!a_QueueFamily.IsComplete())
         {
-            TR_CORE_CRITICAL("Queue family indices not set");
+            TR_CORE_CRITICAL("Queue it_Family indices not set");
             
             return;
         }
-        std::set<uint32_t> uniqueFamilies = { a_QueueFamily.GraphicsFamily.value(), a_QueueFamily.PresentFamily.value() };
+        std::set<uint32_t> l_UniqueFamilies = { a_QueueFamily.GraphicsFamily.value(), a_QueueFamily.PresentFamily.value() };
 
-        float prio = 1.0f;
+        float l_Priority = 1.0f;
         std::vector<VkDeviceQueueCreateInfo> l_QueueCreateInfo;
 
-        for (auto family : uniqueFamilies)
+        for (auto it_Family : l_UniqueFamilies)
         {
             VkDeviceQueueCreateInfo l_DeviceQueueInfo{};
 
             l_DeviceQueueInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-            l_DeviceQueueInfo.queueFamilyIndex = family;
+            l_DeviceQueueInfo.queueFamilyIndex = it_Family;
             l_DeviceQueueInfo.queueCount = 1;
-            l_DeviceQueueInfo.pQueuePriorities = &prio;
+            l_DeviceQueueInfo.pQueuePriorities = &l_Priority;
             l_QueueCreateInfo.push_back(l_DeviceQueueInfo);
         }
 
@@ -265,9 +265,9 @@ namespace Trident
         l_DeviceCreateInfo.queueCreateInfoCount = static_cast<uint32_t>(l_QueueCreateInfo.size());
         l_DeviceCreateInfo.pQueueCreateInfos = l_QueueCreateInfo.data();
         l_DeviceCreateInfo.pEnabledFeatures = &l_Features;
-        const char* devExts[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
+        const char* l_Extensions[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
         l_DeviceCreateInfo.enabledExtensionCount = 1;
-        l_DeviceCreateInfo.ppEnabledExtensionNames = devExts;
+        l_DeviceCreateInfo.ppEnabledExtensionNames = l_Extensions;
 
         if (vkCreateDevice(m_PhysicalDevice, &l_DeviceCreateInfo, nullptr, &m_Device) != VK_SUCCESS)
         {
@@ -328,71 +328,74 @@ namespace Trident
     {
         TR_CORE_TRACE("Checking Validation Layer Support");
 
-        uint32_t layerCount = 0;
-        vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
+        uint32_t l_LayerCount = 0;
+        vkEnumerateInstanceLayerProperties(&l_LayerCount, nullptr);
 
-        std::vector<VkLayerProperties> availableLayers(layerCount);
-        vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
+        std::vector<VkLayerProperties> l_AvailableLayers(l_LayerCount);
+        vkEnumerateInstanceLayerProperties(&l_LayerCount, l_AvailableLayers.data());
 
-        const std::vector<const char*> validationLayers = { "VK_LAYER_KHRONOS_validation" };
+        const std::vector<const char*> l_ValidationLayers = { "VK_LAYER_KHRONOS_validation" };
 
-        for (const char* layerName : validationLayers)
+        for (const char* l_LayerName : l_ValidationLayers)
         {
-            bool layerFound = false;
+            bool l_LayerFound = false;
 
-            for (const auto& layerProps : availableLayers)
+            for (const auto& layerProps : l_AvailableLayers)
             {
-                if (strcmp(layerName, layerProps.layerName) == 0)
+                if (strcmp(l_LayerName, layerProps.layerName) == 0)
                 {
-                    layerFound = true;
+                    l_LayerFound = true;
+
                     break;
                 }
             }
 
-            if (!layerFound)
+            if (!l_LayerFound)
             {
-                TR_CORE_TRACE("Validation layer {} not present", layerName);
+                TR_CORE_TRACE("Validation layer {} not present", l_LayerName);
+
                 return false;
             }
         }
 
         TR_CORE_TRACE("All requested validation layers are available");
+
         return true;
     }
 
     bool Application::IsDeviceSuitable(VkPhysicalDevice device)
     {
-        VkPhysicalDeviceProperties properties{};
-        vkGetPhysicalDeviceProperties(device, &properties);
+        VkPhysicalDeviceProperties l_Properties{};
+        vkGetPhysicalDeviceProperties(device, &l_Properties);
 
-        auto indices = FindQueueFamilies(device);
+        auto a_Indices = FindQueueFamilies(device);
 
         // Check required device extensions
-        uint32_t extensionCount = 0;
-        vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);
-        std::vector<VkExtensionProperties> availableExtensions(extensionCount);
-        vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, availableExtensions.data());
+        uint32_t l_ExtensionCount = 0;
+        vkEnumerateDeviceExtensionProperties(device, nullptr, &l_ExtensionCount, nullptr);
+        std::vector<VkExtensionProperties> l_AvailableExtensions(l_ExtensionCount);
+        vkEnumerateDeviceExtensionProperties(device, nullptr, &l_ExtensionCount, l_AvailableExtensions.data());
 
-        std::set<std::string> requiredExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
-        for (const auto& ext : availableExtensions)
+        std::set<std::string> l_RequiredExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
+        for (const auto& a_Extensions : l_AvailableExtensions)
         {
-            requiredExtensions.erase(ext.extensionName);
+            l_RequiredExtensions.erase(a_Extensions.extensionName);
         }
 
-        bool extensionsSupported = requiredExtensions.empty();
+        bool l_ExtensionsSupported = l_RequiredExtensions.empty();
 
-        bool swapChainAdequate = false;
-        if (extensionsSupported)
+        bool l_SwapchainAdequate = false;
+        if (l_ExtensionsSupported)
         {
-            uint32_t formatCount = 0;
-            vkGetPhysicalDeviceSurfaceFormatsKHR(device, GetSurface(), &formatCount, nullptr);
+            uint32_t l_FormatCount = 0;
+            vkGetPhysicalDeviceSurfaceFormatsKHR(device, GetSurface(), &l_FormatCount, nullptr);
 
-            uint32_t presentModeCount = 0;
-            vkGetPhysicalDeviceSurfacePresentModesKHR(device, GetSurface(), &presentModeCount, nullptr);
+            uint32_t l_PresentModeCount = 0;
+            vkGetPhysicalDeviceSurfacePresentModesKHR(device, GetSurface(), &l_PresentModeCount, nullptr);
 
-            swapChainAdequate = formatCount > 0 && presentModeCount > 0;
+            l_SwapchainAdequate = l_FormatCount > 0 && l_PresentModeCount > 0;
         }
 
-        return indices.IsComplete() && extensionsSupported && swapChainAdequate;
+        return a_Indices.IsComplete() && l_ExtensionsSupported && l_SwapchainAdequate;
     }
 }

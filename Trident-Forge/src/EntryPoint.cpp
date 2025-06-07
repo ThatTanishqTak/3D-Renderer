@@ -4,9 +4,9 @@ int main()
 {
     try
     {
-        ApplicationLayer app;
+        ApplicationLayer l_App;
 
-        app.Run();
+        l_App.Run();
     }
 
     catch (const std::exception& e)

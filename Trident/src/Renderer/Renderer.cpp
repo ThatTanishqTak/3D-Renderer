@@ -34,62 +34,60 @@ namespace Trident
     {
         TR_CORE_TRACE("Shutting Down Renderer");
 
-        VkDevice l_Device = Application::GetDevice();
-        vkDeviceWaitIdle(l_Device);
+        vkDeviceWaitIdle(Application::GetDevice());
 
-        size_t count = m_ImageAvailableSemaphores.size();
-        for (size_t i = 0; i < count; ++i)
+        for (size_t i = 0; i < m_ImageAvailableSemaphores.size(); ++i)
         {
             if (m_RenderFinishedSemaphores[i] != VK_NULL_HANDLE)
             {
-                vkDestroySemaphore(l_Device, m_RenderFinishedSemaphores[i], nullptr);
+                vkDestroySemaphore(Application::GetDevice(), m_RenderFinishedSemaphores[i], nullptr);
             }
 
             if (m_ImageAvailableSemaphores[i] != VK_NULL_HANDLE)
             {
-                vkDestroySemaphore(l_Device, m_ImageAvailableSemaphores[i], nullptr);
+                vkDestroySemaphore(Application::GetDevice(), m_ImageAvailableSemaphores[i], nullptr);
             }
 
             if (m_InFlightFences[i] != VK_NULL_HANDLE)
             {
-                vkDestroyFence(l_Device, m_InFlightFences[i], nullptr);
+                vkDestroyFence(Application::GetDevice(), m_InFlightFences[i], nullptr);
             }
         }
 
         if (!m_CommandBuffers.empty())
         {
-            vkFreeCommandBuffers(l_Device, m_CommandPool, static_cast<uint32_t>(m_CommandBuffers.size()), m_CommandBuffers.data());
+            vkFreeCommandBuffers(Application::GetDevice(), m_CommandPool, static_cast<uint32_t>(m_CommandBuffers.size()), m_CommandBuffers.data());
 
             m_CommandBuffers.clear();
         }
 
         if (m_CommandPool != VK_NULL_HANDLE)
         {
-            vkDestroyCommandPool(l_Device, m_CommandPool, nullptr);
+            vkDestroyCommandPool(Application::GetDevice(), m_CommandPool, nullptr);
             
             m_CommandPool = VK_NULL_HANDLE;
         }
         
         if (m_DescriptorSetLayout != VK_NULL_HANDLE)
         {
-            vkDestroyDescriptorSetLayout(l_Device, m_DescriptorSetLayout, nullptr);
+            vkDestroyDescriptorSetLayout(Application::GetDevice(), m_DescriptorSetLayout, nullptr);
             
             m_DescriptorSetLayout = VK_NULL_HANDLE;
         }
         
         if (m_DescriptorPool != VK_NULL_HANDLE)
         {
-            vkDestroyDescriptorPool(l_Device, m_DescriptorPool, nullptr);
+            vkDestroyDescriptorPool(Application::GetDevice(), m_DescriptorPool, nullptr);
             m_DescriptorPool = VK_NULL_HANDLE;
         }
         
         m_DescriptorSets.clear();
 
-        for (VkFramebuffer fb : m_SwapchainFramebuffers)
+        for (VkFramebuffer l_FrameBuffer : m_SwapchainFramebuffers)
         {
-            if (fb != VK_NULL_HANDLE)
+            if (l_FrameBuffer != VK_NULL_HANDLE)
             {
-                vkDestroyFramebuffer(l_Device, fb, nullptr);
+                vkDestroyFramebuffer(Application::GetDevice(), l_FrameBuffer, nullptr);
             }
         }
         
@@ -99,7 +97,7 @@ namespace Trident
         {
             if (view != VK_NULL_HANDLE)
             {
-                vkDestroyImageView(l_Device, view, nullptr);
+                vkDestroyImageView(Application::GetDevice(), view, nullptr);
             }
         }
         
@@ -107,7 +105,7 @@ namespace Trident
 
         if (m_Swapchain != VK_NULL_HANDLE)
         {
-            vkDestroySwapchainKHR(l_Device, m_Swapchain, nullptr);
+            vkDestroySwapchainKHR(Application::GetDevice(), m_Swapchain, nullptr);
 
             m_Swapchain = VK_NULL_HANDLE;
         }
@@ -116,49 +114,49 @@ namespace Trident
 
         if (m_GraphicsPipeline != VK_NULL_HANDLE)
         {
-            vkDestroyPipeline(l_Device, m_GraphicsPipeline, nullptr);
+            vkDestroyPipeline(Application::GetDevice(), m_GraphicsPipeline, nullptr);
             
             m_GraphicsPipeline = VK_NULL_HANDLE;
         }
 
         if (m_PipelineLayout != VK_NULL_HANDLE)
         {
-            vkDestroyPipelineLayout(l_Device, m_PipelineLayout, nullptr);
+            vkDestroyPipelineLayout(Application::GetDevice(), m_PipelineLayout, nullptr);
             
             m_PipelineLayout = VK_NULL_HANDLE;
         }
 
         if (m_RenderPass != VK_NULL_HANDLE)
         {
-            vkDestroyRenderPass(l_Device, m_RenderPass, nullptr);
+            vkDestroyRenderPass(Application::GetDevice(), m_RenderPass, nullptr);
             
             m_RenderPass = VK_NULL_HANDLE;
         }
 
         if (m_IndexBuffer != VK_NULL_HANDLE)
         {
-            vkDestroyBuffer(l_Device, m_IndexBuffer, nullptr);
+            vkDestroyBuffer(Application::GetDevice(), m_IndexBuffer, nullptr);
             
             m_IndexBuffer = VK_NULL_HANDLE;
         }
         
         if (m_IndexBufferMemory != VK_NULL_HANDLE)
         {
-            vkFreeMemory(l_Device, m_IndexBufferMemory, nullptr);
+            vkFreeMemory(Application::GetDevice(), m_IndexBufferMemory, nullptr);
             
             m_IndexBufferMemory = VK_NULL_HANDLE;
         }
         
         if (m_VertexBuffer != VK_NULL_HANDLE)
         {
-            vkDestroyBuffer(l_Device, m_VertexBuffer, nullptr);
+            vkDestroyBuffer(Application::GetDevice(), m_VertexBuffer, nullptr);
             
             m_VertexBuffer = VK_NULL_HANDLE;
         }
         
         if (m_VertexBufferMemory != VK_NULL_HANDLE)
         {
-            vkFreeMemory(l_Device, m_VertexBufferMemory, nullptr);
+            vkFreeMemory(Application::GetDevice(), m_VertexBufferMemory, nullptr);
             
             m_VertexBufferMemory = VK_NULL_HANDLE;
         }
@@ -167,14 +165,14 @@ namespace Trident
         {
             if (m_UniformBuffers[i] != VK_NULL_HANDLE)
             {
-                vkDestroyBuffer(l_Device, m_UniformBuffers[i], nullptr);
+                vkDestroyBuffer(Application::GetDevice(), m_UniformBuffers[i], nullptr);
 
                 m_UniformBuffers[i] = VK_NULL_HANDLE;
             }
         
             if (m_UniformBuffersMemory[i] != VK_NULL_HANDLE)
             {
-                vkFreeMemory(l_Device, m_UniformBuffersMemory[i], nullptr);
+                vkFreeMemory(Application::GetDevice(), m_UniformBuffersMemory[i], nullptr);
 
                 m_UniformBuffersMemory[i] = VK_NULL_HANDLE;
             }
@@ -188,76 +186,74 @@ namespace Trident
 
     void Renderer::DrawFrame()
     {
-        VkDevice device = Application::GetDevice();
+        vkWaitForFences(Application::GetDevice(), 1, &m_InFlightFences[m_CurrentFrame], VK_TRUE, UINT64_MAX);
 
-        vkWaitForFences(device, 1, &m_InFlightFences[m_CurrentFrame], VK_TRUE, UINT64_MAX);
-
-        uint32_t imageIndex;
-        VkResult result = vkAcquireNextImageKHR(device, m_Swapchain, UINT64_MAX, m_ImageAvailableSemaphores[m_CurrentFrame], VK_NULL_HANDLE, &imageIndex);
-        if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
+        uint32_t l_ImageIndex;
+        VkResult l_Result = vkAcquireNextImageKHR(Application::GetDevice(), m_Swapchain, UINT64_MAX, m_ImageAvailableSemaphores[m_CurrentFrame], VK_NULL_HANDLE, &l_ImageIndex);
+        if (l_Result == VK_ERROR_OUT_OF_DATE_KHR || l_Result == VK_SUBOPTIMAL_KHR)
         {
             RecreateSwapchain();
         
             return;
         }
 
-        else if (result != VK_SUCCESS)
+        else if (l_Result != VK_SUCCESS)
         {
-            TR_CORE_CRITICAL("Failed to acquire swapchain image (code {})", static_cast<int>(result));
+            TR_CORE_CRITICAL("Failed to acquire swapchain image (code {})", static_cast<int>(l_Result));
         }
 
-        if (m_ImagesInFlight[imageIndex] != VK_NULL_HANDLE)
+        if (m_ImagesInFlight[l_ImageIndex] != VK_NULL_HANDLE)
         {
-            vkWaitForFences(device, 1, &m_ImagesInFlight[imageIndex], VK_TRUE, UINT64_MAX);
+            vkWaitForFences(Application::GetDevice(), 1, &m_ImagesInFlight[l_ImageIndex], VK_TRUE, UINT64_MAX);
         }
 
-        m_ImagesInFlight[imageIndex] = m_InFlightFences[m_CurrentFrame];
+        m_ImagesInFlight[l_ImageIndex] = m_InFlightFences[m_CurrentFrame];
 
-        UniformBufferObject ubo{};
-        ubo.model = glm::mat4(1.0f);
-        ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-        ubo.proj = glm::perspective(glm::radians(45.0f), m_SwapchainExtent.width / float(m_SwapchainExtent.height), 0.1f, 10.0f);
-        ubo.proj[1][1] *= -1.0f;
+        UniformBufferObject l_UniformBufferObject{};
+        l_UniformBufferObject.Model = glm::mat4(1.0f);
+        l_UniformBufferObject.View = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+        l_UniformBufferObject.Projection = glm::perspective(glm::radians(45.0f), m_SwapchainExtent.width / float(m_SwapchainExtent.height), 0.1f, 10.0f);
+        l_UniformBufferObject.Projection[1][1] *= -1.0f;
 
-        void* data;
-        vkMapMemory(device, m_UniformBuffersMemory[imageIndex], 0, sizeof(ubo), 0, &data);
-        memcpy(data, &ubo, sizeof(ubo));
-        vkUnmapMemory(device, m_UniformBuffersMemory[imageIndex]);
+        void* l_Data;
+        vkMapMemory(Application::GetDevice(), m_UniformBuffersMemory[l_ImageIndex], 0, sizeof(l_UniformBufferObject), 0, &l_Data);
+        memcpy(l_Data, &l_UniformBufferObject, sizeof(l_UniformBufferObject));
+        vkUnmapMemory(Application::GetDevice(), m_UniformBuffersMemory[l_ImageIndex]);
 
-        VkSemaphore waitSemaphores[] = { m_ImageAvailableSemaphores[m_CurrentFrame] };
-        VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
-        VkSemaphore signalSemaphores[] = { m_RenderFinishedSemaphores[m_CurrentFrame] };
+        VkSemaphore l_WaitSemaphores[] = { m_ImageAvailableSemaphores[m_CurrentFrame] };
+        VkPipelineStageFlags l_WaitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+        VkSemaphore l_SignalSemaphores[] = { m_RenderFinishedSemaphores[m_CurrentFrame] };
 
-        VkSubmitInfo submitInfo{ VK_STRUCTURE_TYPE_SUBMIT_INFO };
-        submitInfo.waitSemaphoreCount = 1;
-        submitInfo.pWaitSemaphores = waitSemaphores;
-        submitInfo.pWaitDstStageMask = waitStages;
-        submitInfo.commandBufferCount = 1;
-        submitInfo.pCommandBuffers = &m_CommandBuffers[imageIndex];
-        submitInfo.signalSemaphoreCount = 1;
-        submitInfo.pSignalSemaphores = signalSemaphores;
+        VkSubmitInfo l_SubmitInfo{ VK_STRUCTURE_TYPE_SUBMIT_INFO };
+        l_SubmitInfo.waitSemaphoreCount = 1;
+        l_SubmitInfo.pWaitSemaphores = l_WaitSemaphores;
+        l_SubmitInfo.pWaitDstStageMask = l_WaitStages;
+        l_SubmitInfo.commandBufferCount = 1;
+        l_SubmitInfo.pCommandBuffers = &m_CommandBuffers[l_ImageIndex];
+        l_SubmitInfo.signalSemaphoreCount = 1;
+        l_SubmitInfo.pSignalSemaphores = l_SignalSemaphores;
 
-        vkResetFences(device, 1, &m_InFlightFences[m_CurrentFrame]);
-        if (vkQueueSubmit(Application::GetGraphicsQueue(), 1, &submitInfo, m_InFlightFences[m_CurrentFrame]) != VK_SUCCESS)
+        vkResetFences(Application::GetDevice(), 1, &m_InFlightFences[m_CurrentFrame]);
+        if (vkQueueSubmit(Application::GetGraphicsQueue(), 1, &l_SubmitInfo, m_InFlightFences[m_CurrentFrame]) != VK_SUCCESS)
         {
             TR_CORE_CRITICAL("Failed to submit draw command buffer");
         }
 
-        VkPresentInfoKHR presentInfo{ VK_STRUCTURE_TYPE_PRESENT_INFO_KHR };
-        presentInfo.waitSemaphoreCount = 1;
-        presentInfo.pWaitSemaphores = signalSemaphores;
-        presentInfo.swapchainCount = 1;
-        presentInfo.pSwapchains = &m_Swapchain;
-        presentInfo.pImageIndices = &imageIndex;
+        VkPresentInfoKHR l_PresentInfo{ VK_STRUCTURE_TYPE_PRESENT_INFO_KHR };
+        l_PresentInfo.waitSemaphoreCount = 1;
+        l_PresentInfo.pWaitSemaphores = l_SignalSemaphores;
+        l_PresentInfo.swapchainCount = 1;
+        l_PresentInfo.pSwapchains = &m_Swapchain;
+        l_PresentInfo.pImageIndices = &l_ImageIndex;
 
-        result = vkQueuePresentKHR(Application::GetPresentQueue(), &presentInfo);
-        if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
+        l_Result = vkQueuePresentKHR(Application::GetPresentQueue(), &l_PresentInfo);
+        if (l_Result == VK_ERROR_OUT_OF_DATE_KHR || l_Result == VK_SUBOPTIMAL_KHR)
         {
             RecreateSwapchain();
         }
-        else if (result != VK_SUCCESS)
+        else if (l_Result != VK_SUCCESS)
         {
-            TR_CORE_CRITICAL("Failed to present swapchain image (code {})", static_cast<int>(result));
+            TR_CORE_CRITICAL("Failed to present swapchain image (code {})", static_cast<int>(l_Result));
         }
 
         m_CurrentFrame = (m_CurrentFrame + 1) % m_ImageAvailableSemaphores.size();
@@ -269,36 +265,35 @@ namespace Trident
 
         uint32_t width = 0;
         uint32_t height = 0;
-        auto& window = Application::GetWindow();
-        window.GetFramebufferSize(width, height);
+
+        Application::GetWindow().GetFramebufferSize(width, height);
 
         while (width == 0 || height == 0)
         {
             glfwWaitEvents();
-            window.GetFramebufferSize(width, height);
+
+            Application::GetWindow().GetFramebufferSize(width, height);
         }
 
-        VkDevice device = Application::GetDevice();
-
-        vkDeviceWaitIdle(device);
+        vkDeviceWaitIdle(Application::GetDevice());
 
         for (size_t i = 0; i < m_ImageAvailableSemaphores.size(); ++i)
         {
             if (m_RenderFinishedSemaphores[i] != VK_NULL_HANDLE)
             {
-                vkDestroySemaphore(device, m_RenderFinishedSemaphores[i], nullptr);
+                vkDestroySemaphore(Application::GetDevice(), m_RenderFinishedSemaphores[i], nullptr);
                 m_RenderFinishedSemaphores[i] = VK_NULL_HANDLE;
             }
 
             if (m_ImageAvailableSemaphores[i] != VK_NULL_HANDLE)
             {
-                vkDestroySemaphore(device, m_ImageAvailableSemaphores[i], nullptr);
+                vkDestroySemaphore(Application::GetDevice(), m_ImageAvailableSemaphores[i], nullptr);
                 m_ImageAvailableSemaphores[i] = VK_NULL_HANDLE;
             }
 
             if (m_InFlightFences[i] != VK_NULL_HANDLE)
             {
-                vkDestroyFence(device, m_InFlightFences[i], nullptr);
+                vkDestroyFence(Application::GetDevice(), m_InFlightFences[i], nullptr);
                 m_InFlightFences[i] = VK_NULL_HANDLE;
             }
         }
@@ -309,28 +304,28 @@ namespace Trident
         m_ImagesInFlight.clear();
         m_CurrentFrame = 0;
 
-        for (VkFramebuffer fb : m_SwapchainFramebuffers)
+        for (VkFramebuffer l_FrameBuffer : m_SwapchainFramebuffers)
         {
-            vkDestroyFramebuffer(device, fb, nullptr);
+            vkDestroyFramebuffer(Application::GetDevice(), l_FrameBuffer, nullptr);
         }
 
         m_SwapchainFramebuffers.clear();
 
         for (VkImageView view : m_SwapchainImageViews)
         {
-            vkDestroyImageView(device, view, nullptr);
+            vkDestroyImageView(Application::GetDevice(), view, nullptr);
         }
 
         m_SwapchainImageViews.clear();
 
-        vkDestroySwapchainKHR(device, m_Swapchain, nullptr);
+        vkDestroySwapchainKHR(Application::GetDevice(), m_Swapchain, nullptr);
         m_SwapchainImages.clear();
 
         CreateSwapchain();
         CreateImageViews();
         CreateFramebuffers();
 
-        vkFreeCommandBuffers(device, m_CommandPool, static_cast<uint32_t>(m_CommandBuffers.size()), m_CommandBuffers.data());
+        vkFreeCommandBuffers(Application::GetDevice(), m_CommandPool, static_cast<uint32_t>(m_CommandBuffers.size()), m_CommandBuffers.data());
         CreateCommandBuffer();
         CreateSyncObjects();
 
@@ -343,64 +338,64 @@ namespace Trident
     {
         TR_CORE_TRACE("Creating Swapchain");
 
-        auto details = QuerySwapchainSupport(Application::GetPhysicalDevice(), Application::GetSurface());
+        auto a_Details = QuerySwapchainSupport(Application::GetPhysicalDevice(), Application::GetSurface());
 
-        VkSurfaceFormatKHR surfaceFormat = ChooseSwapSurfaceFormat(details.Formats);
-        VkPresentModeKHR presentMode = ChooseSwapPresentMode(details.PresentModes);
-        VkExtent2D extent = ChooseSwapExtent(details.Capabilities);
+        VkSurfaceFormatKHR l_SurfaceFormat = ChooseSwapSurfaceFormat(a_Details.Formats);
+        VkPresentModeKHR l_PresentMode = ChooseSwapPresentMode(a_Details.PresentModes);
+        VkExtent2D l_Extent = ChooseSwapExtent(a_Details.Capabilities);
 
-        uint32_t imageCount = details.Capabilities.minImageCount + 1;
-        if (details.Capabilities.maxImageCount > 0 && imageCount > details.Capabilities.maxImageCount)
+        uint32_t l_ImageCount = a_Details.Capabilities.minImageCount + 1;
+        if (a_Details.Capabilities.maxImageCount > 0 && l_ImageCount > a_Details.Capabilities.maxImageCount)
         {
-            imageCount = details.Capabilities.maxImageCount;
+            l_ImageCount = a_Details.Capabilities.maxImageCount;
         }
 
-        VkSwapchainCreateInfoKHR createInfo{};
-        createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-        createInfo.surface = Application::GetSurface();
-        createInfo.minImageCount = imageCount;
-        createInfo.imageFormat = surfaceFormat.format;
-        createInfo.imageColorSpace = surfaceFormat.colorSpace;
-        createInfo.imageExtent = extent;
-        createInfo.imageArrayLayers = 1;
-        createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+        VkSwapchainCreateInfoKHR l_CreateInfo{};
+        l_CreateInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+        l_CreateInfo.surface = Application::GetSurface();
+        l_CreateInfo.minImageCount = l_ImageCount;
+        l_CreateInfo.imageFormat = l_SurfaceFormat.format;
+        l_CreateInfo.imageColorSpace = l_SurfaceFormat.colorSpace;
+        l_CreateInfo.imageExtent = l_Extent;
+        l_CreateInfo.imageArrayLayers = 1;
+        l_CreateInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
-        auto indices = Application::GetQueueFamilyIndices();
-        uint32_t queueFamilyIndices[] = { indices.GraphicsFamily.value(), indices.PresentFamily.value() };
+        auto a_Indices = Application::GetQueueFamilyIndices();
+        uint32_t queueFamilyIndices[] = { a_Indices.GraphicsFamily.value(), a_Indices.PresentFamily.value() };
 
-        if (indices.GraphicsFamily != indices.PresentFamily)
+        if (a_Indices.GraphicsFamily != a_Indices.PresentFamily)
         {
-            createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
-            createInfo.queueFamilyIndexCount = 2;
-            createInfo.pQueueFamilyIndices = queueFamilyIndices;
+            l_CreateInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
+            l_CreateInfo.queueFamilyIndexCount = 2;
+            l_CreateInfo.pQueueFamilyIndices = queueFamilyIndices;
         }
 
         else
         {
-            createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-            createInfo.queueFamilyIndexCount = 0;
-            createInfo.pQueueFamilyIndices = nullptr;
+            l_CreateInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+            l_CreateInfo.queueFamilyIndexCount = 0;
+            l_CreateInfo.pQueueFamilyIndices = nullptr;
         }
 
-        createInfo.preTransform = details.Capabilities.currentTransform;
-        createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-        createInfo.presentMode = presentMode;
-        createInfo.clipped = VK_TRUE;
-        createInfo.oldSwapchain = VK_NULL_HANDLE;
+        l_CreateInfo.preTransform = a_Details.Capabilities.currentTransform;
+        l_CreateInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+        l_CreateInfo.presentMode = l_PresentMode;
+        l_CreateInfo.clipped = VK_TRUE;
+        l_CreateInfo.oldSwapchain = VK_NULL_HANDLE;
 
-        if (vkCreateSwapchainKHR(Application::GetDevice(), &createInfo, nullptr, &m_Swapchain) != VK_SUCCESS)
+        if (vkCreateSwapchainKHR(Application::GetDevice(), &l_CreateInfo, nullptr, &m_Swapchain) != VK_SUCCESS)
         {
             TR_CORE_CRITICAL("Failed to create swap chain");
         }
 
-        vkGetSwapchainImagesKHR(Application::GetDevice(), m_Swapchain, &imageCount, nullptr);
-        m_SwapchainImages.resize(imageCount);
-        vkGetSwapchainImagesKHR(Application::GetDevice(), m_Swapchain, &imageCount, m_SwapchainImages.data());
+        vkGetSwapchainImagesKHR(Application::GetDevice(), m_Swapchain, &l_ImageCount, nullptr);
+        m_SwapchainImages.resize(l_ImageCount);
+        vkGetSwapchainImagesKHR(Application::GetDevice(), m_Swapchain, &l_ImageCount, m_SwapchainImages.data());
 
-        m_SwapchainImageFormat = surfaceFormat.format;
-        m_SwapchainExtent = extent;
+        m_SwapchainImageFormat = l_SurfaceFormat.format;
+        m_SwapchainExtent = l_Extent;
 
-        TR_CORE_TRACE("Swapchain Created: {} Images, Format {}, Extent {}x{}", imageCount, (int)surfaceFormat.format, extent.width, extent.height);
+        TR_CORE_TRACE("Swapchain Created: {} Images, Format {}, Extent {}x{}", l_ImageCount, (int)l_SurfaceFormat.format, l_Extent.width, l_Extent.height);
     }
 
     void Renderer::CreateImageViews()
@@ -411,22 +406,22 @@ namespace Trident
 
         for (size_t i = 0; i < m_SwapchainImages.size(); ++i)
         {
-            VkImageViewCreateInfo viewInfo{};
-            viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-            viewInfo.image = m_SwapchainImages[i];
-            viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-            viewInfo.format = m_SwapchainImageFormat;
-            viewInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
-            viewInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-            viewInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
-            viewInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-            viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            viewInfo.subresourceRange.baseMipLevel = 0;
-            viewInfo.subresourceRange.levelCount = 1;
-            viewInfo.subresourceRange.baseArrayLayer = 0;
-            viewInfo.subresourceRange.layerCount = 1;
+            VkImageViewCreateInfo l_ViewInfo{};
+            l_ViewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+            l_ViewInfo.image = m_SwapchainImages[i];
+            l_ViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+            l_ViewInfo.format = m_SwapchainImageFormat;
+            l_ViewInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+            l_ViewInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+            l_ViewInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+            l_ViewInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+            l_ViewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            l_ViewInfo.subresourceRange.baseMipLevel = 0;
+            l_ViewInfo.subresourceRange.levelCount = 1;
+            l_ViewInfo.subresourceRange.baseArrayLayer = 0;
+            l_ViewInfo.subresourceRange.layerCount = 1;
 
-            if (vkCreateImageView(Application::GetDevice(), &viewInfo, nullptr, &m_SwapchainImageViews[i]) != VK_SUCCESS)
+            if (vkCreateImageView(Application::GetDevice(), &l_ViewInfo, nullptr, &m_SwapchainImageViews[i]) != VK_SUCCESS)
             {
                 TR_CORE_CRITICAL("Failed to create image view for swapchain image {}", i);
             }
@@ -439,43 +434,43 @@ namespace Trident
     {
         TR_CORE_TRACE("Creating Render Pass");
 
-        VkAttachmentDescription colorAttachment{};
-        colorAttachment.format = m_SwapchainImageFormat;
-        colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-        colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-        colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        VkAttachmentDescription l_ColorAttachment{};
+        l_ColorAttachment.format = m_SwapchainImageFormat;
+        l_ColorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+        l_ColorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        l_ColorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        l_ColorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        l_ColorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        l_ColorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        l_ColorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
-        VkAttachmentReference colorAttachmentRef{};
-        colorAttachmentRef.attachment = 0;
-        colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        VkAttachmentReference l_ColorAttachmentReference{};
+        l_ColorAttachmentReference.attachment = 0;
+        l_ColorAttachmentReference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
-        VkSubpassDescription subpass{};
-        subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-        subpass.colorAttachmentCount = 1;
-        subpass.pColorAttachments = &colorAttachmentRef;
+        VkSubpassDescription l_Subpass{};
+        l_Subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+        l_Subpass.colorAttachmentCount = 1;
+        l_Subpass.pColorAttachments = &l_ColorAttachmentReference;
 
-        VkSubpassDependency dependency{};
-        dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-        dependency.dstSubpass = 0;
-        dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        dependency.srcAccessMask = 0;
-        dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        VkSubpassDependency l_Dependency{};
+        l_Dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+        l_Dependency.dstSubpass = 0;
+        l_Dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        l_Dependency.srcAccessMask = 0;
+        l_Dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        l_Dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 
-        VkRenderPassCreateInfo renderPassInfo{};
-        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-        renderPassInfo.attachmentCount = 1;
-        renderPassInfo.pAttachments = &colorAttachment;
-        renderPassInfo.subpassCount = 1;
-        renderPassInfo.pSubpasses = &subpass;
-        renderPassInfo.dependencyCount = 1;
-        renderPassInfo.pDependencies = &dependency;
+        VkRenderPassCreateInfo l_RenderPassInfo{};
+        l_RenderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+        l_RenderPassInfo.attachmentCount = 1;
+        l_RenderPassInfo.pAttachments = &l_ColorAttachment;
+        l_RenderPassInfo.subpassCount = 1;
+        l_RenderPassInfo.pSubpasses = &l_Subpass;
+        l_RenderPassInfo.dependencyCount = 1;
+        l_RenderPassInfo.pDependencies = &l_Dependency;
 
-        if (vkCreateRenderPass(Application::GetDevice(), &renderPassInfo, nullptr, &m_RenderPass) != VK_SUCCESS)
+        if (vkCreateRenderPass(Application::GetDevice(), &l_RenderPassInfo, nullptr, &m_RenderPass) != VK_SUCCESS)
         {
             TR_CORE_CRITICAL("Failed to create render pass");
         }
@@ -487,19 +482,19 @@ namespace Trident
     {
         TR_CORE_TRACE("Creating Descriptor Set Layout");
 
-        VkDescriptorSetLayoutBinding uboLayoutBinding{};
-        uboLayoutBinding.binding = 0;
-        uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        uboLayoutBinding.descriptorCount = 1;
-        uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-        uboLayoutBinding.pImmutableSamplers = nullptr;
+        VkDescriptorSetLayoutBinding l_UboLayoutBinding{};
+        l_UboLayoutBinding.binding = 0;
+        l_UboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        l_UboLayoutBinding.descriptorCount = 1;
+        l_UboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+        l_UboLayoutBinding.pImmutableSamplers = nullptr;
 
-        VkDescriptorSetLayoutCreateInfo layoutInfo{};
-        layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        layoutInfo.bindingCount = 1;
-        layoutInfo.pBindings = &uboLayoutBinding;
+        VkDescriptorSetLayoutCreateInfo l_LayoutInfo{};
+        l_LayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        l_LayoutInfo.bindingCount = 1;
+        l_LayoutInfo.pBindings = &l_UboLayoutBinding;
 
-        if (vkCreateDescriptorSetLayout(Application::GetDevice(), &layoutInfo, nullptr, &m_DescriptorSetLayout) != VK_SUCCESS)
+        if (vkCreateDescriptorSetLayout(Application::GetDevice(), &l_LayoutInfo, nullptr, &m_DescriptorSetLayout) != VK_SUCCESS)
         {
             TR_CORE_CRITICAL("Failed to create descriptor set layout");
         }
@@ -511,122 +506,122 @@ namespace Trident
     {
         TR_CORE_TRACE("Creating Graphics Pipeline");
 
-        auto vertShaderCode = Utilities::FileManagement::ReadFile("Assets/Shaders/Cube.vert.spv");
-        auto fragShaderCode = Utilities::FileManagement::ReadFile("Assets/Shaders/Cube.frag.spv");
+        auto l_VertexShaderCode = Utilities::FileManagement::ReadFile("Assets/Shaders/Cube.vert.spv");
+        auto l_FragmentShaderCode = Utilities::FileManagement::ReadFile("Assets/Shaders/Cube.frag.spv");
 
-        VkShaderModule vertModule = CreateShaderModule(Application::GetDevice(), vertShaderCode);
-        VkShaderModule fragModule = CreateShaderModule(Application::GetDevice(), fragShaderCode);
+        VkShaderModule l_VertexModule = CreateShaderModule(Application::GetDevice(), l_VertexShaderCode);
+        VkShaderModule l_FragmentModule = CreateShaderModule(Application::GetDevice(), l_FragmentShaderCode);
 
-        VkPipelineShaderStageCreateInfo vertStage{};
-        vertStage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        vertStage.stage = VK_SHADER_STAGE_VERTEX_BIT;
-        vertStage.module = vertModule;
-        vertStage.pName = "main";
+        VkPipelineShaderStageCreateInfo l_VertexStage{};
+        l_VertexStage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        l_VertexStage.stage = VK_SHADER_STAGE_VERTEX_BIT;
+        l_VertexStage.module = l_VertexModule;
+        l_VertexStage.pName = "main";
 
-        VkPipelineShaderStageCreateInfo fragStage{};
-        fragStage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        fragStage.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-        fragStage.module = fragModule;
-        fragStage.pName = "main";
+        VkPipelineShaderStageCreateInfo l_FragmentStage{};
+        l_FragmentStage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        l_FragmentStage.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+        l_FragmentStage.module = l_FragmentModule;
+        l_FragmentStage.pName = "main";
 
-        VkPipelineShaderStageCreateInfo shaderStages[] = { vertStage, fragStage };
+        VkPipelineShaderStageCreateInfo l_ShaderStages[] = { l_VertexStage, l_FragmentStage };
 
-        auto bindingDescription = Vertex::GetBindingDescription();
-        auto attributeDescriptions = Vertex::GetAttributeDescriptions();
+        auto l_BindingDescription = Vertex::GetBindingDescription();
+        auto l_AttributeDescriptions = Vertex::GetAttributeDescriptions();
 
-        VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
-        vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-        vertexInputInfo.vertexBindingDescriptionCount = 1;
-        vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
-        vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size());
-        vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
+        VkPipelineVertexInputStateCreateInfo l_VertexInputInfo{};
+        l_VertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+        l_VertexInputInfo.vertexBindingDescriptionCount = 1;
+        l_VertexInputInfo.pVertexBindingDescriptions = &l_BindingDescription;
+        l_VertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(l_AttributeDescriptions.size());
+        l_VertexInputInfo.pVertexAttributeDescriptions = l_AttributeDescriptions.data();
 
-        VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
-        inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-        inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-        inputAssembly.primitiveRestartEnable = VK_FALSE;
+        VkPipelineInputAssemblyStateCreateInfo l_InputAssembly{};
+        l_InputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+        l_InputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        l_InputAssembly.primitiveRestartEnable = VK_FALSE;
 
-        VkViewport viewport{};
-        viewport.x = 0.0f;
-        viewport.y = 0.0f;
-        viewport.width = static_cast<float>(m_SwapchainExtent.width);
-        viewport.height = static_cast<float>(m_SwapchainExtent.height);
-        viewport.minDepth = 0.0f;
-        viewport.maxDepth = 1.0f;
+        VkViewport l_Viewport{};
+        l_Viewport.x = 0.0f;
+        l_Viewport.y = 0.0f;
+        l_Viewport.width = static_cast<float>(m_SwapchainExtent.width);
+        l_Viewport.height = static_cast<float>(m_SwapchainExtent.height);
+        l_Viewport.minDepth = 0.0f;
+        l_Viewport.maxDepth = 1.0f;
 
-        VkRect2D scissor{};
-        scissor.offset = { 0, 0 };
-        scissor.extent = m_SwapchainExtent;
+        VkRect2D l_Scissor{};
+        l_Scissor.offset = { 0, 0 };
+        l_Scissor.extent = m_SwapchainExtent;
 
-        VkPipelineViewportStateCreateInfo viewportState{};
-        viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-        viewportState.viewportCount = 1;
-        viewportState.pViewports = &viewport;
-        viewportState.scissorCount = 1;
-        viewportState.pScissors = &scissor;
+        VkPipelineViewportStateCreateInfo l_ViewportState{};
+        l_ViewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+        l_ViewportState.viewportCount = 1;
+        l_ViewportState.pViewports = &l_Viewport;
+        l_ViewportState.scissorCount = 1;
+        l_ViewportState.pScissors = &l_Scissor;
 
-        VkPipelineRasterizationStateCreateInfo rasterizer{};
-        rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-        rasterizer.depthClampEnable = VK_FALSE;
-        rasterizer.rasterizerDiscardEnable = VK_FALSE;
-        rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
-        rasterizer.lineWidth = 1.0f;
-        rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
-        rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
-        rasterizer.depthBiasEnable = VK_FALSE;
+        VkPipelineRasterizationStateCreateInfo l_Rasterizer{};
+        l_Rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+        l_Rasterizer.depthClampEnable = VK_FALSE;
+        l_Rasterizer.rasterizerDiscardEnable = VK_FALSE;
+        l_Rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+        l_Rasterizer.lineWidth = 1.0f;
+        l_Rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
+        l_Rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
+        l_Rasterizer.depthBiasEnable = VK_FALSE;
 
-        VkPipelineMultisampleStateCreateInfo multisampling{};
-        multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        multisampling.sampleShadingEnable = VK_FALSE;
-        multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+        VkPipelineMultisampleStateCreateInfo l_MultiSamplingInfo{};
+        l_MultiSamplingInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+        l_MultiSamplingInfo.sampleShadingEnable = VK_FALSE;
+        l_MultiSamplingInfo.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 
-        VkPipelineColorBlendAttachmentState colorBlendAttachment{};
-        colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-        colorBlendAttachment.blendEnable = VK_FALSE;
+        VkPipelineColorBlendAttachmentState l_ColorBlendAttachment{};
+        l_ColorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+        l_ColorBlendAttachment.blendEnable = VK_FALSE;
 
-        VkPipelineColorBlendStateCreateInfo colorBlending{};
-        colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-        colorBlending.logicOpEnable = VK_FALSE;
-        colorBlending.attachmentCount = 1;
-        colorBlending.pAttachments = &colorBlendAttachment;
+        VkPipelineColorBlendStateCreateInfo l_ColorBlendInfo{};
+        l_ColorBlendInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+        l_ColorBlendInfo.logicOpEnable = VK_FALSE;
+        l_ColorBlendInfo.attachmentCount = 1;
+        l_ColorBlendInfo.pAttachments = &l_ColorBlendAttachment;
 
-        VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
-        pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-        pipelineLayoutInfo.setLayoutCount = 1;
-        pipelineLayoutInfo.pSetLayouts = &m_DescriptorSetLayout;
-        pipelineLayoutInfo.pushConstantRangeCount = 0;
-        pipelineLayoutInfo.pPushConstantRanges = nullptr;
+        VkPipelineLayoutCreateInfo l_PipelineLayoutInfo{};
+        l_PipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        l_PipelineLayoutInfo.setLayoutCount = 1;
+        l_PipelineLayoutInfo.pSetLayouts = &m_DescriptorSetLayout;
+        l_PipelineLayoutInfo.pushConstantRangeCount = 0;
+        l_PipelineLayoutInfo.pPushConstantRanges = nullptr;
 
-        if (vkCreatePipelineLayout(Application::GetDevice(), &pipelineLayoutInfo, nullptr, &m_PipelineLayout) != VK_SUCCESS)
+        if (vkCreatePipelineLayout(Application::GetDevice(), &l_PipelineLayoutInfo, nullptr, &m_PipelineLayout) != VK_SUCCESS)
         {
             TR_CORE_CRITICAL("Failed to create pipeline layout");
         }
 
-        VkGraphicsPipelineCreateInfo pipelineInfo{};
-        pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-        pipelineInfo.stageCount = 2;
-        pipelineInfo.pStages = shaderStages;
-        pipelineInfo.pVertexInputState = &vertexInputInfo;
-        pipelineInfo.pInputAssemblyState = &inputAssembly;
-        pipelineInfo.pViewportState = &viewportState;
-        pipelineInfo.pRasterizationState = &rasterizer;
-        pipelineInfo.pMultisampleState = &multisampling;
-        pipelineInfo.pDepthStencilState = nullptr;
-        pipelineInfo.pColorBlendState = &colorBlending;
-        pipelineInfo.pDynamicState = nullptr;
-        pipelineInfo.layout = m_PipelineLayout;
-        pipelineInfo.renderPass = m_RenderPass;
-        pipelineInfo.subpass = 0;
-        pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
-        pipelineInfo.basePipelineIndex = -1;
+        VkGraphicsPipelineCreateInfo l_PipelineInfo{};
+        l_PipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+        l_PipelineInfo.stageCount = 2;
+        l_PipelineInfo.pStages = l_ShaderStages;
+        l_PipelineInfo.pVertexInputState = &l_VertexInputInfo;
+        l_PipelineInfo.pInputAssemblyState = &l_InputAssembly;
+        l_PipelineInfo.pViewportState = &l_ViewportState;
+        l_PipelineInfo.pRasterizationState = &l_Rasterizer;
+        l_PipelineInfo.pMultisampleState = &l_MultiSamplingInfo;
+        l_PipelineInfo.pDepthStencilState = nullptr;
+        l_PipelineInfo.pColorBlendState = &l_ColorBlendInfo;
+        l_PipelineInfo.pDynamicState = nullptr;
+        l_PipelineInfo.layout = m_PipelineLayout;
+        l_PipelineInfo.renderPass = m_RenderPass;
+        l_PipelineInfo.subpass = 0;
+        l_PipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
+        l_PipelineInfo.basePipelineIndex = -1;
 
-        if (vkCreateGraphicsPipelines(Application::GetDevice(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &m_GraphicsPipeline) != VK_SUCCESS)
+        if (vkCreateGraphicsPipelines(Application::GetDevice(), VK_NULL_HANDLE, 1, &l_PipelineInfo, nullptr, &m_GraphicsPipeline) != VK_SUCCESS)
         {
             TR_CORE_CRITICAL("Failed to create graphics pipeline");
         }
 
-        vkDestroyShaderModule(Application::GetDevice(), fragModule, nullptr);
-        vkDestroyShaderModule(Application::GetDevice(), vertModule, nullptr);
+        vkDestroyShaderModule(Application::GetDevice(), l_FragmentModule, nullptr);
+        vkDestroyShaderModule(Application::GetDevice(), l_VertexModule, nullptr);
 
         TR_CORE_TRACE("Graphics Pipeline Created");
     }
@@ -639,18 +634,18 @@ namespace Trident
 
         for (size_t i = 0; i < m_SwapchainImageViews.size(); ++i)
         {
-            VkImageView attachments[] = { m_SwapchainImageViews[i] };
+            VkImageView l_Attachments[] = { m_SwapchainImageViews[i] };
 
-            VkFramebufferCreateInfo framebufferInfo{};
-            framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-            framebufferInfo.renderPass = m_RenderPass;
-            framebufferInfo.attachmentCount = 1;
-            framebufferInfo.pAttachments = attachments;
-            framebufferInfo.width = m_SwapchainExtent.width;
-            framebufferInfo.height = m_SwapchainExtent.height;
-            framebufferInfo.layers = 1;
+            VkFramebufferCreateInfo l_FrameBufferInfo{};
+            l_FrameBufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+            l_FrameBufferInfo.renderPass = m_RenderPass;
+            l_FrameBufferInfo.attachmentCount = 1;
+            l_FrameBufferInfo.pAttachments = l_Attachments;
+            l_FrameBufferInfo.width = m_SwapchainExtent.width;
+            l_FrameBufferInfo.height = m_SwapchainExtent.height;
+            l_FrameBufferInfo.layers = 1;
 
-            if (vkCreateFramebuffer(Application::GetDevice(), &framebufferInfo, nullptr, &m_SwapchainFramebuffers[i]) != VK_SUCCESS)
+            if (vkCreateFramebuffer(Application::GetDevice(), &l_FrameBufferInfo, nullptr, &m_SwapchainFramebuffers[i]) != VK_SUCCESS)
             {
                 TR_CORE_CRITICAL("Failed to create framebuffer {}", i);
             }
@@ -663,12 +658,12 @@ namespace Trident
     {
         TR_CORE_TRACE("Creating Command Pool");
 
-        VkCommandPoolCreateInfo poolInfo{};
-        poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-        poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-        poolInfo.queueFamilyIndex = Application::GetQueueFamilyIndices().GraphicsFamily.value();
+        VkCommandPoolCreateInfo l_PoolInfo{};
+        l_PoolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+        l_PoolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+        l_PoolInfo.queueFamilyIndex = Application::GetQueueFamilyIndices().GraphicsFamily.value();
 
-        if (vkCreateCommandPool(Application::GetDevice(), &poolInfo, nullptr, &m_CommandPool) != VK_SUCCESS)
+        if (vkCreateCommandPool(Application::GetDevice(), &l_PoolInfo, nullptr, &m_CommandPool) != VK_SUCCESS)
         {
             TR_CORE_CRITICAL("Failed to create command pool");
         }
@@ -682,46 +677,46 @@ namespace Trident
 
         m_CommandBuffers.resize(m_SwapchainFramebuffers.size());
 
-        VkCommandBufferAllocateInfo allocInfo{};
-        allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-        allocInfo.commandPool = m_CommandPool;
-        allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-        allocInfo.commandBufferCount = static_cast<uint32_t>(m_CommandBuffers.size());
+        VkCommandBufferAllocateInfo l_AllocateInfo{};
+        l_AllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        l_AllocateInfo.commandPool = m_CommandPool;
+        l_AllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        l_AllocateInfo.commandBufferCount = static_cast<uint32_t>(m_CommandBuffers.size());
 
-        if (vkAllocateCommandBuffers(Application::GetDevice(), &allocInfo, m_CommandBuffers.data()) != VK_SUCCESS)
+        if (vkAllocateCommandBuffers(Application::GetDevice(), &l_AllocateInfo, m_CommandBuffers.data()) != VK_SUCCESS)
         {
             TR_CORE_CRITICAL("Failed to allocate command buffers");
         }
 
         for (size_t i = 0; i < m_CommandBuffers.size(); ++i)
         {
-            VkCommandBufferBeginInfo beginInfo{};
-            beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+            VkCommandBufferBeginInfo l_BeginInfo{};
+            l_BeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 
-            if (vkBeginCommandBuffer(m_CommandBuffers[i], &beginInfo) != VK_SUCCESS)
+            if (vkBeginCommandBuffer(m_CommandBuffers[i], &l_BeginInfo) != VK_SUCCESS)
             {
                 TR_CORE_CRITICAL("Failed to begin recording command buffer {}", i);
             }
 
-            VkRenderPassBeginInfo rpInfo{};
-            rpInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-            rpInfo.renderPass = m_RenderPass;
-            rpInfo.framebuffer = m_SwapchainFramebuffers[i];
-            rpInfo.renderArea.offset = { 0, 0 };
-            rpInfo.renderArea.extent = m_SwapchainExtent;
+            VkRenderPassBeginInfo l_RenderPassInfo{};
+            l_RenderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+            l_RenderPassInfo.renderPass = m_RenderPass;
+            l_RenderPassInfo.framebuffer = m_SwapchainFramebuffers[i];
+            l_RenderPassInfo.renderArea.offset = { 0, 0 };
+            l_RenderPassInfo.renderArea.extent = m_SwapchainExtent;
 
-            VkClearValue clearColor = { {{0.0f, 0.0f, 0.0f, 1.0f}} };
-            rpInfo.clearValueCount = 1;
-            rpInfo.pClearValues = &clearColor;
+            VkClearValue l_ClearColor = { {{0.0f, 0.0f, 0.0f, 1.0f}} };
+            l_RenderPassInfo.clearValueCount = 1;
+            l_RenderPassInfo.pClearValues = &l_ClearColor;
 
-            vkCmdBeginRenderPass(m_CommandBuffers[i], &rpInfo, VK_SUBPASS_CONTENTS_INLINE);
+            vkCmdBeginRenderPass(m_CommandBuffers[i], &l_RenderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
             vkCmdBindPipeline(m_CommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_GraphicsPipeline);
             vkCmdBindDescriptorSets(m_CommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_PipelineLayout, 0, 1, &m_DescriptorSets[i], 0, nullptr);
 
-            VkBuffer vertexBuffers[] = { m_VertexBuffer };
-            VkDeviceSize offsets[] = { 0 };
-            vkCmdBindVertexBuffers(m_CommandBuffers[i], 0, 1, vertexBuffers, offsets);
+            VkBuffer l_VertexBuffers[] = { m_VertexBuffer };
+            VkDeviceSize l_Offsets[] = { 0 };
+            vkCmdBindVertexBuffers(m_CommandBuffers[i], 0, 1, l_VertexBuffers, l_Offsets);
             vkCmdBindIndexBuffer(m_CommandBuffers[i], m_IndexBuffer, 0, VK_INDEX_TYPE_UINT16);
 
             vkCmdDrawIndexed(m_CommandBuffers[i], m_IndexCount, 1, 0, 0, 0);
@@ -740,14 +735,14 @@ namespace Trident
     {
         TR_CORE_TRACE("Creating Uniform Buffers");
 
-        VkDeviceSize bufferSize = sizeof(UniformBufferObject);
+        VkDeviceSize l_BufferSize = sizeof(UniformBufferObject);
 
         m_UniformBuffers.resize(m_SwapchainImages.size());
         m_UniformBuffersMemory.resize(m_SwapchainImages.size());
 
         for (size_t i = 0; i < m_SwapchainImages.size(); ++i)
         {
-            CreateBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, 
+            CreateBuffer(l_BufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, 
                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, m_UniformBuffers[i], m_UniformBuffersMemory[i]);
         }
 
@@ -758,94 +753,93 @@ namespace Trident
     {
         TR_CORE_TRACE("Creating Descriptor Pool");
 
-        VkDescriptorPoolSize poolSize{};
-        poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        poolSize.descriptorCount = static_cast<uint32_t>(m_SwapchainImages.size());
+        VkDescriptorPoolSize l_PoolSize{};
+        l_PoolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        l_PoolSize.descriptorCount = static_cast<uint32_t>(m_SwapchainImages.size());
 
-        VkDescriptorPoolCreateInfo poolInfo{};
-        poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-        poolInfo.poolSizeCount = 1;
-        poolInfo.pPoolSizes = &poolSize;
-        poolInfo.maxSets = static_cast<uint32_t>(m_SwapchainImages.size());
+        VkDescriptorPoolCreateInfo l_PoolInfo{};
+        l_PoolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        l_PoolInfo.poolSizeCount = 1;
+        l_PoolInfo.pPoolSizes = &l_PoolSize;
+        l_PoolInfo.maxSets = static_cast<uint32_t>(m_SwapchainImages.size());
 
-        if (vkCreateDescriptorPool(Application::GetDevice(), &poolInfo, nullptr, &m_DescriptorPool) != VK_SUCCESS)
+        if (vkCreateDescriptorPool(Application::GetDevice(), &l_PoolInfo, nullptr, &m_DescriptorPool) != VK_SUCCESS)
         {
             TR_CORE_CRITICAL("Failed to create descriptor pool");
         }
 
-        TR_CORE_TRACE("Descriptor Pool Created (MaxSets = {})", poolInfo.maxSets);
+        TR_CORE_TRACE("Descriptor Pool Created (MaxSets = {})", l_PoolInfo.maxSets);
     }
 
     void Renderer::CreateDescriptorSets()
     {
         TR_CORE_TRACE("Allocating Descriptor Sets");
 
-        VkDevice device = Application::GetDevice();
-        size_t imageCount = m_SwapchainImages.size();
+        size_t l_ImageCount = m_SwapchainImages.size();
 
-        std::vector<VkDescriptorSetLayout> layouts(imageCount, m_DescriptorSetLayout);
+        std::vector<VkDescriptorSetLayout> layouts(l_ImageCount, m_DescriptorSetLayout);
 
         VkDescriptorSetAllocateInfo allocInfo{};
         allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
         allocInfo.descriptorPool = m_DescriptorPool;
-        allocInfo.descriptorSetCount = static_cast<uint32_t>(imageCount);
+        allocInfo.descriptorSetCount = static_cast<uint32_t>(l_ImageCount);
         allocInfo.pSetLayouts = layouts.data();
 
-        m_DescriptorSets.resize(imageCount);
-        if (vkAllocateDescriptorSets(device, &allocInfo, m_DescriptorSets.data()) != VK_SUCCESS)
+        m_DescriptorSets.resize(l_ImageCount);
+        if (vkAllocateDescriptorSets(Application::GetDevice(), &allocInfo, m_DescriptorSets.data()) != VK_SUCCESS)
         {
             TR_CORE_CRITICAL("Failed to allocate descriptor sets");
         }
 
-        for (size_t i = 0; i < imageCount; ++i)
+        for (size_t i = 0; i < l_ImageCount; ++i)
         {
-            VkDescriptorBufferInfo bufferInfo{};
-            bufferInfo.buffer = m_UniformBuffers[i];
-            bufferInfo.offset = 0;
-            bufferInfo.range = sizeof(UniformBufferObject);
+            VkDescriptorBufferInfo l_BufferInfo{};
+            l_BufferInfo.buffer = m_UniformBuffers[i];
+            l_BufferInfo.offset = 0;
+            l_BufferInfo.range = sizeof(UniformBufferObject);
 
-            VkWriteDescriptorSet descriptorWrite{};
-            descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            descriptorWrite.dstSet = m_DescriptorSets[i];
-            descriptorWrite.dstBinding = 0;
-            descriptorWrite.dstArrayElement = 0;
-            descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-            descriptorWrite.descriptorCount = 1;
-            descriptorWrite.pBufferInfo = &bufferInfo;
+            VkWriteDescriptorSet l_DescriptorWrite{};
+            l_DescriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            l_DescriptorWrite.dstSet = m_DescriptorSets[i];
+            l_DescriptorWrite.dstBinding = 0;
+            l_DescriptorWrite.dstArrayElement = 0;
+            l_DescriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            l_DescriptorWrite.descriptorCount = 1;
+            l_DescriptorWrite.pBufferInfo = &l_BufferInfo;
 
-            vkUpdateDescriptorSets(device, 1, &descriptorWrite, 0, nullptr);
+            vkUpdateDescriptorSets(Application::GetDevice(), 1, &l_DescriptorWrite, 0, nullptr);
         }
 
-        TR_CORE_TRACE("Descriptor Sets Allocated ({})", imageCount);
+        TR_CORE_TRACE("Descriptor Sets Allocated ({})", l_ImageCount);
     }
 
     void Renderer::CreateSyncObjects()
     {
         TR_CORE_TRACE("Creating Sync Objects");
 
-        size_t count = m_SwapchainImages.size();
-        
-        m_ImageAvailableSemaphores.resize(count);
-        m_RenderFinishedSemaphores.resize(count);
-        m_InFlightFences.resize(count);
-        m_ImagesInFlight.resize(count);
+        size_t l_Count = m_SwapchainImages.size();
+
+        m_ImageAvailableSemaphores.resize(l_Count);
+        m_RenderFinishedSemaphores.resize(l_Count);
+        m_InFlightFences.resize(l_Count);
+        m_ImagesInFlight.resize(l_Count);
         std::fill(m_ImagesInFlight.begin(), m_ImagesInFlight.end(), VK_NULL_HANDLE);
 
-        VkSemaphoreCreateInfo semInfo{ VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
-        VkFenceCreateInfo fenceInfo{ VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
-        fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+        VkSemaphoreCreateInfo l_SemaphoreInfo{ VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
+        VkFenceCreateInfo l_FenceInfo{ VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
+        l_FenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-        for (size_t i = 0; i < count; ++i)
+        for (size_t i = 0; i < l_Count; ++i)
         {
-            if (vkCreateSemaphore(Application::GetDevice(), &semInfo, nullptr, &m_ImageAvailableSemaphores[i]) != VK_SUCCESS ||
-                vkCreateSemaphore(Application::GetDevice(), &semInfo, nullptr, &m_RenderFinishedSemaphores[i]) != VK_SUCCESS ||
-                vkCreateFence(Application::GetDevice(), &fenceInfo, nullptr, &m_InFlightFences[i]) != VK_SUCCESS)
+            if (vkCreateSemaphore(Application::GetDevice(), &l_SemaphoreInfo, nullptr, &m_ImageAvailableSemaphores[i]) != VK_SUCCESS ||
+                vkCreateSemaphore(Application::GetDevice(), &l_SemaphoreInfo, nullptr, &m_RenderFinishedSemaphores[i]) != VK_SUCCESS ||
+                vkCreateFence(Application::GetDevice(), &l_FenceInfo, nullptr, &m_InFlightFences[i]) != VK_SUCCESS)
             {
                 TR_CORE_CRITICAL("Failed to create sync for image {}", i);
             }
         }
 
-        TR_CORE_TRACE("Sync Objects Created ({} Frames In Flight)", count);
+        TR_CORE_TRACE("Sync Objects Created ({} Frames In Flight)", l_Count);
     }
 
     //------------------------------------------------------------------------------------------------------------------------------------------------------//
@@ -1001,26 +995,26 @@ namespace Trident
 
     SwapchainSupportDetails Renderer::QuerySwapchainSupport(VkPhysicalDevice device, VkSurfaceKHR surface)
     {
-        SwapchainSupportDetails details;
-        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &details.Capabilities);
+        SwapchainSupportDetails l_Details;
+        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &l_Details.Capabilities);
 
-        uint32_t formatCount = 0;
-        vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, nullptr);
-        if (formatCount)
+        uint32_t l_FormatCount = 0;
+        vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &l_FormatCount, nullptr);
+        if (l_FormatCount)
         {
-            details.Formats.resize(formatCount);
-            vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, details.Formats.data());
+            l_Details.Formats.resize(l_FormatCount);
+            vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &l_FormatCount, l_Details.Formats.data());
         }
 
-        uint32_t presentModeCount = 0;
-        vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, nullptr);
-        if (presentModeCount)
+        uint32_t l_PresentModeCount = 0;
+        vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &l_PresentModeCount, nullptr);
+        if (l_PresentModeCount)
         {
-            details.PresentModes.resize(presentModeCount);
-            vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, details.PresentModes.data());
+            l_Details.PresentModes.resize(l_PresentModeCount);
+            vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &l_PresentModeCount, l_Details.PresentModes.data());
         }
 
-        return details;
+        return l_Details;
     }
 
     VkSurfaceFormatKHR Renderer::ChooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats)
@@ -1038,11 +1032,11 @@ namespace Trident
 
     VkPresentModeKHR Renderer::ChooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes)
     {
-        for (auto a_Mode : availablePresentModes)
+        for (auto it_Mode : availablePresentModes)
         {
-            if (a_Mode == VK_PRESENT_MODE_MAILBOX_KHR)
+            if (it_Mode == VK_PRESENT_MODE_MAILBOX_KHR)
             {
-                return a_Mode;
+                return it_Mode;
             }
         }
 
@@ -1058,16 +1052,16 @@ namespace Trident
 
         else
         {
-            uint32_t width = 0;
-            uint32_t height = 0;
-            Application::GetWindow().GetFramebufferSize(width, height);
+            uint32_t l_Width = 0;
+            uint32_t l_Height = 0;
+            Application::GetWindow().GetFramebufferSize(l_Width, l_Height);
 
-            VkExtent2D actualExtent = { width, height };
+            VkExtent2D l_ActualExtent = { l_Width, l_Height };
 
-            actualExtent.width = std::max(capabilities.minImageExtent.width, std::min(capabilities.maxImageExtent.width, actualExtent.width));
-            actualExtent.height = std::max(capabilities.minImageExtent.height, std::min(capabilities.maxImageExtent.height, actualExtent.height));
+            l_ActualExtent.width = std::max(capabilities.minImageExtent.width, std::min(capabilities.maxImageExtent.width, l_ActualExtent.width));
+            l_ActualExtent.height = std::max(capabilities.minImageExtent.height, std::min(capabilities.maxImageExtent.height, l_ActualExtent.height));
 
-            return actualExtent;
+            return l_ActualExtent;
         }
     }
 }
