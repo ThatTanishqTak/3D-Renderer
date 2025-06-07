@@ -37,6 +37,8 @@ namespace Trident
 			if (!l_File.is_open())
 			{
 				TR_CORE_CRITICAL("Failed to open file: " + filePath);
+				
+				return {};
 			}
 
 			size_t l_Size = (size_t)l_File.tellg();

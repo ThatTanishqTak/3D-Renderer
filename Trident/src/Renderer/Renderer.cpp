@@ -37,7 +37,7 @@ namespace Trident
         VkDevice l_Device = Application::GetDevice();
         vkDeviceWaitIdle(l_Device);
 
-        for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
+        for (int i = 0; i < 2; ++i)
         {
             if (m_RenderFinishedSemaphores[i] != VK_NULL_HANDLE)
             {
@@ -191,7 +191,7 @@ namespace Trident
 
         vkWaitForFences(device, 1, &m_InFlightFences[m_CurrentFrame], VK_TRUE, UINT64_MAX);
 
-        uint32_t imageIndex;
+        uint32_t imageIndex{};
         VkResult result = vkAcquireNextImageKHR(device, m_Swapchain, UINT64_MAX, m_ImageAvailableSemaphores[m_CurrentFrame], VK_NULL_HANDLE, &imageIndex);
         if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
         {
@@ -259,7 +259,42 @@ namespace Trident
             TR_CORE_CRITICAL("Failed to present swapchain image (code {})", static_cast<int>(result));
         }
 
-        m_CurrentFrame = (m_CurrentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+        m_CurrentFrame = (m_CurrentFrame + 1) % 2;
+    }
+
+    void Renderer::RecreateSwapchain()
+    {
+        TR_CORE_TRACE("Recreating Swapchain");
+
+        VkDevice device = Application::GetDevice();
+
+        vkDeviceWaitIdle(device);
+
+        for (VkFramebuffer fb : m_SwapchainFramebuffers)
+        {
+            vkDestroyFramebuffer(device, fb, nullptr);
+        }
+
+        m_SwapchainFramebuffers.clear();
+
+        for (VkImageView view : m_SwapchainImageViews)
+        {
+            vkDestroyImageView(device, view, nullptr);
+        }
+
+        m_SwapchainImageViews.clear();
+
+        vkDestroySwapchainKHR(device, m_Swapchain, nullptr);
+        m_SwapchainImages.clear();
+
+        CreateSwapchain();
+        CreateImageViews();
+        CreateFramebuffers();
+
+        vkFreeCommandBuffers(device, m_CommandPool, static_cast<uint32_t>(m_CommandBuffers.size()), m_CommandBuffers.data());
+        CreateCommandBuffer();
+
+        TR_CORE_TRACE("Swapchain Recreated");
     }
 
     //------------------------------------------------------------------------------------------------------------------------------------------------------//
@@ -748,27 +783,26 @@ namespace Trident
     {
         TR_CORE_TRACE("Creating Sync Objects");
 
-        m_ImagesInFlight.resize(m_SwapchainImages.size());
-        std::fill(m_ImagesInFlight.begin(), m_ImagesInFlight.end(), VK_NULL_HANDLE);
+        size_t count = m_SwapchainImages.size();
+        m_ImageAvailableSemaphores.resize(count);
+        m_RenderFinishedSemaphores.resize(count);
+        m_InFlightFences.resize(count);
 
-        VkSemaphoreCreateInfo semaphoreInfo{};
-        semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-
-        VkFenceCreateInfo fenceInfo{};
-        fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+        VkSemaphoreCreateInfo semInfo{ VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
+        VkFenceCreateInfo     fenceInfo{ VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
         fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-        for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
+        for (size_t i = 0; i < count; ++i)
         {
-            if (vkCreateSemaphore(Application::GetDevice(), &semaphoreInfo, nullptr, &m_ImageAvailableSemaphores[i]) != VK_SUCCESS ||
-                vkCreateSemaphore(Application::GetDevice(), &semaphoreInfo, nullptr, &m_RenderFinishedSemaphores[i]) != VK_SUCCESS ||
+            if (vkCreateSemaphore(Application::GetDevice(), &semInfo, nullptr, &m_ImageAvailableSemaphores[i]) != VK_SUCCESS ||
+                vkCreateSemaphore(Application::GetDevice(), &semInfo, nullptr, &m_RenderFinishedSemaphores[i]) != VK_SUCCESS ||
                 vkCreateFence(Application::GetDevice(), &fenceInfo, nullptr, &m_InFlightFences[i]) != VK_SUCCESS)
             {
-                TR_CORE_CRITICAL("Failed to create sync objects for frame {}", i);
+                TR_CORE_CRITICAL("Failed to create sync for image {}", i);
             }
         }
 
-        TR_CORE_TRACE("Sync Objects Created ({} Frames In Flight)", MAX_FRAMES_IN_FLIGHT);
+        TR_CORE_TRACE("Sync Objects Created ({} Frames In Flight)", count);
     }
 
     //------------------------------------------------------------------------------------------------------------------------------------------------------//
@@ -988,38 +1022,5 @@ namespace Trident
 
             return actualExtent;
         }
-    }
-
-    void Renderer::RecreateSwapchain()
-    {
-        TR_CORE_TRACE("Recreating Swapchain");
-
-        VkDevice device = Application::GetDevice();
-
-        vkDeviceWaitIdle(device);
-
-        for (VkFramebuffer fb : m_SwapchainFramebuffers)
-        {
-            vkDestroyFramebuffer(device, fb, nullptr);
-        }
-        m_SwapchainFramebuffers.clear();
-
-        for (VkImageView view : m_SwapchainImageViews)
-        {
-            vkDestroyImageView(device, view, nullptr);
-        }
-        m_SwapchainImageViews.clear();        
-
-        vkDestroySwapchainKHR(device, m_Swapchain, nullptr);
-        m_SwapchainImages.clear();
-
-        CreateSwapchain();
-        CreateImageViews();
-        CreateFramebuffers();
-
-        vkFreeCommandBuffers(device, m_CommandPool, static_cast<uint32_t>(m_CommandBuffers.size()), m_CommandBuffers.data());
-        CreateCommandBuffer();
-
-        TR_CORE_TRACE("Swapchain Recreated");
     }
 }
