@@ -1,5 +1,7 @@
 ﻿#include "ApplicationLayer.h"
 
+#include <imgui.h>
+
 ApplicationLayer::ApplicationLayer()
 {
     Trident::Utilities::Log::Init();

@@ -8,6 +8,7 @@
 #include <vulkan/vulkan.h>
 #include <vector>
 #include <array>
+#include <functional>
 
 namespace Trident
 {
@@ -25,7 +26,11 @@ namespace Trident
         void Shutdown();
         void DrawFrame();
 
+        VkRenderPass GetRenderPass() const { return m_RenderPass; }
+        uint32_t GetImageCount() const { return static_cast<uint32_t>(m_SwapchainImages.size()); }
+
         void RecreateSwapchain();
+        VkCommandPool GetCommandPool() const { return m_CommandPool; }
 
     private:
         // Swapchain

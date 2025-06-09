@@ -25,9 +25,9 @@ namespace Trident
     {
         Utilities::Time::Update();
 
-        m_Window.PollEvents();
-
         m_Renderer->DrawFrame();
+
+        m_Window.PollEvents();
     }
 
     void Application::Shutdown()

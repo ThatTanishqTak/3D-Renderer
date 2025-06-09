@@ -20,15 +20,15 @@ endif()
 
 add_library(Vulkan::Vulkan UNKNOWN IMPORTED)
 set_target_properties(Vulkan::Vulkan PROPERTIES
-  IMPORTED_LOCATION               "${VULKAN_LIBRARY}"
-  INTERFACE_INCLUDE_DIRECTORIES   "${VULKAN_INCLUDE_DIR}"
+  IMPORTED_LOCATION "${VULKAN_LIBRARY}"
+  INTERFACE_INCLUDE_DIRECTORIES "${VULKAN_INCLUDE_DIR}"
 )
 
 set(GLFW_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/vendor/glfw")
 add_library(glfw3 STATIC IMPORTED GLOBAL)
 set_target_properties(glfw3 PROPERTIES
-  IMPORTED_LOCATION               "${GLFW_ROOT}/lib-vc2022/glfw3.lib"
-  INTERFACE_INCLUDE_DIRECTORIES   "${GLFW_ROOT}/include"
+  IMPORTED_LOCATION "${GLFW_ROOT}/lib-vc2022/glfw3.lib"
+  INTERFACE_INCLUDE_DIRECTORIES "${GLFW_ROOT}/include"
 )
 
 add_library(glm INTERFACE)
@@ -40,6 +40,19 @@ add_library(spdlog INTERFACE)
 target_include_directories(spdlog INTERFACE
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/vendor/spdlog/include>
 )
+
+set(IMGUI_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/vendor/imgui")
+file(GLOB IMGUI_SOURCES
+  ${IMGUI_ROOT}/*.cpp
+  ${IMGUI_ROOT}/backends/imgui_impl_glfw.cpp
+  ${IMGUI_ROOT}/backends/imgui_impl_vulkan.cpp
+)
+add_library(imgui STATIC ${IMGUI_SOURCES})
+target_include_directories(imgui PUBLIC
+  $<BUILD_INTERFACE:${IMGUI_ROOT}>
+  $<BUILD_INTERFACE:${IMGUI_ROOT}/backends>
+)
+target_link_libraries(imgui PUBLIC glfw3 Vulkan::Vulkan)
 
 file(GLOB_RECURSE TRIDENT_SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp
@@ -57,6 +70,7 @@ target_link_libraries(Trident PUBLIC
   glfw3
   glm
   spdlog
+  imgui
 )
 
 option(TRIDENT_ENABLE_VALIDATION "Enable Vulkan Validation Layers" ON)

@@ -13,6 +13,7 @@
 #include <vector>
 #include <set>
 #include <memory>
+#include <functional>
 
 namespace Trident
 {

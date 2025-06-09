@@ -224,6 +224,43 @@ namespace Trident
         memcpy(l_Data, &l_UniformBufferObject, sizeof(l_UniformBufferObject));
         vkUnmapMemory(Application::GetDevice(), m_UniformBuffersMemory[l_ImageIndex]);
 
+        vkResetCommandBuffer(m_CommandBuffers[l_ImageIndex], 0);
+
+        VkCommandBufferBeginInfo l_BeginInfo{ VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
+        if (vkBeginCommandBuffer(m_CommandBuffers[l_ImageIndex], &l_BeginInfo) != VK_SUCCESS)
+        {
+            TR_CORE_CRITICAL("Failed to begin recording command buffer {}", l_ImageIndex);
+        }
+
+        VkRenderPassBeginInfo l_RenderPassInfo{ VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO };
+        l_RenderPassInfo.renderPass = m_RenderPass;
+        l_RenderPassInfo.framebuffer = m_SwapchainFramebuffers[l_ImageIndex];
+        l_RenderPassInfo.renderArea.offset = { 0, 0 };
+        l_RenderPassInfo.renderArea.extent = m_SwapchainExtent;
+
+        VkClearValue l_ClearColor = { {{0.0f, 0.0f, 0.0f, 1.0f}} };
+        l_RenderPassInfo.clearValueCount = 1;
+        l_RenderPassInfo.pClearValues = &l_ClearColor;
+
+        vkCmdBeginRenderPass(m_CommandBuffers[l_ImageIndex], &l_RenderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+        vkCmdBindPipeline(m_CommandBuffers[l_ImageIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, m_GraphicsPipeline);
+        vkCmdBindDescriptorSets(m_CommandBuffers[l_ImageIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, m_PipelineLayout, 0, 1, &m_DescriptorSets[l_ImageIndex], 0, nullptr);
+
+        VkBuffer l_VertexBuffers[] = { m_VertexBuffer };
+        VkDeviceSize l_Offsets[] = { 0 };
+        vkCmdBindVertexBuffers(m_CommandBuffers[l_ImageIndex], 0, 1, l_VertexBuffers, l_Offsets);
+        vkCmdBindIndexBuffer(m_CommandBuffers[l_ImageIndex], m_IndexBuffer, 0, VK_INDEX_TYPE_UINT16);
+
+        vkCmdDrawIndexed(m_CommandBuffers[l_ImageIndex], m_IndexCount, 1, 0, 0, 0);
+
+        vkCmdEndRenderPass(m_CommandBuffers[l_ImageIndex]);
+
+        if (vkEndCommandBuffer(m_CommandBuffers[l_ImageIndex]) != VK_SUCCESS)
+        {
+            TR_CORE_CRITICAL("Failed to record command buffer {}", l_ImageIndex);
+        }
+
         VkSemaphore l_WaitSemaphores[] = { m_ImageAvailableSemaphores[m_CurrentFrame] };
         VkPipelineStageFlags l_WaitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
         VkSemaphore l_SignalSemaphores[] = { m_RenderFinishedSemaphores[m_CurrentFrame] };
@@ -681,7 +718,7 @@ namespace Trident
 
     void Renderer::CreateCommandBuffer()
     {
-        TR_CORE_TRACE("Recording Command Buffers");
+        TR_CORE_TRACE("Allocating Command Buffers");
 
         m_CommandBuffers.resize(m_SwapchainFramebuffers.size());
 
@@ -696,47 +733,48 @@ namespace Trident
             TR_CORE_CRITICAL("Failed to allocate command buffers");
         }
 
-        for (size_t i = 0; i < m_CommandBuffers.size(); ++i)
-        {
-            VkCommandBufferBeginInfo l_BeginInfo{};
-            l_BeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        //for (size_t i = 0; i < m_CommandBuffers.size(); ++i)
+        //{
+        //    VkCommandBufferBeginInfo l_BeginInfo{};
+        //    l_BeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 
-            if (vkBeginCommandBuffer(m_CommandBuffers[i], &l_BeginInfo) != VK_SUCCESS)
-            {
-                TR_CORE_CRITICAL("Failed to begin recording command buffer {}", i);
-            }
+        //    if (vkBeginCommandBuffer(m_CommandBuffers[i], &l_BeginInfo) != VK_SUCCESS)
+        //    {
+        //        TR_CORE_CRITICAL("Failed to begin recording command buffer {}", i);
+        //    }
 
-            VkRenderPassBeginInfo l_RenderPassInfo{};
-            l_RenderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-            l_RenderPassInfo.renderPass = m_RenderPass;
-            l_RenderPassInfo.framebuffer = m_SwapchainFramebuffers[i];
-            l_RenderPassInfo.renderArea.offset = { 0, 0 };
-            l_RenderPassInfo.renderArea.extent = m_SwapchainExtent;
+        //    VkRenderPassBeginInfo l_RenderPassInfo{};
+        //    l_RenderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+        //    l_RenderPassInfo.renderPass = m_RenderPass;
+        //    l_RenderPassInfo.framebuffer = m_SwapchainFramebuffers[i];
+        //    l_RenderPassInfo.renderArea.offset = { 0, 0 };
+        //    l_RenderPassInfo.renderArea.extent = m_SwapchainExtent;
 
-            VkClearValue l_ClearColor = { {{0.0f, 0.0f, 0.0f, 1.0f}} };
-            l_RenderPassInfo.clearValueCount = 1;
-            l_RenderPassInfo.pClearValues = &l_ClearColor;
+        //    VkClearValue l_ClearColor = { {{0.0f, 0.0f, 0.0f, 1.0f}} };
+        //    l_RenderPassInfo.clearValueCount = 1;
+        //    l_RenderPassInfo.pClearValues = &l_ClearColor;
 
-            vkCmdBeginRenderPass(m_CommandBuffers[i], &l_RenderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+        //    vkCmdBeginRenderPass(m_CommandBuffers[i], &l_RenderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-            vkCmdBindPipeline(m_CommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_GraphicsPipeline);
-            vkCmdBindDescriptorSets(m_CommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_PipelineLayout, 0, 1, &m_DescriptorSets[i], 0, nullptr);
+        //    vkCmdBindPipeline(m_CommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_GraphicsPipeline);
+        //    vkCmdBindDescriptorSets(m_CommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_PipelineLayout, 0, 1, &m_DescriptorSets[i], 0, nullptr);
 
-            VkBuffer l_VertexBuffers[] = { m_VertexBuffer };
-            VkDeviceSize l_Offsets[] = { 0 };
-            vkCmdBindVertexBuffers(m_CommandBuffers[i], 0, 1, l_VertexBuffers, l_Offsets);
-            vkCmdBindIndexBuffer(m_CommandBuffers[i], m_IndexBuffer, 0, VK_INDEX_TYPE_UINT16);
+        //    VkBuffer l_VertexBuffers[] = { m_VertexBuffer };
+        //    VkDeviceSize l_Offsets[] = { 0 };
+        //    vkCmdBindVertexBuffers(m_CommandBuffers[i], 0, 1, l_VertexBuffers, l_Offsets);
+        //    vkCmdBindIndexBuffer(m_CommandBuffers[i], m_IndexBuffer, 0, VK_INDEX_TYPE_UINT16);
 
-            vkCmdDrawIndexed(m_CommandBuffers[i], m_IndexCount, 1, 0, 0, 0);
-            vkCmdEndRenderPass(m_CommandBuffers[i]);
+        //    vkCmdDrawIndexed(m_CommandBuffers[i], m_IndexCount, 1, 0, 0, 0);
+        //    vkCmdEndRenderPass(m_CommandBuffers[i]);
 
-            if (vkEndCommandBuffer(m_CommandBuffers[i]) != VK_SUCCESS)
-            {
-                TR_CORE_CRITICAL("Failed to record command buffer {}", i);
-            }
-        }
+        //    if (vkEndCommandBuffer(m_CommandBuffers[i]) != VK_SUCCESS)
+        //    {
+        //        TR_CORE_CRITICAL("Failed to record command buffer {}", i);
+        //    }
+        //}
 
-        TR_CORE_TRACE("Command Buffers Recorded");
+        //TR_CORE_TRACE("Command Buffers Recorded");
+        TR_CORE_TRACE("Command Buffers Allocated ({} Buffers)", m_CommandBuffers.size());
     }
 
     void Renderer::CreateUniformBuffer()
