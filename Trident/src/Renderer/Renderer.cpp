@@ -36,8 +36,6 @@ namespace Trident
     {
         TR_CORE_TRACE("Shutting Down Renderer");
 
-        vkDeviceWaitIdle(Application::GetDevice());
-
         for (size_t i = 0; i < m_ImageAvailableSemaphores.size(); ++i)
         {
             if (m_RenderFinishedSemaphores[i] != VK_NULL_HANDLE)
@@ -194,6 +192,10 @@ namespace Trident
         uint32_t l_ImageIndex;
         VkResult l_Result = vkAcquireNextImageKHR(Application::GetDevice(), m_Swapchain, UINT64_MAX, m_ImageAvailableSemaphores[m_CurrentFrame], VK_NULL_HANDLE, &l_ImageIndex);
 
+        Application::GetImGuiLayer().Begin();
+        Application::GetImGuiLayer().SetupDockspace();
+        ImGui::ShowDemoWindow();
+
         if (l_Result == VK_ERROR_OUT_OF_DATE_KHR || l_Result == VK_SUBOPTIMAL_KHR)
         {
             RecreateSwapchain();
@@ -254,6 +256,10 @@ namespace Trident
 
         vkCmdDrawIndexed(m_CommandBuffers[l_ImageIndex], m_IndexCount, 1, 0, 0, 0);
 
+        vkCmdEndRenderPass(m_CommandBuffers[l_ImageIndex]);
+
+        vkCmdBeginRenderPass(m_CommandBuffers[l_ImageIndex], &l_RenderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+        Application::GetImGuiLayer().End(m_CommandBuffers[l_ImageIndex]);
         vkCmdEndRenderPass(m_CommandBuffers[l_ImageIndex]);
 
         if (vkEndCommandBuffer(m_CommandBuffers[l_ImageIndex]) != VK_SUCCESS)

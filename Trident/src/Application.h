@@ -6,6 +6,8 @@
 
 #include "Renderer/Renderer.h"
 
+#include "ImGui/ImGuiLayer.h"
+
 #include <vulkan/vulkan.h>
 #include <GLFW/glfw3.h>
 
@@ -33,9 +35,13 @@ namespace Trident
         void Init();
         void Update();
 
+        void RenderScene();
+        void RenderUI();
+
         void Shutdown();
 
         static Application& Get() { return *s_Instance; }
+        static VkInstance GetInstance() { return Get().m_Instance; }
         static VkPhysicalDevice GetPhysicalDevice() { return Get().m_PhysicalDevice; }
         static VkDevice GetDevice() { return Get().m_Device; }
         static VkSurfaceKHR GetSurface() { return Get().m_Surface; }
@@ -43,6 +49,7 @@ namespace Trident
         static VkQueue GetPresentQueue() { return Get().m_PresentQueue; }
         static QueueFamilyIndices GetQueueFamilyIndices() { return Get().m_QueueFamilyIndices; }
         static Window& GetWindow() { return Get().m_Window; }
+        static ImGuiLayer& GetImGuiLayer() { return *Get().m_ImGuiLayer; }
         bool IsDeviceSuitable(VkPhysicalDevice device);
 
     private:
@@ -57,6 +64,7 @@ namespace Trident
         QueueFamilyIndices m_QueueFamilyIndices;
 
         std::unique_ptr<Renderer> m_Renderer;
+        std::unique_ptr<ImGuiLayer> m_ImGuiLayer;
 
         static Application* s_Instance;
 

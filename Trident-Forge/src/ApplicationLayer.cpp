@@ -29,5 +29,12 @@ void ApplicationLayer::Run()
     while (!m_Window->ShouldClose())
     {
         m_Engine->Update();
+        m_Engine->RenderScene();
+        m_Engine->RenderUI();
     }
+}
+
+void ApplicationLayer::RenderUI()
+{
+
 }

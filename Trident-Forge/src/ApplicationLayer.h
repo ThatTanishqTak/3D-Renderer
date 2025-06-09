@@ -18,4 +18,7 @@ public:
 private:
     std::unique_ptr<Trident::Window> m_Window;
     std::unique_ptr<Trident::Application> m_Engine;
+
+private:
+    void RenderUI();
 };

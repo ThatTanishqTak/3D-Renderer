@@ -31,6 +31,7 @@ namespace Trident
 
         void RecreateSwapchain();
         VkCommandPool GetCommandPool() const { return m_CommandPool; }
+        std::vector<VkCommandBuffer> GetCommandBuffer() const { return m_CommandBuffers; }
 
     private:
         // Swapchain
