@@ -14,10 +14,14 @@ ApplicationLayer::ApplicationLayer()
 
 ApplicationLayer::~ApplicationLayer()
 {
+    TR_INFO("-------SHUTING DOWN APPLICATION-------");
+
     if (m_Engine)
     {
         m_Engine->Shutdown();
     }
+
+    TR_INFO("-------APPLICATION SHUTDOWN-------");
 }
 
 void ApplicationLayer::Run()
