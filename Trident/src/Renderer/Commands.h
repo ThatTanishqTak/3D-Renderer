@@ -29,6 +29,7 @@ namespace Trident
         void CreateCommandBuffers(uint32_t commandBufferCount);
         void CreateSyncObjects(uint32_t count);
 
+    private:
         VkCommandPool m_CommandPool = VK_NULL_HANDLE;
         std::vector<VkCommandBuffer> m_CommandBuffers;
         std::vector<VkSemaphore> m_ImageAvailableSemaphores;

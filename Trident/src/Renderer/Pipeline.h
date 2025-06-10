@@ -16,7 +16,6 @@ namespace Trident
         void CleanupFramebuffers();
         void CreateFramebuffers(Swapchain& swapchain);
 
-    public:
         VkRenderPass GetRenderPass() const { return m_RenderPass; }
         VkPipeline GetPipeline() const { return m_GraphicsPipeline; }
         VkPipelineLayout GetPipelineLayout() const { return m_PipelineLayout; }

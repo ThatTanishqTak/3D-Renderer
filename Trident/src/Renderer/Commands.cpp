@@ -17,23 +17,30 @@ namespace Trident
         for (size_t i = 0; i < m_ImageAvailableSemaphores.size(); ++i)
         {
             if (m_RenderFinishedSemaphores[i] != VK_NULL_HANDLE)
+            {
                 vkDestroySemaphore(Application::GetDevice(), m_RenderFinishedSemaphores[i], nullptr);
+            }
             if (m_ImageAvailableSemaphores[i] != VK_NULL_HANDLE)
+            {
                 vkDestroySemaphore(Application::GetDevice(), m_ImageAvailableSemaphores[i], nullptr);
+            }
+
             if (m_InFlightFences[i] != VK_NULL_HANDLE)
+            {
                 vkDestroyFence(Application::GetDevice(), m_InFlightFences[i], nullptr);
+            }
         }
 
         if (!m_CommandBuffers.empty())
         {
-            vkFreeCommandBuffers(Application::GetDevice(), m_CommandPool,
-                static_cast<uint32_t>(m_CommandBuffers.size()), m_CommandBuffers.data());
+            vkFreeCommandBuffers(Application::GetDevice(), m_CommandPool, static_cast<uint32_t>(m_CommandBuffers.size()), m_CommandBuffers.data());
             m_CommandBuffers.clear();
         }
 
         if (m_CommandPool != VK_NULL_HANDLE)
         {
             vkDestroyCommandPool(Application::GetDevice(), m_CommandPool, nullptr);
+
             m_CommandPool = VK_NULL_HANDLE;
         }
 
@@ -48,11 +55,19 @@ namespace Trident
         for (size_t i = 0; i < m_ImageAvailableSemaphores.size(); ++i)
         {
             if (m_RenderFinishedSemaphores[i] != VK_NULL_HANDLE)
+            {
                 vkDestroySemaphore(Application::GetDevice(), m_RenderFinishedSemaphores[i], nullptr);
+            }
+
             if (m_ImageAvailableSemaphores[i] != VK_NULL_HANDLE)
+            {
                 vkDestroySemaphore(Application::GetDevice(), m_ImageAvailableSemaphores[i], nullptr);
+            }
+
             if (m_InFlightFences[i] != VK_NULL_HANDLE)
+            {
                 vkDestroyFence(Application::GetDevice(), m_InFlightFences[i], nullptr);
+            }
         }
 
         m_ImageAvailableSemaphores.clear();
@@ -62,8 +77,7 @@ namespace Trident
 
         m_CurrentFrame = 0;
 
-        vkFreeCommandBuffers(Application::GetDevice(), m_CommandPool,
-            static_cast<uint32_t>(m_CommandBuffers.size()), m_CommandBuffers.data());
+        vkFreeCommandBuffers(Application::GetDevice(), m_CommandPool, static_cast<uint32_t>(m_CommandBuffers.size()), m_CommandBuffers.data());
         m_CommandBuffers.clear();
 
         CreateCommandBuffers(commandBufferCount);
@@ -74,12 +88,12 @@ namespace Trident
     {
         TR_CORE_TRACE("Creating Command Pool");
 
-        VkCommandPoolCreateInfo poolInfo{};
-        poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-        poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-        poolInfo.queueFamilyIndex = Application::GetQueueFamilyIndices().GraphicsFamily.value();
+        VkCommandPoolCreateInfo l_PoolInfo{};
+        l_PoolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+        l_PoolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+        l_PoolInfo.queueFamilyIndex = Application::GetQueueFamilyIndices().GraphicsFamily.value();
 
-        if (vkCreateCommandPool(Application::GetDevice(), &poolInfo, nullptr, &m_CommandPool) != VK_SUCCESS)
+        if (vkCreateCommandPool(Application::GetDevice(), &l_PoolInfo, nullptr, &m_CommandPool) != VK_SUCCESS)
         {
             TR_CORE_CRITICAL("Failed to create command pool");
         }
@@ -93,13 +107,13 @@ namespace Trident
 
         m_CommandBuffers.resize(commandBufferCount);
 
-        VkCommandBufferAllocateInfo allocateInfo{};
-        allocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-        allocateInfo.commandPool = m_CommandPool;
-        allocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-        allocateInfo.commandBufferCount = static_cast<uint32_t>(m_CommandBuffers.size());
+        VkCommandBufferAllocateInfo l_AllocateInfo{};
+        l_AllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        l_AllocateInfo.commandPool = m_CommandPool;
+        l_AllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        l_AllocateInfo.commandBufferCount = static_cast<uint32_t>(m_CommandBuffers.size());
 
-        if (vkAllocateCommandBuffers(Application::GetDevice(), &allocateInfo, m_CommandBuffers.data()) != VK_SUCCESS)
+        if (vkAllocateCommandBuffers(Application::GetDevice(), &l_AllocateInfo, m_CommandBuffers.data()) != VK_SUCCESS)
         {
             TR_CORE_CRITICAL("Failed to allocate command buffers");
         }
@@ -117,15 +131,15 @@ namespace Trident
         m_ImagesInFlight.resize(count);
         std::fill(m_ImagesInFlight.begin(), m_ImagesInFlight.end(), VK_NULL_HANDLE);
 
-        VkSemaphoreCreateInfo semaphoreInfo{ VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
-        VkFenceCreateInfo fenceInfo{ VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
-        fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+        VkSemaphoreCreateInfo l_SemaphoreInfo{ VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
+        VkFenceCreateInfo l_FenceInfo{ VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
+        l_FenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
         for (size_t i = 0; i < count; ++i)
         {
-            if (vkCreateSemaphore(Application::GetDevice(), &semaphoreInfo, nullptr, &m_ImageAvailableSemaphores[i]) != VK_SUCCESS ||
-                vkCreateSemaphore(Application::GetDevice(), &semaphoreInfo, nullptr, &m_RenderFinishedSemaphores[i]) != VK_SUCCESS ||
-                vkCreateFence(Application::GetDevice(), &fenceInfo, nullptr, &m_InFlightFences[i]) != VK_SUCCESS)
+            if (vkCreateSemaphore(Application::GetDevice(), &l_SemaphoreInfo, nullptr, &m_ImageAvailableSemaphores[i]) != VK_SUCCESS ||
+                vkCreateSemaphore(Application::GetDevice(), &l_SemaphoreInfo, nullptr, &m_RenderFinishedSemaphores[i]) != VK_SUCCESS ||
+                vkCreateFence(Application::GetDevice(), &l_FenceInfo, nullptr, &m_InFlightFences[i]) != VK_SUCCESS)
             {
                 TR_CORE_CRITICAL("Failed to create sync for image {}", i);
             }
