@@ -75,8 +75,5 @@ namespace Trident
         void CreateDescriptorSets();
         void CreateCommandBuffer();
         void CreateSyncObjects();
-
-        // Utility helpers
-        VkShaderModule CreateShaderModule(VkDevice device, const std::vector<char>& code);
     };
 }

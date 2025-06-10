@@ -397,24 +397,4 @@ namespace Trident
 
         TR_CORE_TRACE("Sync Objects Created ({} Frames In Flight)", l_Count);
     }
-
-    //------------------------------------------------------------------------------------------------------------------------------------------------------//
-
-    //------------------------------------------------------------------------------------------------------------------------------------------------------//
-
-    VkShaderModule Renderer::CreateShaderModule(VkDevice device, const std::vector<char>& code)
-    {
-        VkShaderModuleCreateInfo l_CreateInfo{};
-        l_CreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-        l_CreateInfo.codeSize = code.size();
-        l_CreateInfo.pCode = reinterpret_cast<const uint32_t*>(code.data());
-
-        VkShaderModule l_Module;
-        if (vkCreateShaderModule(device, &l_CreateInfo, nullptr, &l_Module) != VK_SUCCESS)
-        {
-            TR_CORE_CRITICAL("Failed to create shader l_Module");
-        }
-
-        return l_Module;
-    }
 }

@@ -148,23 +148,8 @@ namespace Trident
         VkShaderModule l_VertexModule = VK_NULL_HANDLE;
         VkShaderModule l_FragmentModule = VK_NULL_HANDLE;
 
-        auto a_CreateShaderModule = [&](const std::vector<char>& code) -> VkShaderModule
-            {
-                VkShaderModuleCreateInfo l_CreateInfo{ VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO };
-                l_CreateInfo.codeSize = code.size();
-                l_CreateInfo.pCode = reinterpret_cast<const uint32_t*>(code.data());
-
-                VkShaderModule l_Module;
-                if (vkCreateShaderModule(Application::GetDevice(), &l_CreateInfo, nullptr, &l_Module) != VK_SUCCESS)
-                {
-                    TR_CORE_CRITICAL("Failed to create shader module");
-                }
-
-                return l_Module;
-            };
-
-        l_VertexModule = a_CreateShaderModule(a_VertexCode);
-        l_FragmentModule = a_CreateShaderModule(a_FragmentCode);
+        l_VertexModule = CreateShaderModule(a_VertexCode);
+        l_FragmentModule = CreateShaderModule(a_FragmentCode);
 
         VkPipelineShaderStageCreateInfo l_VertexStage{ VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO };
         l_VertexStage.stage = VK_SHADER_STAGE_VERTEX_BIT;
@@ -293,5 +278,23 @@ namespace Trident
         }
 
         TR_CORE_TRACE("Framebuffers Created ({} Total)", m_SwapchainFramebuffers.size());
+    }
+
+    //------------------------------------------------------------------------------------------------------------------------------------------------------//
+
+    VkShaderModule Pipeline::CreateShaderModule(const std::vector<char>& code)
+    {
+        VkShaderModuleCreateInfo l_CreateInfo{};
+        l_CreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+        l_CreateInfo.codeSize = code.size();
+        l_CreateInfo.pCode = reinterpret_cast<const uint32_t*>(code.data());
+
+        VkShaderModule l_Module;
+        if (vkCreateShaderModule(Application::GetDevice(), &l_CreateInfo, nullptr, &l_Module) != VK_SUCCESS)
+        {
+            TR_CORE_CRITICAL("Failed to create shader l_Module");
+        }
+
+        return l_Module;
     }
 }

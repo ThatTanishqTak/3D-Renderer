@@ -16,6 +16,7 @@ namespace Trident
         void CleanupFramebuffers();
         void CreateFramebuffers(Swapchain& swapchain);
 
+    public:
         VkRenderPass GetRenderPass() const { return m_RenderPass; }
         VkPipeline GetPipeline() const { return m_GraphicsPipeline; }
         VkPipelineLayout GetPipelineLayout() const { return m_PipelineLayout; }
@@ -27,6 +28,9 @@ namespace Trident
         void CreateDescriptorSetLayout();
         void CreateGraphicsPipeline(Swapchain& swapchain);
 
+        VkShaderModule CreateShaderModule(const std::vector<char>& code);
+
+    private:
         VkRenderPass m_RenderPass = VK_NULL_HANDLE;
         VkPipelineLayout m_PipelineLayout = VK_NULL_HANDLE;
         VkPipeline m_GraphicsPipeline = VK_NULL_HANDLE;
