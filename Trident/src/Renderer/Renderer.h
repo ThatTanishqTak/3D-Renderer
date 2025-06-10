@@ -3,6 +3,8 @@
 #include "Core/Utilities.h"
 #include "Renderer/Vertex.h"
 #include "Renderer/UniformBuffer.h"
+#include "Renderer/Swapchain.h"
+
 #include "Geometry/Cube.h"
 
 #include <vulkan/vulkan.h>
@@ -12,13 +14,6 @@
 
 namespace Trident
 {
-    struct SwapchainSupportDetails
-    {
-        VkSurfaceCapabilitiesKHR Capabilities;
-        std::vector<VkSurfaceFormatKHR> Formats;
-        std::vector<VkPresentModeKHR> PresentModes;
-    };
-
     class Renderer
     {
     public:
@@ -27,7 +22,7 @@ namespace Trident
         void DrawFrame();
 
         VkRenderPass GetRenderPass() const { return m_RenderPass; }
-        uint32_t GetImageCount() const { return static_cast<uint32_t>(m_SwapchainImages.size()); }
+        uint32_t GetImageCount() const { return m_Swapchain.GetImageCount(); }
 
         void RecreateSwapchain();
         VkCommandPool GetCommandPool() const { return m_CommandPool; }
@@ -35,11 +30,7 @@ namespace Trident
 
     private:
         // Swapchain
-        VkSwapchainKHR m_Swapchain = VK_NULL_HANDLE;
-        std::vector<VkImage> m_SwapchainImages;
-        std::vector<VkImageView> m_SwapchainImageViews;
-        VkFormat m_SwapchainImageFormat;
-        VkExtent2D m_SwapchainExtent;
+        Swapchain m_Swapchain;
 
         // Buffers
         VkBuffer m_VertexBuffer;
@@ -79,8 +70,6 @@ namespace Trident
 
     private:
         // Core setup
-        void CreateSwapchain();
-        void CreateImageViews();
         void CreateRenderPass();
         void CreateDescriptorSetLayout();
         void CreateGraphicsPipeline();
@@ -99,10 +88,5 @@ namespace Trident
         uint32_t FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
         void CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory);
         void CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
-
-        SwapchainSupportDetails QuerySwapchainSupport(VkPhysicalDevice device, VkSurfaceKHR surface);
-        VkSurfaceFormatKHR ChooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats);
-        VkPresentModeKHR ChooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes);
-        VkExtent2D ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities);
     };
 }

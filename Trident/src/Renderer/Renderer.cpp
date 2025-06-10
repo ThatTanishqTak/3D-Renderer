@@ -3,8 +3,6 @@
 #include "Application.h"
 
 #include <stdexcept>
-#include <algorithm>
-#include <limits>
 
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -14,8 +12,7 @@ namespace Trident
     {
         TR_CORE_INFO("-------INITIALIZING RENDERER-------");
 
-        CreateSwapchain();
-        CreateImageViews();
+        m_Swapchain.Init();
         CreateRenderPass();
         CreateDescriptorSetLayout();
         CreateGraphicsPipeline();
@@ -94,24 +91,7 @@ namespace Trident
         
         m_SwapchainFramebuffers.clear();
 
-        for (VkImageView l_View : m_SwapchainImageViews)
-        {
-            if (l_View != VK_NULL_HANDLE)
-            {
-                vkDestroyImageView(Application::GetDevice(), l_View, nullptr);
-            }
-        }
-        
-        m_SwapchainImageViews.clear();
-
-        if (m_Swapchain != VK_NULL_HANDLE)
-        {
-            vkDestroySwapchainKHR(Application::GetDevice(), m_Swapchain, nullptr);
-
-            m_Swapchain = VK_NULL_HANDLE;
-        }
-        
-        m_SwapchainImages.clear();
+        m_Swapchain.Cleanup();
 
         if (m_GraphicsPipeline != VK_NULL_HANDLE)
         {
@@ -190,7 +170,8 @@ namespace Trident
         vkWaitForFences(Application::GetDevice(), 1, &m_InFlightFences[m_CurrentFrame], VK_TRUE, UINT64_MAX);
 
         uint32_t l_ImageIndex;
-        VkResult l_Result = vkAcquireNextImageKHR(Application::GetDevice(), m_Swapchain, UINT64_MAX, m_ImageAvailableSemaphores[m_CurrentFrame], VK_NULL_HANDLE, &l_ImageIndex);
+        VkResult l_Result = vkAcquireNextImageKHR(Application::GetDevice(), m_Swapchain.GetSwapchain(), UINT64_MAX, 
+            m_ImageAvailableSemaphores[m_CurrentFrame], VK_NULL_HANDLE, &l_ImageIndex);
 
         Application::GetImGuiLayer().Begin();
         Application::GetImGuiLayer().SetupDockspace();
@@ -218,7 +199,7 @@ namespace Trident
         UniformBufferObject l_UniformBufferObject{};
         l_UniformBufferObject.Model = glm::rotate(glm::mat4(1.0f), Utilities::Time::GetTime() * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
         l_UniformBufferObject.View = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-        l_UniformBufferObject.Projection = glm::perspective(glm::radians(45.0f), m_SwapchainExtent.width / float(m_SwapchainExtent.height), 0.1f, 10.0f);
+        l_UniformBufferObject.Projection = glm::perspective(glm::radians(45.0f), m_Swapchain.GetExtent().width / float(m_Swapchain.GetExtent().height), 0.1f, 10.0f);
         l_UniformBufferObject.Projection[1][1] *= -1.0f;
 
         void* l_Data;
@@ -238,7 +219,7 @@ namespace Trident
         l_RenderPassInfo.renderPass = m_RenderPass;
         l_RenderPassInfo.framebuffer = m_SwapchainFramebuffers[l_ImageIndex];
         l_RenderPassInfo.renderArea.offset = { 0, 0 };
-        l_RenderPassInfo.renderArea.extent = m_SwapchainExtent;
+        l_RenderPassInfo.renderArea.extent = m_Swapchain.GetExtent();
 
         VkClearValue l_ClearColor = { {{0.0f, 0.0f, 0.0f, 1.0f}} };
         l_RenderPassInfo.clearValueCount = 1;
@@ -290,7 +271,8 @@ namespace Trident
         l_PresentInfo.waitSemaphoreCount = 1;
         l_PresentInfo.pWaitSemaphores = l_SignalSemaphores;
         l_PresentInfo.swapchainCount = 1;
-        l_PresentInfo.pSwapchains = &m_Swapchain;
+        VkSwapchainKHR l_SwapchainHandle = m_Swapchain.GetSwapchain();
+        l_PresentInfo.pSwapchains = &l_SwapchainHandle;
         l_PresentInfo.pImageIndices = &l_ImageIndex;
 
         l_Result = vkQueuePresentKHR(Application::GetPresentQueue(), &l_PresentInfo);
@@ -362,18 +344,8 @@ namespace Trident
 
         m_SwapchainFramebuffers.clear();
 
-        for (VkImageView l_View : m_SwapchainImageViews)
-        {
-            vkDestroyImageView(Application::GetDevice(), l_View, nullptr);
-        }
-
-        m_SwapchainImageViews.clear();
-
-        vkDestroySwapchainKHR(Application::GetDevice(), m_Swapchain, nullptr);
-        m_SwapchainImages.clear();
-
-        CreateSwapchain();
-        CreateImageViews();
+        m_Swapchain.Cleanup();
+        m_Swapchain.Init();
         CreateFramebuffers();
 
         vkFreeCommandBuffers(Application::GetDevice(), m_CommandPool, static_cast<uint32_t>(m_CommandBuffers.size()), m_CommandBuffers.data());
@@ -385,108 +357,12 @@ namespace Trident
 
     //------------------------------------------------------------------------------------------------------------------------------------------------------//
 
-    void Renderer::CreateSwapchain()
-    {
-        TR_CORE_TRACE("Creating Swapchain");
-
-        auto a_Details = QuerySwapchainSupport(Application::GetPhysicalDevice(), Application::GetSurface());
-
-        VkSurfaceFormatKHR l_SurfaceFormat = ChooseSwapSurfaceFormat(a_Details.Formats);
-        VkPresentModeKHR l_PresentMode = ChooseSwapPresentMode(a_Details.PresentModes);
-        VkExtent2D l_Extent = ChooseSwapExtent(a_Details.Capabilities);
-
-        uint32_t l_ImageCount = a_Details.Capabilities.minImageCount + 1;
-        if (a_Details.Capabilities.maxImageCount > 0 && l_ImageCount > a_Details.Capabilities.maxImageCount)
-        {
-            l_ImageCount = a_Details.Capabilities.maxImageCount;
-        }
-
-        VkSwapchainCreateInfoKHR l_CreateInfo{};
-        l_CreateInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-        l_CreateInfo.surface = Application::GetSurface();
-        l_CreateInfo.minImageCount = l_ImageCount;
-        l_CreateInfo.imageFormat = l_SurfaceFormat.format;
-        l_CreateInfo.imageColorSpace = l_SurfaceFormat.colorSpace;
-        l_CreateInfo.imageExtent = l_Extent;
-        l_CreateInfo.imageArrayLayers = 1;
-        l_CreateInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-
-        auto a_Indices = Application::GetQueueFamilyIndices();
-        uint32_t queueFamilyIndices[] = { a_Indices.GraphicsFamily.value(), a_Indices.PresentFamily.value() };
-
-        if (a_Indices.GraphicsFamily != a_Indices.PresentFamily)
-        {
-            l_CreateInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
-            l_CreateInfo.queueFamilyIndexCount = 2;
-            l_CreateInfo.pQueueFamilyIndices = queueFamilyIndices;
-        }
-
-        else
-        {
-            l_CreateInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-            l_CreateInfo.queueFamilyIndexCount = 0;
-            l_CreateInfo.pQueueFamilyIndices = nullptr;
-        }
-
-        l_CreateInfo.preTransform = a_Details.Capabilities.currentTransform;
-        l_CreateInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-        l_CreateInfo.presentMode = l_PresentMode;
-        l_CreateInfo.clipped = VK_TRUE;
-        l_CreateInfo.oldSwapchain = VK_NULL_HANDLE;
-
-        if (vkCreateSwapchainKHR(Application::GetDevice(), &l_CreateInfo, nullptr, &m_Swapchain) != VK_SUCCESS)
-        {
-            TR_CORE_CRITICAL("Failed to create swap chain");
-        }
-
-        vkGetSwapchainImagesKHR(Application::GetDevice(), m_Swapchain, &l_ImageCount, nullptr);
-        m_SwapchainImages.resize(l_ImageCount);
-        vkGetSwapchainImagesKHR(Application::GetDevice(), m_Swapchain, &l_ImageCount, m_SwapchainImages.data());
-
-        m_SwapchainImageFormat = l_SurfaceFormat.format;
-        m_SwapchainExtent = l_Extent;
-
-        TR_CORE_TRACE("Swapchain Created: {} Images, Format {}, Extent {}x{}", l_ImageCount, (int)l_SurfaceFormat.format, l_Extent.width, l_Extent.height);
-    }
-
-    void Renderer::CreateImageViews()
-    {
-        TR_CORE_TRACE("Creating Image Views");
-
-        m_SwapchainImageViews.resize(m_SwapchainImages.size());
-
-        for (size_t i = 0; i < m_SwapchainImages.size(); ++i)
-        {
-            VkImageViewCreateInfo l_ViewInfo{};
-            l_ViewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-            l_ViewInfo.image = m_SwapchainImages[i];
-            l_ViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-            l_ViewInfo.format = m_SwapchainImageFormat;
-            l_ViewInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
-            l_ViewInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-            l_ViewInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
-            l_ViewInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-            l_ViewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            l_ViewInfo.subresourceRange.baseMipLevel = 0;
-            l_ViewInfo.subresourceRange.levelCount = 1;
-            l_ViewInfo.subresourceRange.baseArrayLayer = 0;
-            l_ViewInfo.subresourceRange.layerCount = 1;
-
-            if (vkCreateImageView(Application::GetDevice(), &l_ViewInfo, nullptr, &m_SwapchainImageViews[i]) != VK_SUCCESS)
-            {
-                TR_CORE_CRITICAL("Failed to create image view for swapchain image {}", i);
-            }
-        }
-
-        TR_CORE_TRACE("Image Views Created ({} Views)", m_SwapchainImageViews.size());
-    }
-
     void Renderer::CreateRenderPass()
     {
         TR_CORE_TRACE("Creating Render Pass");
 
         VkAttachmentDescription l_ColorAttachment{};
-        l_ColorAttachment.format = m_SwapchainImageFormat;
+        l_ColorAttachment.format = m_Swapchain.GetImageFormat();
         l_ColorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
         l_ColorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
         l_ColorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -595,14 +471,14 @@ namespace Trident
         VkViewport l_Viewport{};
         l_Viewport.x = 0.0f;
         l_Viewport.y = 0.0f;
-        l_Viewport.width = static_cast<float>(m_SwapchainExtent.width);
-        l_Viewport.height = static_cast<float>(m_SwapchainExtent.height);
+        l_Viewport.width = static_cast<float>(m_Swapchain.GetExtent().width);
+        l_Viewport.height = static_cast<float>(m_Swapchain.GetExtent().height);
         l_Viewport.minDepth = 0.0f;
         l_Viewport.maxDepth = 1.0f;
 
         VkRect2D l_Scissor{};
         l_Scissor.offset = { 0, 0 };
-        l_Scissor.extent = m_SwapchainExtent;
+        l_Scissor.extent = m_Swapchain.GetExtent();
 
         VkPipelineViewportStateCreateInfo l_ViewportState{};
         l_ViewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
@@ -681,19 +557,19 @@ namespace Trident
     {
         TR_CORE_TRACE("Creating Framebuffers");
 
-        m_SwapchainFramebuffers.resize(m_SwapchainImageViews.size());
+        m_SwapchainFramebuffers.resize(m_Swapchain.GetImageViews().size());
 
-        for (size_t i = 0; i < m_SwapchainImageViews.size(); ++i)
+        for (size_t i = 0; i < m_Swapchain.GetImageViews().size(); ++i)
         {
-            VkImageView l_Attachments[] = { m_SwapchainImageViews[i] };
+            VkImageView l_Attachments[] = { m_Swapchain.GetImageViews()[i] };
 
             VkFramebufferCreateInfo l_FrameBufferInfo{};
             l_FrameBufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
             l_FrameBufferInfo.renderPass = m_RenderPass;
             l_FrameBufferInfo.attachmentCount = 1;
             l_FrameBufferInfo.pAttachments = l_Attachments;
-            l_FrameBufferInfo.width = m_SwapchainExtent.width;
-            l_FrameBufferInfo.height = m_SwapchainExtent.height;
+            l_FrameBufferInfo.width = m_Swapchain.GetExtent().width;
+            l_FrameBufferInfo.height = m_Swapchain.GetExtent().height;
             l_FrameBufferInfo.layers = 1;
 
             if (vkCreateFramebuffer(Application::GetDevice(), &l_FrameBufferInfo, nullptr, &m_SwapchainFramebuffers[i]) != VK_SUCCESS)
@@ -789,10 +665,10 @@ namespace Trident
 
         VkDeviceSize l_BufferSize = sizeof(UniformBufferObject);
 
-        m_UniformBuffers.resize(m_SwapchainImages.size());
-        m_UniformBuffersMemory.resize(m_SwapchainImages.size());
+        m_UniformBuffers.resize(m_Swapchain.GetImageCount());
+        m_UniformBuffersMemory.resize(m_Swapchain.GetImageCount());
 
-        for (size_t i = 0; i < m_SwapchainImages.size(); ++i)
+        for (size_t i = 0; i < m_Swapchain.GetImageCount(); ++i)
         {
             CreateBuffer(l_BufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, 
                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, m_UniformBuffers[i], m_UniformBuffersMemory[i]);
@@ -807,13 +683,13 @@ namespace Trident
 
         VkDescriptorPoolSize l_PoolSize{};
         l_PoolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        l_PoolSize.descriptorCount = static_cast<uint32_t>(m_SwapchainImages.size());
+        l_PoolSize.descriptorCount = m_Swapchain.GetImageCount();
 
         VkDescriptorPoolCreateInfo l_PoolInfo{};
         l_PoolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
         l_PoolInfo.poolSizeCount = 1;
         l_PoolInfo.pPoolSizes = &l_PoolSize;
-        l_PoolInfo.maxSets = static_cast<uint32_t>(m_SwapchainImages.size());
+        l_PoolInfo.maxSets = m_Swapchain.GetImageCount();
 
         if (vkCreateDescriptorPool(Application::GetDevice(), &l_PoolInfo, nullptr, &m_DescriptorPool) != VK_SUCCESS)
         {
@@ -827,7 +703,7 @@ namespace Trident
     {
         TR_CORE_TRACE("Allocating Descriptor Sets");
 
-        size_t l_ImageCount = m_SwapchainImages.size();
+        size_t l_ImageCount = m_Swapchain.GetImageCount();
 
         std::vector<VkDescriptorSetLayout> layouts(l_ImageCount, m_DescriptorSetLayout);
 
@@ -869,7 +745,7 @@ namespace Trident
     {
         TR_CORE_TRACE("Creating Sync Objects");
 
-        size_t l_Count = m_SwapchainImages.size();
+        size_t l_Count = m_Swapchain.GetImageCount();
 
         m_ImageAvailableSemaphores.resize(l_Count);
         m_RenderFinishedSemaphores.resize(l_Count);
@@ -1043,77 +919,5 @@ namespace Trident
         vkQueueWaitIdle(Application::GetGraphicsQueue());
 
         vkFreeCommandBuffers(Application::GetDevice(), m_CommandPool, 1, &l_CommandBuffer);
-    }
-
-    SwapchainSupportDetails Renderer::QuerySwapchainSupport(VkPhysicalDevice device, VkSurfaceKHR surface)
-    {
-        SwapchainSupportDetails l_Details;
-        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &l_Details.Capabilities);
-
-        uint32_t l_FormatCount = 0;
-        vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &l_FormatCount, nullptr);
-        if (l_FormatCount)
-        {
-            l_Details.Formats.resize(l_FormatCount);
-            vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &l_FormatCount, l_Details.Formats.data());
-        }
-
-        uint32_t l_PresentModeCount = 0;
-        vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &l_PresentModeCount, nullptr);
-        if (l_PresentModeCount)
-        {
-            l_Details.PresentModes.resize(l_PresentModeCount);
-            vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &l_PresentModeCount, l_Details.PresentModes.data());
-        }
-
-        return l_Details;
-    }
-
-    VkSurfaceFormatKHR Renderer::ChooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats)
-    {
-        for (const auto& it_AvailableFormat : availableFormats)
-        {
-            if (it_AvailableFormat.format == VK_FORMAT_B8G8R8A8_SRGB && it_AvailableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
-            {
-                return it_AvailableFormat;
-            }
-        }
-
-        return availableFormats[0];
-    }
-
-    VkPresentModeKHR Renderer::ChooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes)
-    {
-        for (auto it_Mode : availablePresentModes)
-        {
-            if (it_Mode == VK_PRESENT_MODE_MAILBOX_KHR)
-            {
-                return it_Mode;
-            }
-        }
-
-        return VK_PRESENT_MODE_FIFO_KHR;
-    }
-
-    VkExtent2D Renderer::ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities)
-    {
-        if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max())
-        {
-            return capabilities.currentExtent;
-        }
-
-        else
-        {
-            uint32_t l_Width = 0;
-            uint32_t l_Height = 0;
-            Application::GetWindow().GetFramebufferSize(l_Width, l_Height);
-
-            VkExtent2D l_ActualExtent = { l_Width, l_Height };
-
-            l_ActualExtent.width = std::max(capabilities.minImageExtent.width, std::min(capabilities.maxImageExtent.width, l_ActualExtent.width));
-            l_ActualExtent.height = std::max(capabilities.minImageExtent.height, std::min(capabilities.maxImageExtent.height, l_ActualExtent.height));
-
-            return l_ActualExtent;
-        }
     }
 }
