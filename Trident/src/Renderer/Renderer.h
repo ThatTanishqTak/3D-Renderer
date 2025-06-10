@@ -5,6 +5,7 @@
 #include "Renderer/UniformBuffer.h"
 #include "Renderer/Swapchain.h"
 #include "Renderer/Pipeline.h"
+#include "Renderer/Buffers.h"
 
 #include "Geometry/Cube.h"
 
@@ -65,12 +66,11 @@ namespace Trident
         std::vector<VkBuffer> m_UniformBuffers;
         std::vector<VkDeviceMemory> m_UniformBuffersMemory;
 
+        Buffers m_Buffers;
+
     private:
         // Core setup
         void CreateCommandPool();
-        void CreateVertexBuffer();
-        void CreateIndexBuffer();
-        void CreateUniformBuffer();
         void CreateDescriptorPool();
         void CreateDescriptorSets();
         void CreateCommandBuffer();
@@ -78,8 +78,5 @@ namespace Trident
 
         // Utility helpers
         VkShaderModule CreateShaderModule(VkDevice device, const std::vector<char>& code);
-        uint32_t FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
-        void CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory);
-        void CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
     };
 }

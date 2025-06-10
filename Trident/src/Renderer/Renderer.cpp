@@ -15,9 +15,9 @@ namespace Trident
         m_Swapchain.Init();
         m_Pipeline.Init(m_Swapchain);
         CreateCommandPool();
-        CreateVertexBuffer();
-        CreateIndexBuffer();
-        CreateUniformBuffer();
+        m_Buffers.CreateVertexBuffer(Geometry::CubeVertices, m_CommandPool, m_VertexBuffer, m_VertexBufferMemory);
+        m_Buffers.CreateIndexBuffer(Geometry::CubeIndices, m_CommandPool, m_IndexBuffer, m_IndexBufferMemory, m_IndexCount);
+        m_Buffers.CreateUniformBuffers(m_Swapchain.GetImageCount(), m_UniformBuffers, m_UniformBuffersMemory);
         CreateDescriptorPool();
         CreateDescriptorSets();
         CreateCommandBuffer();
@@ -73,51 +73,7 @@ namespace Trident
 
         m_Pipeline.Cleanup();
         m_Swapchain.Cleanup();
-
-        if (m_IndexBuffer != VK_NULL_HANDLE)
-        {
-            vkDestroyBuffer(Application::GetDevice(), m_IndexBuffer, nullptr);
-            
-            m_IndexBuffer = VK_NULL_HANDLE;
-        }
-        
-        if (m_IndexBufferMemory != VK_NULL_HANDLE)
-        {
-            vkFreeMemory(Application::GetDevice(), m_IndexBufferMemory, nullptr);
-            
-            m_IndexBufferMemory = VK_NULL_HANDLE;
-        }
-        
-        if (m_VertexBuffer != VK_NULL_HANDLE)
-        {
-            vkDestroyBuffer(Application::GetDevice(), m_VertexBuffer, nullptr);
-            
-            m_VertexBuffer = VK_NULL_HANDLE;
-        }
-        
-        if (m_VertexBufferMemory != VK_NULL_HANDLE)
-        {
-            vkFreeMemory(Application::GetDevice(), m_VertexBufferMemory, nullptr);
-            
-            m_VertexBufferMemory = VK_NULL_HANDLE;
-        }
-
-        for (size_t i = 0; i < m_UniformBuffers.size(); ++i)
-        {
-            if (m_UniformBuffers[i] != VK_NULL_HANDLE)
-            {
-                vkDestroyBuffer(Application::GetDevice(), m_UniformBuffers[i], nullptr);
-
-                m_UniformBuffers[i] = VK_NULL_HANDLE;
-            }
-        
-            if (m_UniformBuffersMemory[i] != VK_NULL_HANDLE)
-            {
-                vkFreeMemory(Application::GetDevice(), m_UniformBuffersMemory[i], nullptr);
-
-                m_UniformBuffersMemory[i] = VK_NULL_HANDLE;
-            }
-        }
+        m_Buffers.Cleanup();
 
         m_UniformBuffers.clear();
         m_UniformBuffersMemory.clear();
@@ -349,24 +305,6 @@ namespace Trident
         TR_CORE_TRACE("Command Buffers Allocated ({} Buffers)", m_CommandBuffers.size());
     }
 
-    void Renderer::CreateUniformBuffer()
-    {
-        TR_CORE_TRACE("Creating Uniform Buffers");
-
-        VkDeviceSize l_BufferSize = sizeof(UniformBufferObject);
-
-        m_UniformBuffers.resize(m_Swapchain.GetImageCount());
-        m_UniformBuffersMemory.resize(m_Swapchain.GetImageCount());
-
-        for (size_t i = 0; i < m_Swapchain.GetImageCount(); ++i)
-        {
-            CreateBuffer(l_BufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, 
-                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, m_UniformBuffers[i], m_UniformBuffersMemory[i]);
-        }
-
-        TR_CORE_TRACE("Uniform Buffers Created ({} Buffers)", m_UniformBuffers.size());
-    }
-
     void Renderer::CreateDescriptorPool()
     {
         TR_CORE_TRACE("Creating Descriptor Pool");
@@ -462,49 +400,6 @@ namespace Trident
 
     //------------------------------------------------------------------------------------------------------------------------------------------------------//
 
-    void Renderer::CreateVertexBuffer()
-    {
-        auto& a_Vertices = Geometry::CubeVertices;
-        VkDeviceSize l_BufferSize = sizeof(a_Vertices[0]) * a_Vertices.size();
-
-        VkBuffer l_StagingBuffer;
-        VkDeviceMemory l_StagingBufferMemory;
-        CreateBuffer(l_BufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, l_StagingBuffer, l_StagingBufferMemory);
-
-        void* l_Data;
-        vkMapMemory(Application::GetDevice(), l_StagingBufferMemory, 0, l_BufferSize, 0, &l_Data);
-        memcpy(l_Data, a_Vertices.data(), (size_t)l_BufferSize);
-        vkUnmapMemory(Application::GetDevice(), l_StagingBufferMemory);
-
-        CreateBuffer(l_BufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_VertexBuffer, m_VertexBufferMemory);
-        CopyBuffer(l_StagingBuffer, m_VertexBuffer, l_BufferSize);
-
-        vkDestroyBuffer(Application::GetDevice(), l_StagingBuffer, nullptr);
-        vkFreeMemory(Application::GetDevice(), l_StagingBufferMemory, nullptr);
-    }
-
-    void Renderer::CreateIndexBuffer()
-    {
-        auto& a_Indices = Geometry::CubeIndices;
-        m_IndexCount = static_cast<uint32_t>(a_Indices.size());
-        VkDeviceSize l_BufferSize = sizeof(a_Indices[0]) * a_Indices.size();
-
-        VkBuffer l_StagingBuffer;
-        VkDeviceMemory l_StagingBufferMemory;
-        CreateBuffer(l_BufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, l_StagingBuffer, l_StagingBufferMemory);
-
-        void* l_Data;
-        vkMapMemory(Application::GetDevice(), l_StagingBufferMemory, 0, l_BufferSize, 0, &l_Data);
-        memcpy(l_Data, a_Indices.data(), (size_t)l_BufferSize);
-        vkUnmapMemory(Application::GetDevice(), l_StagingBufferMemory);
-
-        CreateBuffer(l_BufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_IndexBuffer, m_IndexBufferMemory);
-        CopyBuffer(l_StagingBuffer, m_IndexBuffer, l_BufferSize);
-
-        vkDestroyBuffer(Application::GetDevice(), l_StagingBuffer, nullptr);
-        vkFreeMemory(Application::GetDevice(), l_StagingBufferMemory, nullptr);
-    }
-
     //------------------------------------------------------------------------------------------------------------------------------------------------------//
 
     VkShaderModule Renderer::CreateShaderModule(VkDevice device, const std::vector<char>& code)
@@ -521,93 +416,5 @@ namespace Trident
         }
 
         return l_Module;
-    }
-
-    uint32_t Renderer::FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties)
-    {
-        VkPhysicalDeviceMemoryProperties l_MemoryProperties;
-        vkGetPhysicalDeviceMemoryProperties(Application::GetPhysicalDevice(), &l_MemoryProperties);
-
-        for (uint32_t i = 0; i < l_MemoryProperties.memoryTypeCount; i++)
-        {
-            if ((typeFilter & (1 << i)) && (l_MemoryProperties.memoryTypes[i].propertyFlags & properties) == properties)
-            {
-                return i;
-            }
-        }
-
-        TR_CORE_CRITICAL("Failed to find suitable memory type");
-
-        return EXIT_FAILURE;
-    }
-
-    void Renderer::CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory)
-    {
-        VkBufferCreateInfo l_BufferInfo{};
-        l_BufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-        l_BufferInfo.pNext = nullptr;
-        l_BufferInfo.size = size;
-        l_BufferInfo.usage = usage;
-        l_BufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        l_BufferInfo.queueFamilyIndexCount = 0;
-        l_BufferInfo.pQueueFamilyIndices = nullptr;
-
-        VkResult l_Result = vkCreateBuffer(Application::GetDevice(), &l_BufferInfo, nullptr, &buffer);
-        if (l_Result != VK_SUCCESS)
-        {
-            TR_CORE_CRITICAL("vkCreateBuffer failed(code {}) for size = {} usage = 0x{:x}", static_cast<int>(l_Result), static_cast<uint64_t>(size), static_cast<uint64_t>(usage));
-        }
-
-        VkMemoryRequirements l_MemoryRequirements;
-        vkGetBufferMemoryRequirements(Application::GetDevice(), buffer, &l_MemoryRequirements);
-
-        VkMemoryAllocateInfo l_AllocateInfo{};
-        l_AllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-        l_AllocateInfo.pNext = nullptr;
-        l_AllocateInfo.allocationSize = l_MemoryRequirements.size;
-        l_AllocateInfo.memoryTypeIndex = FindMemoryType(l_MemoryRequirements.memoryTypeBits, properties);
-
-        l_Result = vkAllocateMemory(Application::GetDevice(), &l_AllocateInfo, nullptr, &bufferMemory);
-        if (l_Result != VK_SUCCESS)
-        {
-            TR_CORE_CRITICAL("vkAllocateMemory failed(code {}) for size = {}", static_cast<int>(l_Result), static_cast<uint64_t>(l_MemoryRequirements.size));
-        }
-
-        vkBindBufferMemory(Application::GetDevice(), buffer, bufferMemory, 0);
-    }
-
-    void Renderer::CopyBuffer(VkBuffer sourceBuffer, VkBuffer destinationBuffer, VkDeviceSize size)
-    {
-        VkCommandBufferAllocateInfo l_AllocateInfo{};
-        l_AllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-        l_AllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-        l_AllocateInfo.commandPool = m_CommandPool;
-        l_AllocateInfo.commandBufferCount = 1;
-
-        VkCommandBuffer l_CommandBuffer;
-        vkAllocateCommandBuffers(Application::GetDevice(), &l_AllocateInfo, &l_CommandBuffer);
-
-        VkCommandBufferBeginInfo l_BeginInfo{};
-        l_BeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-        l_BeginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-
-        vkBeginCommandBuffer(l_CommandBuffer, &l_BeginInfo);
-        VkBufferCopy l_CopyRegion{};
-        l_CopyRegion.srcOffset = 0;
-        l_CopyRegion.dstOffset = 0;
-        l_CopyRegion.size = size;
-        
-        vkCmdCopyBuffer(l_CommandBuffer, sourceBuffer, destinationBuffer, 1, &l_CopyRegion);
-        vkEndCommandBuffer(l_CommandBuffer);
-
-        VkSubmitInfo l_SubmitInfo{};
-        l_SubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-        l_SubmitInfo.commandBufferCount = 1;
-        l_SubmitInfo.pCommandBuffers = &l_CommandBuffer;
-
-        vkQueueSubmit(Application::GetGraphicsQueue(), 1, &l_SubmitInfo, VK_NULL_HANDLE);
-        vkQueueWaitIdle(Application::GetGraphicsQueue());
-
-        vkFreeCommandBuffers(Application::GetDevice(), m_CommandPool, 1, &l_CommandBuffer);
     }
 }
