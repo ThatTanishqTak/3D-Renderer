@@ -4,6 +4,7 @@
 #include "Renderer/Vertex.h"
 #include "Renderer/UniformBuffer.h"
 #include "Renderer/Swapchain.h"
+#include "Renderer/Pipeline.h"
 
 #include "Geometry/Cube.h"
 
@@ -21,8 +22,10 @@ namespace Trident
         void Shutdown();
         void DrawFrame();
 
-        VkRenderPass GetRenderPass() const { return m_RenderPass; }
+        VkRenderPass GetRenderPass() const { return m_Pipeline.GetRenderPass(); }
         uint32_t GetImageCount() const { return m_Swapchain.GetImageCount(); }
+
+        VkDescriptorSetLayout GetDescriptorSetLayout() const { return m_Pipeline.GetDescriptorSetLayout(); }
 
         void RecreateSwapchain();
         VkCommandPool GetCommandPool() const { return m_CommandPool; }
@@ -40,12 +43,7 @@ namespace Trident
         uint32_t m_IndexCount;
 
         // Pipeline
-        VkRenderPass m_RenderPass;
-        VkPipelineLayout m_PipelineLayout;
-        VkPipeline m_GraphicsPipeline;
-
-        // Framebuffers
-        std::vector<VkFramebuffer> m_SwapchainFramebuffers;
+        Pipeline m_Pipeline;
 
         // Command pool & buffers
         VkCommandPool m_CommandPool = VK_NULL_HANDLE;
@@ -62,7 +60,6 @@ namespace Trident
         size_t m_CurrentFrame = 0;
 
         // Descriptor sets & uniform buffers
-        VkDescriptorSetLayout m_DescriptorSetLayout = VK_NULL_HANDLE;
         VkDescriptorPool m_DescriptorPool = VK_NULL_HANDLE;
         std::vector<VkDescriptorSet> m_DescriptorSets;
         std::vector<VkBuffer> m_UniformBuffers;
@@ -70,10 +67,6 @@ namespace Trident
 
     private:
         // Core setup
-        void CreateRenderPass();
-        void CreateDescriptorSetLayout();
-        void CreateGraphicsPipeline();
-        void CreateFramebuffers();
         void CreateCommandPool();
         void CreateVertexBuffer();
         void CreateIndexBuffer();

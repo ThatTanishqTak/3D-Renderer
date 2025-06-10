@@ -13,10 +13,7 @@ namespace Trident
         TR_CORE_INFO("-------INITIALIZING RENDERER-------");
 
         m_Swapchain.Init();
-        CreateRenderPass();
-        CreateDescriptorSetLayout();
-        CreateGraphicsPipeline();
-        CreateFramebuffers();
+        m_Pipeline.Init(m_Swapchain);
         CreateCommandPool();
         CreateVertexBuffer();
         CreateIndexBuffer();
@@ -65,13 +62,6 @@ namespace Trident
             m_CommandPool = VK_NULL_HANDLE;
         }
         
-        if (m_DescriptorSetLayout != VK_NULL_HANDLE)
-        {
-            vkDestroyDescriptorSetLayout(Application::GetDevice(), m_DescriptorSetLayout, nullptr);
-            
-            m_DescriptorSetLayout = VK_NULL_HANDLE;
-        }
-        
         if (m_DescriptorPool != VK_NULL_HANDLE)
         {
             vkDestroyDescriptorPool(Application::GetDevice(), m_DescriptorPool, nullptr);
@@ -81,38 +71,8 @@ namespace Trident
         
         m_DescriptorSets.clear();
 
-        for (VkFramebuffer l_FrameBuffer : m_SwapchainFramebuffers)
-        {
-            if (l_FrameBuffer != VK_NULL_HANDLE)
-            {
-                vkDestroyFramebuffer(Application::GetDevice(), l_FrameBuffer, nullptr);
-            }
-        }
-        
-        m_SwapchainFramebuffers.clear();
-
+        m_Pipeline.Cleanup();
         m_Swapchain.Cleanup();
-
-        if (m_GraphicsPipeline != VK_NULL_HANDLE)
-        {
-            vkDestroyPipeline(Application::GetDevice(), m_GraphicsPipeline, nullptr);
-            
-            m_GraphicsPipeline = VK_NULL_HANDLE;
-        }
-
-        if (m_PipelineLayout != VK_NULL_HANDLE)
-        {
-            vkDestroyPipelineLayout(Application::GetDevice(), m_PipelineLayout, nullptr);
-            
-            m_PipelineLayout = VK_NULL_HANDLE;
-        }
-
-        if (m_RenderPass != VK_NULL_HANDLE)
-        {
-            vkDestroyRenderPass(Application::GetDevice(), m_RenderPass, nullptr);
-            
-            m_RenderPass = VK_NULL_HANDLE;
-        }
 
         if (m_IndexBuffer != VK_NULL_HANDLE)
         {
@@ -216,8 +176,8 @@ namespace Trident
         }
 
         VkRenderPassBeginInfo l_RenderPassInfo{ VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO };
-        l_RenderPassInfo.renderPass = m_RenderPass;
-        l_RenderPassInfo.framebuffer = m_SwapchainFramebuffers[l_ImageIndex];
+        l_RenderPassInfo.renderPass = m_Pipeline.GetRenderPass();
+        l_RenderPassInfo.framebuffer = m_Pipeline.GetFramebuffers()[l_ImageIndex];
         l_RenderPassInfo.renderArea.offset = { 0, 0 };
         l_RenderPassInfo.renderArea.extent = m_Swapchain.GetExtent();
 
@@ -227,8 +187,8 @@ namespace Trident
 
         vkCmdBeginRenderPass(m_CommandBuffers[l_ImageIndex], &l_RenderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-        vkCmdBindPipeline(m_CommandBuffers[l_ImageIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, m_GraphicsPipeline);
-        vkCmdBindDescriptorSets(m_CommandBuffers[l_ImageIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, m_PipelineLayout, 0, 1, &m_DescriptorSets[l_ImageIndex], 0, nullptr);
+        vkCmdBindPipeline(m_CommandBuffers[l_ImageIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline.GetPipeline());
+        vkCmdBindDescriptorSets(m_CommandBuffers[l_ImageIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline.GetPipelineLayout(), 0, 1, &m_DescriptorSets[l_ImageIndex], 0, nullptr);
 
         VkBuffer l_VertexBuffers[] = { m_VertexBuffer };
         VkDeviceSize l_Offsets[] = { 0 };
@@ -337,16 +297,11 @@ namespace Trident
 
         m_CurrentFrame = 0;
 
-        for (VkFramebuffer l_FrameBuffer : m_SwapchainFramebuffers)
-        {
-            vkDestroyFramebuffer(Application::GetDevice(), l_FrameBuffer, nullptr);
-        }
-
-        m_SwapchainFramebuffers.clear();
+        m_Pipeline.CleanupFramebuffers();
 
         m_Swapchain.Cleanup();
         m_Swapchain.Init();
-        CreateFramebuffers();
+        m_Pipeline.CreateFramebuffers(m_Swapchain);
 
         vkFreeCommandBuffers(Application::GetDevice(), m_CommandPool, static_cast<uint32_t>(m_CommandBuffers.size()), m_CommandBuffers.data());
         CreateCommandBuffer();
@@ -356,230 +311,6 @@ namespace Trident
     }
 
     //------------------------------------------------------------------------------------------------------------------------------------------------------//
-
-    void Renderer::CreateRenderPass()
-    {
-        TR_CORE_TRACE("Creating Render Pass");
-
-        VkAttachmentDescription l_ColorAttachment{};
-        l_ColorAttachment.format = m_Swapchain.GetImageFormat();
-        l_ColorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-        l_ColorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        l_ColorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-        l_ColorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        l_ColorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        l_ColorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        l_ColorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-
-        VkAttachmentReference l_ColorAttachmentReference{};
-        l_ColorAttachmentReference.attachment = 0;
-        l_ColorAttachmentReference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-        VkSubpassDescription l_Subpass{};
-        l_Subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-        l_Subpass.colorAttachmentCount = 1;
-        l_Subpass.pColorAttachments = &l_ColorAttachmentReference;
-
-        VkSubpassDependency l_Dependency{};
-        l_Dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-        l_Dependency.dstSubpass = 0;
-        l_Dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        l_Dependency.srcAccessMask = 0;
-        l_Dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        l_Dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-
-        VkRenderPassCreateInfo l_RenderPassInfo{};
-        l_RenderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-        l_RenderPassInfo.attachmentCount = 1;
-        l_RenderPassInfo.pAttachments = &l_ColorAttachment;
-        l_RenderPassInfo.subpassCount = 1;
-        l_RenderPassInfo.pSubpasses = &l_Subpass;
-        l_RenderPassInfo.dependencyCount = 1;
-        l_RenderPassInfo.pDependencies = &l_Dependency;
-
-        if (vkCreateRenderPass(Application::GetDevice(), &l_RenderPassInfo, nullptr, &m_RenderPass) != VK_SUCCESS)
-        {
-            TR_CORE_CRITICAL("Failed to create render pass");
-        }
-
-        TR_CORE_TRACE("Render Pass Created");
-    }
-
-    void Renderer::CreateDescriptorSetLayout()
-    {
-        TR_CORE_TRACE("Creating Descriptor Set Layout");
-
-        VkDescriptorSetLayoutBinding l_UboLayoutBinding{};
-        l_UboLayoutBinding.binding = 0;
-        l_UboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        l_UboLayoutBinding.descriptorCount = 1;
-        l_UboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-        l_UboLayoutBinding.pImmutableSamplers = nullptr;
-
-        VkDescriptorSetLayoutCreateInfo l_LayoutInfo{};
-        l_LayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        l_LayoutInfo.bindingCount = 1;
-        l_LayoutInfo.pBindings = &l_UboLayoutBinding;
-
-        if (vkCreateDescriptorSetLayout(Application::GetDevice(), &l_LayoutInfo, nullptr, &m_DescriptorSetLayout) != VK_SUCCESS)
-        {
-            TR_CORE_CRITICAL("Failed to create descriptor set layout");
-        }
-
-        TR_CORE_TRACE("Descriptor Set Layout Created");
-    }
-
-    void Renderer::CreateGraphicsPipeline()
-    {
-        TR_CORE_TRACE("Creating Graphics Pipeline");
-
-        auto a_VertexShaderCode = Utilities::FileManagement::ReadFile("Assets/Shaders/Cube.vert.spv");
-        auto a_FragmentShaderCode = Utilities::FileManagement::ReadFile("Assets/Shaders/Cube.frag.spv");
-
-        VkShaderModule l_VertexModule = CreateShaderModule(Application::GetDevice(), a_VertexShaderCode);
-        VkShaderModule l_FragmentModule = CreateShaderModule(Application::GetDevice(), a_FragmentShaderCode);
-
-        VkPipelineShaderStageCreateInfo l_VertexStage{};
-        l_VertexStage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        l_VertexStage.stage = VK_SHADER_STAGE_VERTEX_BIT;
-        l_VertexStage.module = l_VertexModule;
-        l_VertexStage.pName = "main";
-
-        VkPipelineShaderStageCreateInfo l_FragmentStage{};
-        l_FragmentStage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        l_FragmentStage.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-        l_FragmentStage.module = l_FragmentModule;
-        l_FragmentStage.pName = "main";
-
-        VkPipelineShaderStageCreateInfo l_ShaderStages[] = { l_VertexStage, l_FragmentStage };
-
-        auto a_BindingDescription = Vertex::GetBindingDescription();
-        auto a_AttributeDescriptions = Vertex::GetAttributeDescriptions();
-
-        VkPipelineVertexInputStateCreateInfo l_VertexInputInfo{};
-        l_VertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-        l_VertexInputInfo.vertexBindingDescriptionCount = 1;
-        l_VertexInputInfo.pVertexBindingDescriptions = &a_BindingDescription;
-        l_VertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(a_AttributeDescriptions.size());
-        l_VertexInputInfo.pVertexAttributeDescriptions = a_AttributeDescriptions.data();
-
-        VkPipelineInputAssemblyStateCreateInfo l_InputAssembly{};
-        l_InputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-        l_InputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-        l_InputAssembly.primitiveRestartEnable = VK_FALSE;
-
-        VkViewport l_Viewport{};
-        l_Viewport.x = 0.0f;
-        l_Viewport.y = 0.0f;
-        l_Viewport.width = static_cast<float>(m_Swapchain.GetExtent().width);
-        l_Viewport.height = static_cast<float>(m_Swapchain.GetExtent().height);
-        l_Viewport.minDepth = 0.0f;
-        l_Viewport.maxDepth = 1.0f;
-
-        VkRect2D l_Scissor{};
-        l_Scissor.offset = { 0, 0 };
-        l_Scissor.extent = m_Swapchain.GetExtent();
-
-        VkPipelineViewportStateCreateInfo l_ViewportState{};
-        l_ViewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-        l_ViewportState.viewportCount = 1;
-        l_ViewportState.pViewports = &l_Viewport;
-        l_ViewportState.scissorCount = 1;
-        l_ViewportState.pScissors = &l_Scissor;
-
-        VkPipelineRasterizationStateCreateInfo l_Rasterizer{};
-        l_Rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-        l_Rasterizer.depthClampEnable = VK_FALSE;
-        l_Rasterizer.rasterizerDiscardEnable = VK_FALSE;
-        l_Rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
-        l_Rasterizer.lineWidth = 1.0f;
-        l_Rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
-        l_Rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
-        l_Rasterizer.depthBiasEnable = VK_FALSE;
-
-        VkPipelineMultisampleStateCreateInfo l_MultiSamplingInfo{};
-        l_MultiSamplingInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        l_MultiSamplingInfo.sampleShadingEnable = VK_FALSE;
-        l_MultiSamplingInfo.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-
-        VkPipelineColorBlendAttachmentState l_ColorBlendAttachment{};
-        l_ColorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-        l_ColorBlendAttachment.blendEnable = VK_FALSE;
-
-        VkPipelineColorBlendStateCreateInfo l_ColorBlendInfo{};
-        l_ColorBlendInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-        l_ColorBlendInfo.logicOpEnable = VK_FALSE;
-        l_ColorBlendInfo.attachmentCount = 1;
-        l_ColorBlendInfo.pAttachments = &l_ColorBlendAttachment;
-
-        VkPipelineLayoutCreateInfo l_PipelineLayoutInfo{};
-        l_PipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-        l_PipelineLayoutInfo.setLayoutCount = 1;
-        l_PipelineLayoutInfo.pSetLayouts = &m_DescriptorSetLayout;
-        l_PipelineLayoutInfo.pushConstantRangeCount = 0;
-        l_PipelineLayoutInfo.pPushConstantRanges = nullptr;
-
-        if (vkCreatePipelineLayout(Application::GetDevice(), &l_PipelineLayoutInfo, nullptr, &m_PipelineLayout) != VK_SUCCESS)
-        {
-            TR_CORE_CRITICAL("Failed to create pipeline layout");
-        }
-
-        VkGraphicsPipelineCreateInfo l_PipelineInfo{};
-        l_PipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-        l_PipelineInfo.stageCount = 2;
-        l_PipelineInfo.pStages = l_ShaderStages;
-        l_PipelineInfo.pVertexInputState = &l_VertexInputInfo;
-        l_PipelineInfo.pInputAssemblyState = &l_InputAssembly;
-        l_PipelineInfo.pViewportState = &l_ViewportState;
-        l_PipelineInfo.pRasterizationState = &l_Rasterizer;
-        l_PipelineInfo.pMultisampleState = &l_MultiSamplingInfo;
-        l_PipelineInfo.pDepthStencilState = nullptr;
-        l_PipelineInfo.pColorBlendState = &l_ColorBlendInfo;
-        l_PipelineInfo.pDynamicState = nullptr;
-        l_PipelineInfo.layout = m_PipelineLayout;
-        l_PipelineInfo.renderPass = m_RenderPass;
-        l_PipelineInfo.subpass = 0;
-        l_PipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
-        l_PipelineInfo.basePipelineIndex = -1;
-
-        if (vkCreateGraphicsPipelines(Application::GetDevice(), VK_NULL_HANDLE, 1, &l_PipelineInfo, nullptr, &m_GraphicsPipeline) != VK_SUCCESS)
-        {
-            TR_CORE_CRITICAL("Failed to create graphics pipeline");
-        }
-
-        vkDestroyShaderModule(Application::GetDevice(), l_FragmentModule, nullptr);
-        vkDestroyShaderModule(Application::GetDevice(), l_VertexModule, nullptr);
-
-        TR_CORE_TRACE("Graphics Pipeline Created");
-    }
-
-    void Renderer::CreateFramebuffers()
-    {
-        TR_CORE_TRACE("Creating Framebuffers");
-
-        m_SwapchainFramebuffers.resize(m_Swapchain.GetImageViews().size());
-
-        for (size_t i = 0; i < m_Swapchain.GetImageViews().size(); ++i)
-        {
-            VkImageView l_Attachments[] = { m_Swapchain.GetImageViews()[i] };
-
-            VkFramebufferCreateInfo l_FrameBufferInfo{};
-            l_FrameBufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-            l_FrameBufferInfo.renderPass = m_RenderPass;
-            l_FrameBufferInfo.attachmentCount = 1;
-            l_FrameBufferInfo.pAttachments = l_Attachments;
-            l_FrameBufferInfo.width = m_Swapchain.GetExtent().width;
-            l_FrameBufferInfo.height = m_Swapchain.GetExtent().height;
-            l_FrameBufferInfo.layers = 1;
-
-            if (vkCreateFramebuffer(Application::GetDevice(), &l_FrameBufferInfo, nullptr, &m_SwapchainFramebuffers[i]) != VK_SUCCESS)
-            {
-                TR_CORE_CRITICAL("Failed to create framebuffer {}", i);
-            }
-        }
-
-        TR_CORE_TRACE("Framebuffers Created ({} Total)", m_SwapchainFramebuffers.size());
-    }
 
     void Renderer::CreateCommandPool()
     {
@@ -602,7 +333,7 @@ namespace Trident
     {
         TR_CORE_TRACE("Allocating Command Buffers");
 
-        m_CommandBuffers.resize(m_SwapchainFramebuffers.size());
+        m_CommandBuffers.resize(m_Pipeline.GetFramebuffers().size());
 
         VkCommandBufferAllocateInfo l_AllocateInfo{};
         l_AllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -615,47 +346,6 @@ namespace Trident
             TR_CORE_CRITICAL("Failed to allocate command buffers");
         }
 
-        //for (size_t i = 0; i < m_CommandBuffers.size(); ++i)
-        //{
-        //    VkCommandBufferBeginInfo l_BeginInfo{};
-        //    l_BeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-
-        //    if (vkBeginCommandBuffer(m_CommandBuffers[i], &l_BeginInfo) != VK_SUCCESS)
-        //    {
-        //        TR_CORE_CRITICAL("Failed to begin recording command buffer {}", i);
-        //    }
-
-        //    VkRenderPassBeginInfo l_RenderPassInfo{};
-        //    l_RenderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        //    l_RenderPassInfo.renderPass = m_RenderPass;
-        //    l_RenderPassInfo.framebuffer = m_SwapchainFramebuffers[i];
-        //    l_RenderPassInfo.renderArea.offset = { 0, 0 };
-        //    l_RenderPassInfo.renderArea.extent = m_SwapchainExtent;
-
-        //    VkClearValue l_ClearColor = { {{0.0f, 0.0f, 0.0f, 1.0f}} };
-        //    l_RenderPassInfo.clearValueCount = 1;
-        //    l_RenderPassInfo.pClearValues = &l_ClearColor;
-
-        //    vkCmdBeginRenderPass(m_CommandBuffers[i], &l_RenderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-
-        //    vkCmdBindPipeline(m_CommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_GraphicsPipeline);
-        //    vkCmdBindDescriptorSets(m_CommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_PipelineLayout, 0, 1, &m_DescriptorSets[i], 0, nullptr);
-
-        //    VkBuffer l_VertexBuffers[] = { m_VertexBuffer };
-        //    VkDeviceSize l_Offsets[] = { 0 };
-        //    vkCmdBindVertexBuffers(m_CommandBuffers[i], 0, 1, l_VertexBuffers, l_Offsets);
-        //    vkCmdBindIndexBuffer(m_CommandBuffers[i], m_IndexBuffer, 0, VK_INDEX_TYPE_UINT16);
-
-        //    vkCmdDrawIndexed(m_CommandBuffers[i], m_IndexCount, 1, 0, 0, 0);
-        //    vkCmdEndRenderPass(m_CommandBuffers[i]);
-
-        //    if (vkEndCommandBuffer(m_CommandBuffers[i]) != VK_SUCCESS)
-        //    {
-        //        TR_CORE_CRITICAL("Failed to record command buffer {}", i);
-        //    }
-        //}
-
-        //TR_CORE_TRACE("Command Buffers Recorded");
         TR_CORE_TRACE("Command Buffers Allocated ({} Buffers)", m_CommandBuffers.size());
     }
 
@@ -705,7 +395,7 @@ namespace Trident
 
         size_t l_ImageCount = m_Swapchain.GetImageCount();
 
-        std::vector<VkDescriptorSetLayout> layouts(l_ImageCount, m_DescriptorSetLayout);
+        std::vector<VkDescriptorSetLayout> layouts(l_ImageCount, m_Pipeline.GetDescriptorSetLayout());
 
         VkDescriptorSetAllocateInfo allocInfo{};
         allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
