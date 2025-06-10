@@ -1,11 +1,13 @@
 #pragma once
 
 #include "Core/Utilities.h"
+
 #include "Renderer/Vertex.h"
 #include "Renderer/UniformBuffer.h"
 #include "Renderer/Swapchain.h"
 #include "Renderer/Pipeline.h"
 #include "Renderer/Buffers.h"
+#include "Renderer/Commands.h"
 
 #include "Geometry/Cube.h"
 
@@ -29,8 +31,8 @@ namespace Trident
         VkDescriptorSetLayout GetDescriptorSetLayout() const { return m_Pipeline.GetDescriptorSetLayout(); }
 
         void RecreateSwapchain();
-        VkCommandPool GetCommandPool() const { return m_CommandPool; }
-        std::vector<VkCommandBuffer> GetCommandBuffer() const { return m_CommandBuffers; }
+        VkCommandPool GetCommandPool() const { return m_Commands.GetCommandPool(); }
+        std::vector<VkCommandBuffer> GetCommandBuffer() const { return m_Commands.GetCommandBuffers(); }
 
     private:
         // Swapchain
@@ -46,19 +48,8 @@ namespace Trident
         // Pipeline
         Pipeline m_Pipeline;
 
-        // Command pool & buffers
-        VkCommandPool m_CommandPool = VK_NULL_HANDLE;
-        std::vector<VkCommandBuffer> m_CommandBuffers;
-
-        // Synchronization (frames-in-flight pattern)
-        static constexpr int MAX_FRAMES_IN_FLIGHT = 2;
-        std::vector<VkSemaphore> m_ImageAvailableSemaphores;
-        std::vector<VkSemaphore> m_RenderFinishedSemaphores;
-        std::vector<VkFence> m_InFlightFences;
-
-        // Track which fence is using each swapchain image
-        std::vector<VkFence> m_ImagesInFlight;
-        size_t m_CurrentFrame = 0;
+        // Command pool, buffers and sync objects
+        Commands m_Commands;
 
         // Descriptor sets & uniform buffers
         VkDescriptorPool m_DescriptorPool = VK_NULL_HANDLE;
@@ -70,10 +61,7 @@ namespace Trident
 
     private:
         // Core setup
-        void CreateCommandPool();
         void CreateDescriptorPool();
         void CreateDescriptorSets();
-        void CreateCommandBuffer();
-        void CreateSyncObjects();
     };
 }

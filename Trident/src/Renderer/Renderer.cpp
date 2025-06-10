@@ -14,14 +14,12 @@ namespace Trident
 
         m_Swapchain.Init();
         m_Pipeline.Init(m_Swapchain);
-        CreateCommandPool();
-        m_Buffers.CreateVertexBuffer(Geometry::CubeVertices, m_CommandPool, m_VertexBuffer, m_VertexBufferMemory);
-        m_Buffers.CreateIndexBuffer(Geometry::CubeIndices, m_CommandPool, m_IndexBuffer, m_IndexBufferMemory, m_IndexCount);
+        m_Commands.Init(m_Pipeline.GetFramebuffers().size());
+        m_Buffers.CreateVertexBuffer(Geometry::CubeVertices, m_Commands.GetCommandPool(), m_VertexBuffer, m_VertexBufferMemory);
+        m_Buffers.CreateIndexBuffer(Geometry::CubeIndices, m_Commands.GetCommandPool(), m_IndexBuffer, m_IndexBufferMemory, m_IndexCount);
         m_Buffers.CreateUniformBuffers(m_Swapchain.GetImageCount(), m_UniformBuffers, m_UniformBuffersMemory);
         CreateDescriptorPool();
         CreateDescriptorSets();
-        CreateCommandBuffer();
-        CreateSyncObjects();
 
         TR_CORE_INFO("-------RENDERER INITIALIZED-------");
     }
@@ -30,37 +28,7 @@ namespace Trident
     {
         TR_CORE_TRACE("Shutting Down Renderer");
 
-        for (size_t i = 0; i < m_ImageAvailableSemaphores.size(); ++i)
-        {
-            if (m_RenderFinishedSemaphores[i] != VK_NULL_HANDLE)
-            {
-                vkDestroySemaphore(Application::GetDevice(), m_RenderFinishedSemaphores[i], nullptr);
-            }
-
-            if (m_ImageAvailableSemaphores[i] != VK_NULL_HANDLE)
-            {
-                vkDestroySemaphore(Application::GetDevice(), m_ImageAvailableSemaphores[i], nullptr);
-            }
-
-            if (m_InFlightFences[i] != VK_NULL_HANDLE)
-            {
-                vkDestroyFence(Application::GetDevice(), m_InFlightFences[i], nullptr);
-            }
-        }
-
-        if (!m_CommandBuffers.empty())
-        {
-            vkFreeCommandBuffers(Application::GetDevice(), m_CommandPool, static_cast<uint32_t>(m_CommandBuffers.size()), m_CommandBuffers.data());
-
-            m_CommandBuffers.clear();
-        }
-
-        if (m_CommandPool != VK_NULL_HANDLE)
-        {
-            vkDestroyCommandPool(Application::GetDevice(), m_CommandPool, nullptr);
-            
-            m_CommandPool = VK_NULL_HANDLE;
-        }
+        m_Commands.Cleanup();
         
         if (m_DescriptorPool != VK_NULL_HANDLE)
         {
@@ -83,11 +51,13 @@ namespace Trident
 
     void Renderer::DrawFrame()
     {
-        vkWaitForFences(Application::GetDevice(), 1, &m_InFlightFences[m_CurrentFrame], VK_TRUE, UINT64_MAX);
+        VkFence l_InFlightFence = m_Commands.GetInFlightFence(m_Commands.CurrentFrame());
+
+        vkWaitForFences(Application::GetDevice(), 1, &l_InFlightFence, VK_TRUE, UINT64_MAX);
 
         uint32_t l_ImageIndex;
-        VkResult l_Result = vkAcquireNextImageKHR(Application::GetDevice(), m_Swapchain.GetSwapchain(), UINT64_MAX, 
-            m_ImageAvailableSemaphores[m_CurrentFrame], VK_NULL_HANDLE, &l_ImageIndex);
+        VkResult l_Result = vkAcquireNextImageKHR(Application::GetDevice(), m_Swapchain.GetSwapchain(), UINT64_MAX,
+            m_Commands.GetImageAvailableSemaphore(m_Commands.CurrentFrame()), VK_NULL_HANDLE, &l_ImageIndex);
 
         Application::GetImGuiLayer().Begin();
         Application::GetImGuiLayer().SetupDockspace();
@@ -105,12 +75,12 @@ namespace Trident
             TR_CORE_CRITICAL("Failed to acquire swapchain image (code {})", static_cast<int>(l_Result));
         }
 
-        if (m_ImagesInFlight[l_ImageIndex] != VK_NULL_HANDLE)
+        if (m_Commands.GetImageInFlight(l_ImageIndex) != VK_NULL_HANDLE)
         {
-            vkWaitForFences(Application::GetDevice(), 1, &m_ImagesInFlight[l_ImageIndex], VK_TRUE, UINT64_MAX);
+            vkWaitForFences(Application::GetDevice(), 1, &m_Commands.GetImageInFlight(l_ImageIndex), VK_TRUE, UINT64_MAX);
         }
 
-        m_ImagesInFlight[l_ImageIndex] = m_InFlightFences[m_CurrentFrame];
+        m_Commands.GetImageInFlight(l_ImageIndex) = m_Commands.GetInFlightFence(m_Commands.CurrentFrame());
 
         UniformBufferObject l_UniformBufferObject{};
         l_UniformBufferObject.Model = glm::rotate(glm::mat4(1.0f), Utilities::Time::GetTime() * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
@@ -123,10 +93,10 @@ namespace Trident
         memcpy(l_Data, &l_UniformBufferObject, sizeof(l_UniformBufferObject));
         vkUnmapMemory(Application::GetDevice(), m_UniformBuffersMemory[l_ImageIndex]);
 
-        vkResetCommandBuffer(m_CommandBuffers[l_ImageIndex], 0);
+        vkResetCommandBuffer(m_Commands.GetCommandBuffer(l_ImageIndex), 0);
 
         VkCommandBufferBeginInfo l_BeginInfo{ VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
-        if (vkBeginCommandBuffer(m_CommandBuffers[l_ImageIndex], &l_BeginInfo) != VK_SUCCESS)
+        if (vkBeginCommandBuffer(m_Commands.GetCommandBuffer(l_ImageIndex), &l_BeginInfo) != VK_SUCCESS)
         {
             TR_CORE_CRITICAL("Failed to begin recording command buffer {}", l_ImageIndex);
         }
@@ -141,44 +111,44 @@ namespace Trident
         l_RenderPassInfo.clearValueCount = 1;
         l_RenderPassInfo.pClearValues = &l_ClearColor;
 
-        vkCmdBeginRenderPass(m_CommandBuffers[l_ImageIndex], &l_RenderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+        vkCmdBeginRenderPass(m_Commands.GetCommandBuffer(l_ImageIndex), &l_RenderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-        vkCmdBindPipeline(m_CommandBuffers[l_ImageIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline.GetPipeline());
-        vkCmdBindDescriptorSets(m_CommandBuffers[l_ImageIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline.GetPipelineLayout(), 0, 1, &m_DescriptorSets[l_ImageIndex], 0, nullptr);
+        vkCmdBindPipeline(m_Commands.GetCommandBuffer(l_ImageIndex), VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline.GetPipeline());
+        vkCmdBindDescriptorSets(m_Commands.GetCommandBuffer(l_ImageIndex), VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline.GetPipelineLayout(), 0, 1, &m_DescriptorSets[l_ImageIndex], 0, nullptr);
 
         VkBuffer l_VertexBuffers[] = { m_VertexBuffer };
         VkDeviceSize l_Offsets[] = { 0 };
-        vkCmdBindVertexBuffers(m_CommandBuffers[l_ImageIndex], 0, 1, l_VertexBuffers, l_Offsets);
-        vkCmdBindIndexBuffer(m_CommandBuffers[l_ImageIndex], m_IndexBuffer, 0, VK_INDEX_TYPE_UINT16);
+        vkCmdBindVertexBuffers(m_Commands.GetCommandBuffer(l_ImageIndex), 0, 1, l_VertexBuffers, l_Offsets);
+        vkCmdBindIndexBuffer(m_Commands.GetCommandBuffer(l_ImageIndex), m_IndexBuffer, 0, VK_INDEX_TYPE_UINT16);
 
-        vkCmdDrawIndexed(m_CommandBuffers[l_ImageIndex], m_IndexCount, 1, 0, 0, 0);
+        vkCmdDrawIndexed(m_Commands.GetCommandBuffer(l_ImageIndex), m_IndexCount, 1, 0, 0, 0);
 
-        vkCmdEndRenderPass(m_CommandBuffers[l_ImageIndex]);
+        vkCmdEndRenderPass(m_Commands.GetCommandBuffer(l_ImageIndex));
 
-        vkCmdBeginRenderPass(m_CommandBuffers[l_ImageIndex], &l_RenderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-        Application::GetImGuiLayer().End(m_CommandBuffers[l_ImageIndex]);
-        vkCmdEndRenderPass(m_CommandBuffers[l_ImageIndex]);
+        vkCmdBeginRenderPass(m_Commands.GetCommandBuffer(l_ImageIndex), &l_RenderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+        Application::GetImGuiLayer().End(m_Commands.GetCommandBuffer(l_ImageIndex));
+        vkCmdEndRenderPass(m_Commands.GetCommandBuffer(l_ImageIndex));
 
-        if (vkEndCommandBuffer(m_CommandBuffers[l_ImageIndex]) != VK_SUCCESS)
+        if (vkEndCommandBuffer(m_Commands.GetCommandBuffer(l_ImageIndex)) != VK_SUCCESS)
         {
             TR_CORE_CRITICAL("Failed to record command buffer {}", l_ImageIndex);
         }
 
-        VkSemaphore l_WaitSemaphores[] = { m_ImageAvailableSemaphores[m_CurrentFrame] };
+        VkSemaphore l_WaitSemaphores[] = { m_Commands.GetImageAvailableSemaphore(m_Commands.CurrentFrame()) };
         VkPipelineStageFlags l_WaitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
-        VkSemaphore l_SignalSemaphores[] = { m_RenderFinishedSemaphores[m_CurrentFrame] };
+        VkSemaphore l_SignalSemaphores[] = { m_Commands.GetRenderFinishedSemaphore(m_Commands.CurrentFrame()) };
 
         VkSubmitInfo l_SubmitInfo{ VK_STRUCTURE_TYPE_SUBMIT_INFO };
         l_SubmitInfo.waitSemaphoreCount = 1;
         l_SubmitInfo.pWaitSemaphores = l_WaitSemaphores;
         l_SubmitInfo.pWaitDstStageMask = l_WaitStages;
         l_SubmitInfo.commandBufferCount = 1;
-        l_SubmitInfo.pCommandBuffers = &m_CommandBuffers[l_ImageIndex];
+        l_SubmitInfo.pCommandBuffers = &m_Commands.GetCommandBuffers()[l_ImageIndex];
         l_SubmitInfo.signalSemaphoreCount = 1;
         l_SubmitInfo.pSignalSemaphores = l_SignalSemaphores;
-
-        vkResetFences(Application::GetDevice(), 1, &m_InFlightFences[m_CurrentFrame]);
-        if (vkQueueSubmit(Application::GetGraphicsQueue(), 1, &l_SubmitInfo, m_InFlightFences[m_CurrentFrame]) != VK_SUCCESS)
+        
+        vkResetFences(Application::GetDevice(), 1, &l_InFlightFence);
+        if (vkQueueSubmit(Application::GetGraphicsQueue(), 1, &l_SubmitInfo, l_InFlightFence) != VK_SUCCESS)
         {
             TR_CORE_CRITICAL("Failed to submit draw command buffer");
         }
@@ -201,7 +171,7 @@ namespace Trident
             TR_CORE_CRITICAL("Failed to present swapchain image (code {})", static_cast<int>(l_Result));
         }
 
-        m_CurrentFrame = (m_CurrentFrame + 1) % m_ImageAvailableSemaphores.size();
+        m_Commands.CurrentFrame() = (m_Commands.CurrentFrame() + 1) % m_Commands.GetFrameCount();
     }
 
     void Renderer::RecreateSwapchain()
@@ -222,88 +192,18 @@ namespace Trident
 
         vkDeviceWaitIdle(Application::GetDevice());
 
-        for (size_t i = 0; i < m_ImageAvailableSemaphores.size(); ++i)
-        {
-            if (m_RenderFinishedSemaphores[i] != VK_NULL_HANDLE)
-            {
-                vkDestroySemaphore(Application::GetDevice(), m_RenderFinishedSemaphores[i], nullptr);
-
-                m_RenderFinishedSemaphores[i] = VK_NULL_HANDLE;
-            }
-
-            if (m_ImageAvailableSemaphores[i] != VK_NULL_HANDLE)
-            {
-                vkDestroySemaphore(Application::GetDevice(), m_ImageAvailableSemaphores[i], nullptr);
-
-                m_ImageAvailableSemaphores[i] = VK_NULL_HANDLE;
-            }
-
-            if (m_InFlightFences[i] != VK_NULL_HANDLE)
-            {
-                vkDestroyFence(Application::GetDevice(), m_InFlightFences[i], nullptr);
-
-                m_InFlightFences[i] = VK_NULL_HANDLE;
-            }
-        }
-
-        m_ImageAvailableSemaphores.clear();
-        m_RenderFinishedSemaphores.clear();
-        m_InFlightFences.clear();
-        m_ImagesInFlight.clear();
-
-        m_CurrentFrame = 0;
-
         m_Pipeline.CleanupFramebuffers();
 
         m_Swapchain.Cleanup();
         m_Swapchain.Init();
         m_Pipeline.CreateFramebuffers(m_Swapchain);
 
-        vkFreeCommandBuffers(Application::GetDevice(), m_CommandPool, static_cast<uint32_t>(m_CommandBuffers.size()), m_CommandBuffers.data());
-        CreateCommandBuffer();
-        CreateSyncObjects();
+        m_Commands.Recreate(m_Pipeline.GetFramebuffers().size());
 
         TR_CORE_TRACE("Swapchain Recreated");
     }
 
     //------------------------------------------------------------------------------------------------------------------------------------------------------//
-
-    void Renderer::CreateCommandPool()
-    {
-        TR_CORE_TRACE("Creating Command Pool");
-
-        VkCommandPoolCreateInfo l_PoolInfo{};
-        l_PoolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-        l_PoolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-        l_PoolInfo.queueFamilyIndex = Application::GetQueueFamilyIndices().GraphicsFamily.value();
-
-        if (vkCreateCommandPool(Application::GetDevice(), &l_PoolInfo, nullptr, &m_CommandPool) != VK_SUCCESS)
-        {
-            TR_CORE_CRITICAL("Failed to create command pool");
-        }
-
-        TR_CORE_TRACE("Command Pool Created");
-    }
-
-    void Renderer::CreateCommandBuffer()
-    {
-        TR_CORE_TRACE("Allocating Command Buffers");
-
-        m_CommandBuffers.resize(m_Pipeline.GetFramebuffers().size());
-
-        VkCommandBufferAllocateInfo l_AllocateInfo{};
-        l_AllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-        l_AllocateInfo.commandPool = m_CommandPool;
-        l_AllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-        l_AllocateInfo.commandBufferCount = static_cast<uint32_t>(m_CommandBuffers.size());
-
-        if (vkAllocateCommandBuffers(Application::GetDevice(), &l_AllocateInfo, m_CommandBuffers.data()) != VK_SUCCESS)
-        {
-            TR_CORE_CRITICAL("Failed to allocate command buffers");
-        }
-
-        TR_CORE_TRACE("Command Buffers Allocated ({} Buffers)", m_CommandBuffers.size());
-    }
 
     void Renderer::CreateDescriptorPool()
     {
@@ -367,34 +267,5 @@ namespace Trident
         }
 
         TR_CORE_TRACE("Descriptor Sets Allocated ({})", l_ImageCount);
-    }
-
-    void Renderer::CreateSyncObjects()
-    {
-        TR_CORE_TRACE("Creating Sync Objects");
-
-        size_t l_Count = m_Swapchain.GetImageCount();
-
-        m_ImageAvailableSemaphores.resize(l_Count);
-        m_RenderFinishedSemaphores.resize(l_Count);
-        m_InFlightFences.resize(l_Count);
-        m_ImagesInFlight.resize(l_Count);
-        std::fill(m_ImagesInFlight.begin(), m_ImagesInFlight.end(), VK_NULL_HANDLE);
-
-        VkSemaphoreCreateInfo l_SemaphoreInfo{ VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
-        VkFenceCreateInfo l_FenceInfo{ VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
-        l_FenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-
-        for (size_t i = 0; i < l_Count; ++i)
-        {
-            if (vkCreateSemaphore(Application::GetDevice(), &l_SemaphoreInfo, nullptr, &m_ImageAvailableSemaphores[i]) != VK_SUCCESS ||
-                vkCreateSemaphore(Application::GetDevice(), &l_SemaphoreInfo, nullptr, &m_RenderFinishedSemaphores[i]) != VK_SUCCESS ||
-                vkCreateFence(Application::GetDevice(), &l_FenceInfo, nullptr, &m_InFlightFences[i]) != VK_SUCCESS)
-            {
-                TR_CORE_CRITICAL("Failed to create sync for image {}", i);
-            }
-        }
-
-        TR_CORE_TRACE("Sync Objects Created ({} Frames In Flight)", l_Count);
     }
 }
