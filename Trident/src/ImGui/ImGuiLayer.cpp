@@ -36,8 +36,10 @@ namespace Trident
 
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
-        ImGuiIO& io = ImGui::GetIO();
-        io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_DockingEnable | ImGuiConfigFlags_ViewportsEnable;
+        ImGuiIO& io = ImGui::GetIO(); (void)io;
+        io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+        io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+        io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
         ImGui::StyleColorsDark();
 
         ImGui_ImplGlfw_InitForVulkan(window, true);
@@ -52,6 +54,7 @@ namespace Trident
         init_info.ImageCount = imageCount;
         init_info.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
         init_info.RenderPass = renderPass;
+        
         ImGui_ImplVulkan_Init(&init_info);
     }
 
@@ -64,7 +67,9 @@ namespace Trident
 
     void ImGuiLayer::SetupDockspace()
     {
-        ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_MenuBar;
+        ImGuiDockNodeFlags dockspaceFlags = ImGuiDockNodeFlags_PassthruCentralNode;
+        ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoDocking 
+            | ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoBackground;
         ImGuiViewport* vp = ImGui::GetMainViewport();
         ImGui::SetNextWindowPos(vp->WorkPos);
         ImGui::SetNextWindowSize(vp->WorkSize);
@@ -73,7 +78,7 @@ namespace Trident
         ImGui::Begin("DockSpace", nullptr, flags);
         ImGui::PopStyleVar();
         ImGuiID dockId = ImGui::GetID("TridentDockSpace");
-        ImGui::DockSpace(dockId, ImVec2(0, 0), ImGuiDockNodeFlags_None);
+        ImGui::DockSpace(dockId, ImVec2(0, 0), dockspaceFlags);
         ImGui::End();
     }
 
@@ -99,5 +104,10 @@ namespace Trident
         {
             vkDestroyDescriptorPool(Application::GetDevice(), m_DescriptorPool, nullptr);
         }
+    }
+
+    ImTextureID ImGuiLayer::RegisterTexture(VkSampler sampler, VkImageView imageView, VkImageLayout layout)
+    {
+        return (ImTextureID)ImGui_ImplVulkan_AddTexture(sampler, imageView, layout);
     }
 }

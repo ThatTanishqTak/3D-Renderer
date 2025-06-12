@@ -20,6 +20,8 @@ namespace Trident
 
         void Shutdown();
 
+        ImTextureID RegisterTexture(VkSampler sampler, VkImageView imageView, VkImageLayout layout);
+
     private:
         VkDescriptorPool m_DescriptorPool = VK_NULL_HANDLE;
         GLFWwindow* m_Window = nullptr;

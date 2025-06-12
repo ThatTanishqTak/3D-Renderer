@@ -13,6 +13,7 @@
 
 #include <vulkan/vulkan.h>
 #include <glm/glm.hpp>
+#include <imgui.h>
 #include <vector>
 #include <array>
 #include <functional>
@@ -39,17 +40,25 @@ namespace Trident
         void Shutdown();
         void DrawFrame();
 
+        void RecreateSwapchain();
+        void CreateOffscreenTarget();
+
+        uint32_t GetCurrentFrame() const { return m_Commands.CurrentFrame(); }
+
         void SetCubeProperties(const CubeProperties& props) { m_CubeProperties = props; }
-        CubeProperties GetCubeProperties() const { return m_CubeProperties; }
         void SetViewport(const ViewportInfo& info) { m_Viewport = info; }
+        CubeProperties GetCubeProperties() const { return m_CubeProperties; }
         ViewportInfo GetViewport() const { return m_Viewport; }
 
         VkRenderPass GetRenderPass() const { return m_Pipeline.GetRenderPass(); }
         uint32_t GetImageCount() const { return m_Swapchain.GetImageCount(); }
+        ImTextureID GetOffscreenTextureID() const { return m_OffscreenTextureID; }
+
+        VkImageView GetOffscreenImageView() const { return m_OffscreenImageView; }
+        VkSampler GetOffscreenSampler() const { return m_OffscreenSampler; }
+        VkImageLayout GetOffscreenLayout() const { return VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL; }
 
         VkDescriptorSetLayout GetDescriptorSetLayout() const { return m_Pipeline.GetDescriptorSetLayout(); }
-
-        void RecreateSwapchain();
         VkCommandPool GetCommandPool() const { return m_Commands.GetCommandPool(); }
         std::vector<VkCommandBuffer> GetCommandBuffer() const { return m_Commands.GetCommandBuffers(); }
 
@@ -76,6 +85,14 @@ namespace Trident
         std::vector<VkBuffer> m_UniformBuffers;
         std::vector<VkDeviceMemory> m_UniformBuffersMemory;
 
+        // Offscreen rendering
+        VkImage m_OffscreenImage = VK_NULL_HANDLE;
+        VkDeviceMemory m_OffscreenMemory = VK_NULL_HANDLE;
+        VkImageView m_OffscreenImageView = VK_NULL_HANDLE;
+        VkFramebuffer m_OffscreenFramebuffer = VK_NULL_HANDLE;
+        ImTextureID m_OffscreenTextureID;
+        VkSampler m_OffscreenSampler = VK_NULL_HANDLE;
+
         Buffers m_Buffers;
 
         CubeProperties m_CubeProperties{};
@@ -85,5 +102,7 @@ namespace Trident
         // Core setup
         void CreateDescriptorPool();
         void CreateDescriptorSets();
+
+        bool IsValidViewport() const { return m_Viewport.Size.x > 0 && m_Viewport.Size.y > 0; }
     };
 }

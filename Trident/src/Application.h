@@ -36,7 +36,6 @@ namespace Trident
         void Update();
 
         void RenderScene();
-        void RenderUI();
 
         void Shutdown();
 

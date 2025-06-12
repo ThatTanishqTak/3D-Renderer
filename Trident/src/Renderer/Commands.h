@@ -23,6 +23,10 @@ namespace Trident
 
         size_t GetFrameCount() const { return m_ImageAvailableSemaphores.size(); }
         size_t& CurrentFrame() { return m_CurrentFrame; }
+        size_t CurrentFrame() const { return m_CurrentFrame; }
+
+        VkCommandBuffer BeginSingleTimeCommands();
+        void EndSingleTimeCommands(VkCommandBuffer commandBuffer);
 
     private:
         void CreateCommandPool();

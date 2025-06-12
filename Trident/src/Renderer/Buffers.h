@@ -17,11 +17,13 @@ namespace Trident
         void CreateIndexBuffer(const std::vector<uint16_t>& indices, VkCommandPool commandPool, VkBuffer& indexBuffer, VkDeviceMemory& indexBufferMemory, uint32_t& indexCount);
         void CreateUniformBuffers(uint32_t imageCount, std::vector<VkBuffer>& uniformBuffers, std::vector<VkDeviceMemory>& uniformBuffersMemory);
 
-    private:
-        // Utility helpers
         uint32_t FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
         void CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory);
         void CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size, VkCommandPool commandPool);
+
+    private:
+        // Utility helpers
+
 
     private:
         struct Allocation

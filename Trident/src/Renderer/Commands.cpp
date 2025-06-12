@@ -35,14 +35,12 @@ namespace Trident
         if (!m_CommandBuffers.empty())
         {
             vkFreeCommandBuffers(Application::GetDevice(), m_CommandPool, static_cast<uint32_t>(m_CommandBuffers.size()), m_CommandBuffers.data());
-
             m_CommandBuffers.clear();
         }
 
         if (m_CommandPool != VK_NULL_HANDLE)
         {
             vkDestroyCommandPool(Application::GetDevice(), m_CommandPool, nullptr);
-
             m_CommandPool = VK_NULL_HANDLE;
         }
 
@@ -84,6 +82,41 @@ namespace Trident
 
         CreateCommandBuffers(commandBufferCount);
         CreateSyncObjects(commandBufferCount);
+    }
+
+    VkCommandBuffer Commands::BeginSingleTimeCommands()
+    {
+        VkCommandBufferAllocateInfo allocInfo{};
+        allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        allocInfo.commandPool = m_CommandPool;
+        allocInfo.commandBufferCount = 1;
+
+        VkCommandBuffer commandBuffer;
+        vkAllocateCommandBuffers(Application::GetDevice(), &allocInfo, &commandBuffer);
+
+        VkCommandBufferBeginInfo beginInfo{};
+        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+        vkBeginCommandBuffer(commandBuffer, &beginInfo);
+
+        return commandBuffer;
+    }
+
+    void Commands::EndSingleTimeCommands(VkCommandBuffer commandBuffer)
+    {
+        vkEndCommandBuffer(commandBuffer);
+
+        VkSubmitInfo submitInfo{};
+        submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+        submitInfo.commandBufferCount = 1;
+        submitInfo.pCommandBuffers = &commandBuffer;
+
+        vkQueueSubmit(Application::GetGraphicsQueue(), 1, &submitInfo, VK_NULL_HANDLE);
+        vkQueueWaitIdle(Application::GetGraphicsQueue());
+
+        vkFreeCommandBuffers(Application::GetDevice(), m_CommandPool, 1, &commandBuffer);
     }
 
     void Commands::CreateCommandPool()

@@ -23,6 +23,8 @@ namespace Trident
         m_ImGuiLayer = std::make_unique<ImGuiLayer>();
         m_ImGuiLayer->Init(m_Window.GetNativeWindow(), m_Instance, m_Device, m_PhysicalDevice,
             m_QueueFamilyIndices.GraphicsFamily.value(), m_GraphicsQueue, m_Renderer->GetRenderPass(), m_Renderer->GetImageCount(), m_Renderer->GetCommandPool());
+
+        m_Renderer->CreateOffscreenTarget();
     }
 
     void Application::Update()
@@ -34,11 +36,6 @@ namespace Trident
     void Application::RenderScene()
     {
         m_Renderer->DrawFrame();
-    }
-
-    void Application::RenderUI()
-    {
-
     }
 
     void Application::Shutdown()
