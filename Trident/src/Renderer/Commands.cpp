@@ -20,6 +20,7 @@ namespace Trident
             {
                 vkDestroySemaphore(Application::GetDevice(), m_RenderFinishedSemaphores[i], nullptr);
             }
+
             if (m_ImageAvailableSemaphores[i] != VK_NULL_HANDLE)
             {
                 vkDestroySemaphore(Application::GetDevice(), m_ImageAvailableSemaphores[i], nullptr);
@@ -34,6 +35,7 @@ namespace Trident
         if (!m_CommandBuffers.empty())
         {
             vkFreeCommandBuffers(Application::GetDevice(), m_CommandPool, static_cast<uint32_t>(m_CommandBuffers.size()), m_CommandBuffers.data());
+
             m_CommandBuffers.clear();
         }
 
@@ -129,6 +131,7 @@ namespace Trident
         m_RenderFinishedSemaphores.resize(count);
         m_InFlightFences.resize(count);
         m_ImagesInFlight.resize(count);
+
         std::fill(m_ImagesInFlight.begin(), m_ImagesInFlight.end(), VK_NULL_HANDLE);
 
         VkSemaphoreCreateInfo l_SemaphoreInfo{ VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };

@@ -166,6 +166,7 @@ namespace Trident
         {
             RecreateSwapchain();
         }
+
         else if (l_Result != VK_SUCCESS)
         {
             TR_CORE_CRITICAL("Failed to present swapchain image (code {})", static_cast<int>(l_Result));
