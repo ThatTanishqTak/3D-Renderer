@@ -59,9 +59,8 @@ namespace Trident
         VkResult l_Result = vkAcquireNextImageKHR(Application::GetDevice(), m_Swapchain.GetSwapchain(), UINT64_MAX,
             m_Commands.GetImageAvailableSemaphore(m_Commands.CurrentFrame()), VK_NULL_HANDLE, &l_ImageIndex);
 
-        Application::GetImGuiLayer().Begin();
-        Application::GetImGuiLayer().SetupDockspace();
-        ImGui::ShowDemoWindow();
+        glm::vec2 viewportPos = m_Viewport.Position;
+        glm::vec2 viewportSize = m_Viewport.Size;
 
         if (l_Result == VK_ERROR_OUT_OF_DATE_KHR || l_Result == VK_SUBOPTIMAL_KHR)
         {
@@ -83,9 +82,16 @@ namespace Trident
         m_Commands.GetImageInFlight(l_ImageIndex) = m_Commands.GetInFlightFence(m_Commands.CurrentFrame());
 
         UniformBufferObject l_UniformBufferObject{};
-        l_UniformBufferObject.Model = glm::rotate(glm::mat4(1.0f), Utilities::Time::GetTime() * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+        glm::mat4 model = glm::mat4(1.0f);
+        model = glm::translate(model, m_CubeProperties.Position);
+        model = glm::rotate(model, glm::radians(m_CubeProperties.Rotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
+        model = glm::rotate(model, glm::radians(m_CubeProperties.Rotation.y), glm::vec3(0.0f, 1.0f, 0.0f));
+        model = glm::rotate(model, glm::radians(m_CubeProperties.Rotation.z), glm::vec3(0.0f, 0.0f, 1.0f));
+        model = glm::scale(model, m_CubeProperties.Scale);
+        l_UniformBufferObject.Model = model;
         l_UniformBufferObject.View = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-        l_UniformBufferObject.Projection = glm::perspective(glm::radians(45.0f), m_Swapchain.GetExtent().width / float(m_Swapchain.GetExtent().height), 0.1f, 10.0f);
+        float aspect = m_Viewport.Size.y > 0.0f ? m_Viewport.Size.x / m_Viewport.Size.y : 1.0f;
+        l_UniformBufferObject.Projection = glm::perspective(glm::radians(45.0f), aspect, 0.1f, 10.0f);
         l_UniformBufferObject.Projection[1][1] *= -1.0f;
 
         void* l_Data;
@@ -114,6 +120,19 @@ namespace Trident
         vkCmdBeginRenderPass(m_Commands.GetCommandBuffer(l_ImageIndex), &l_RenderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
         vkCmdBindPipeline(m_Commands.GetCommandBuffer(l_ImageIndex), VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline.GetPipeline());
+        VkViewport viewport{};
+        viewport.x = viewportPos.x;
+        viewport.y = viewportPos.y;
+        viewport.width = viewportSize.x;
+        viewport.height = viewportSize.y;
+        viewport.minDepth = 0.0f;
+        viewport.maxDepth = 1.0f;
+        vkCmdSetViewport(m_Commands.GetCommandBuffer(l_ImageIndex), 0, 1, &viewport);
+
+        VkRect2D scissor{};
+        scissor.offset = { static_cast<int32_t>(viewportPos.x), static_cast<int32_t>(viewportPos.y) };
+        scissor.extent = { static_cast<uint32_t>(viewportSize.x), static_cast<uint32_t>(viewportSize.y) };
+        vkCmdSetScissor(m_Commands.GetCommandBuffer(l_ImageIndex), 0, 1, &scissor);
         vkCmdBindDescriptorSets(m_Commands.GetCommandBuffer(l_ImageIndex), VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline.GetPipelineLayout(), 0, 1, &m_DescriptorSets[l_ImageIndex], 0, nullptr);
 
         VkBuffer l_VertexBuffers[] = { m_VertexBuffer };
@@ -123,9 +142,9 @@ namespace Trident
 
         vkCmdDrawIndexed(m_Commands.GetCommandBuffer(l_ImageIndex), m_IndexCount, 1, 0, 0, 0);
 
-        vkCmdEndRenderPass(m_Commands.GetCommandBuffer(l_ImageIndex));
+        //vkCmdEndRenderPass(m_Commands.GetCommandBuffer(l_ImageIndex));
 
-        vkCmdBeginRenderPass(m_Commands.GetCommandBuffer(l_ImageIndex), &l_RenderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+        //vkCmdBeginRenderPass(m_Commands.GetCommandBuffer(l_ImageIndex), &l_RenderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
         Application::GetImGuiLayer().End(m_Commands.GetCommandBuffer(l_ImageIndex));
         vkCmdEndRenderPass(m_Commands.GetCommandBuffer(l_ImageIndex));
 

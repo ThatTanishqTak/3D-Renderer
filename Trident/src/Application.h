@@ -50,6 +50,7 @@ namespace Trident
         static QueueFamilyIndices GetQueueFamilyIndices() { return Get().m_QueueFamilyIndices; }
         static Window& GetWindow() { return Get().m_Window; }
         static ImGuiLayer& GetImGuiLayer() { return *Get().m_ImGuiLayer; }
+        static Renderer& GetRenderer() { return *Get().m_Renderer; }
         bool IsDeviceSuitable(VkPhysicalDevice device);
 
     private:

@@ -216,6 +216,12 @@ namespace Trident
         l_ColorBlending.attachmentCount = 1;
         l_ColorBlending.pAttachments = &l_ColorBlendAttachment;
 
+        VkDynamicState l_DynamicStates[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+        VkPipelineDynamicStateCreateInfo l_DynamicState{};
+        l_DynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+        l_DynamicState.dynamicStateCount = 2;
+        l_DynamicState.pDynamicStates = l_DynamicStates;
+
         VkPipelineLayoutCreateInfo l_PipelineLayoutInfo{ VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO };
         l_PipelineLayoutInfo.setLayoutCount = 1;
         l_PipelineLayoutInfo.pSetLayouts = &m_DescriptorSetLayout;
@@ -235,7 +241,7 @@ namespace Trident
         l_PipelineInfo.pMultisampleState = &l_Multisampling;
         l_PipelineInfo.pDepthStencilState = nullptr;
         l_PipelineInfo.pColorBlendState = &l_ColorBlending;
-        l_PipelineInfo.pDynamicState = nullptr;
+        l_PipelineInfo.pDynamicState = &l_DynamicState;
         l_PipelineInfo.layout = m_PipelineLayout;
         l_PipelineInfo.renderPass = m_RenderPass;
         l_PipelineInfo.subpass = 0;

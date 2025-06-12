@@ -12,18 +12,37 @@
 #include "Geometry/Cube.h"
 
 #include <vulkan/vulkan.h>
+#include <glm/glm.hpp>
 #include <vector>
 #include <array>
 #include <functional>
 
 namespace Trident
 {
+    struct CubeProperties
+    {
+        glm::vec3 Position{ 0.0f };
+        glm::vec3 Rotation{ 0.0f };
+        glm::vec3 Scale{ 1.0f };
+    };
+
+    struct ViewportInfo
+    {
+        glm::vec2 Position{ 0.0f };
+        glm::vec2 Size{ 0.0f };
+    };
+
     class Renderer
     {
     public:
         void Init();
         void Shutdown();
         void DrawFrame();
+
+        void SetCubeProperties(const CubeProperties& props) { m_CubeProperties = props; }
+        CubeProperties GetCubeProperties() const { return m_CubeProperties; }
+        void SetViewport(const ViewportInfo& info) { m_Viewport = info; }
+        ViewportInfo GetViewport() const { return m_Viewport; }
 
         VkRenderPass GetRenderPass() const { return m_Pipeline.GetRenderPass(); }
         uint32_t GetImageCount() const { return m_Swapchain.GetImageCount(); }
@@ -58,6 +77,9 @@ namespace Trident
         std::vector<VkDeviceMemory> m_UniformBuffersMemory;
 
         Buffers m_Buffers;
+
+        CubeProperties m_CubeProperties{};
+        ViewportInfo m_Viewport{};
 
     private:
         // Core setup
