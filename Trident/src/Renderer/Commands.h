@@ -14,7 +14,7 @@ namespace Trident
 
         VkCommandPool GetCommandPool() const { return m_CommandPool; }
         const std::vector<VkCommandBuffer>& GetCommandBuffers() const { return m_CommandBuffers; }
-        VkCommandBuffer GetCommandBuffer(uint32_t index) const { return m_CommandBuffers[index]; }
+        VkCommandBuffer& GetCommandBuffer(uint32_t index) { return m_CommandBuffers[index]; }
 
         VkSemaphore GetImageAvailableSemaphore(size_t index) const { return m_ImageAvailableSemaphores[index]; }
         VkSemaphore GetRenderFinishedSemaphore(size_t index) const { return m_RenderFinishedSemaphores[index]; }

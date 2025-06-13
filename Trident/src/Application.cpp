@@ -19,12 +19,6 @@ namespace Trident
 
         m_Renderer = std::make_unique<Renderer>();
         m_Renderer->Init();
-
-        m_ImGuiLayer = std::make_unique<ImGuiLayer>();
-        m_ImGuiLayer->Init(m_Window.GetNativeWindow(), m_Instance, m_Device, m_PhysicalDevice,
-            m_QueueFamilyIndices.GraphicsFamily.value(), m_GraphicsQueue, m_Renderer->GetRenderPass(), m_Renderer->GetImageCount(), m_Renderer->GetCommandPool());
-
-        m_Renderer->CreateOffscreenTarget();
     }
 
     void Application::Update()
@@ -67,12 +61,6 @@ namespace Trident
     void Application::CleanupVulkan()
     {
         vkDeviceWaitIdle(m_Device);
-
-        if (m_ImGuiLayer)
-        {
-            m_ImGuiLayer->Shutdown();
-            m_ImGuiLayer.reset();
-        }
 
         if (m_Renderer)
         {

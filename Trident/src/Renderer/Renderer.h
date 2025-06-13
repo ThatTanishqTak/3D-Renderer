@@ -41,7 +41,6 @@ namespace Trident
         void DrawFrame();
 
         void RecreateSwapchain();
-        void CreateOffscreenTarget();
 
         uint32_t GetCurrentFrame() const { return m_Commands.CurrentFrame(); }
 
@@ -52,11 +51,6 @@ namespace Trident
 
         VkRenderPass GetRenderPass() const { return m_Pipeline.GetRenderPass(); }
         uint32_t GetImageCount() const { return m_Swapchain.GetImageCount(); }
-        ImTextureID GetOffscreenTextureID() const { return m_OffscreenTextureID; }
-
-        VkImageView GetOffscreenImageView() const { return m_OffscreenImageView; }
-        VkSampler GetOffscreenSampler() const { return m_OffscreenSampler; }
-        VkImageLayout GetOffscreenLayout() const { return VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL; }
 
         VkDescriptorSetLayout GetDescriptorSetLayout() const { return m_Pipeline.GetDescriptorSetLayout(); }
         VkCommandPool GetCommandPool() const { return m_Commands.GetCommandPool(); }
