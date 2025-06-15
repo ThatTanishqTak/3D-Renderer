@@ -14,13 +14,12 @@ namespace Trident
 
         m_Swapchain.Init();
         m_Pipeline.Init(m_Swapchain);
-        m_Commands.Init(m_Pipeline.GetFramebuffers().size());
+        m_Commands.Init(m_Swapchain.GetImageCount());
         m_Buffers.CreateVertexBuffer(Geometry::CubeVertices, m_Commands.GetCommandPool(), m_VertexBuffer, m_VertexBufferMemory);
         m_Buffers.CreateIndexBuffer(Geometry::CubeIndices, m_Commands.GetCommandPool(), m_IndexBuffer, m_IndexBufferMemory, m_IndexCount);
         m_Buffers.CreateUniformBuffers(m_Swapchain.GetImageCount(), m_UniformBuffers, m_UniformBuffersMemory);
         CreateDescriptorPool();
         CreateDescriptorSets();
-        //CreateOffscreenTarget();
 
         TR_CORE_INFO("-------RENDERER INITIALIZED-------");
     }
@@ -64,7 +63,7 @@ namespace Trident
 
         uint32_t l_ImageIndex;
         VkResult l_Result = vkAcquireNextImageKHR(Application::GetDevice(), m_Swapchain.GetSwapchain(), UINT64_MAX,
-            m_Commands.GetImageAvailableSemaphore(m_Commands.CurrentFrame()), VK_NULL_HANDLE, &l_ImageIndex);
+            m_Commands.GetImageAvailableSemaphorePerImage(m_Commands.CurrentFrame()), VK_NULL_HANDLE, &l_ImageIndex);
 
         if (l_Result == VK_ERROR_OUT_OF_DATE_KHR || l_Result == VK_SUBOPTIMAL_KHR)
         {
@@ -72,6 +71,7 @@ namespace Trident
 
             return;
         }
+
         else if (l_Result != VK_SUCCESS)
         {
             TR_CORE_CRITICAL("Failed to acquire swapchain image (code {})", static_cast<int>(l_Result));
@@ -146,9 +146,12 @@ namespace Trident
         vkEndCommandBuffer(m_Commands.GetCommandBuffer(l_ImageIndex));
 
         // Submit
-        VkSemaphore l_WaitSemaphores[] = { m_Commands.GetImageAvailableSemaphore(m_Commands.CurrentFrame()) };
+        VkSemaphore imageAvailable = m_Commands.GetImageAvailableSemaphorePerImage(l_ImageIndex);
+        VkSemaphore renderFinished = m_Commands.GetRenderFinishedSemaphorePerImage(l_ImageIndex);
+
+        VkSemaphore l_WaitSemaphores[] = { imageAvailable };
+        VkSemaphore l_SignalSemaphores[] = { renderFinished };
         VkPipelineStageFlags l_WaitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
-        VkSemaphore l_SignalSemaphores[] = { m_Commands.GetRenderFinishedSemaphore(m_Commands.CurrentFrame()) };
 
         VkSubmitInfo l_SubmitInfo{ VK_STRUCTURE_TYPE_SUBMIT_INFO };
         l_SubmitInfo.waitSemaphoreCount = 1;
@@ -205,7 +208,7 @@ namespace Trident
         m_Swapchain.Init();
         m_Pipeline.CreateFramebuffers(m_Swapchain);
 
-        m_Commands.Recreate(m_Pipeline.GetFramebuffers().size());
+        m_Commands.Recreate(m_Swapchain.GetImageCount());
 
         TR_CORE_TRACE("Swapchain Recreated");
     }

@@ -8,3 +8,6 @@
 	path = Trident/vendor/imgui
 	url = https://github.com/ThatTanishqTak/imgui.git
 	branch = docking
+[submodule "Trident/vendor/tinygltf"]
+	path = Trident/vendor/tinygltf
+	url = https://github.com/ThatTanishqTak/tinygltf.git

@@ -219,15 +219,37 @@ namespace Trident
         std::vector<VkPhysicalDevice> l_Devices(l_DeviceCount);
         vkEnumeratePhysicalDevices(m_Instance, &l_DeviceCount, l_Devices.data());
 
+        VkPhysicalDevice l_BestDevice = VK_NULL_HANDLE;
+
         for (const auto& it_Device : l_Devices)
         {
-            if (IsDeviceSuitable(it_Device))
+            if (!IsDeviceSuitable(it_Device))
+            {
+                continue;
+            }
+
+            VkPhysicalDeviceProperties l_Properites;
+            vkGetPhysicalDeviceProperties(it_Device, &l_Properites);
+
+            if (l_Properites.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
             {
                 m_PhysicalDevice = it_Device;
                 m_QueueFamilyIndices = FindQueueFamilies(it_Device);
 
                 break;
             }
+
+            // fallback (if no discrete GPU is found)
+            if (l_BestDevice == VK_NULL_HANDLE)
+            {
+                l_BestDevice = it_Device;
+                m_QueueFamilyIndices = FindQueueFamilies(it_Device);
+            }
+        }
+
+        if (m_PhysicalDevice == VK_NULL_HANDLE && l_BestDevice != VK_NULL_HANDLE)
+        {
+            m_PhysicalDevice = l_BestDevice;
         }
 
         if (m_PhysicalDevice == VK_NULL_HANDLE)
@@ -281,7 +303,7 @@ namespace Trident
 
         if (vkCreateDevice(m_PhysicalDevice, &l_DeviceCreateInfo, nullptr, &m_Device) != VK_SUCCESS)
         {
-            TR_CORE_CRITICAL("Failed to create logical device");
+            TR_CORE_CRITICAL("Failed to create logical it_Device");
         }
 
         vkGetDeviceQueue(m_Device, *a_QueueFamily.GraphicsFamily, 0, &m_GraphicsQueue);
@@ -302,14 +324,14 @@ namespace Trident
         return l_Extension;
     }
 
-    QueueFamilyIndices Application::FindQueueFamilies(VkPhysicalDevice device)
+    QueueFamilyIndices Application::FindQueueFamilies(VkPhysicalDevice it_Device)
     {
         QueueFamilyIndices l_Indices;
         uint32_t l_Count = 0;
 
-        vkGetPhysicalDeviceQueueFamilyProperties(device, &l_Count, nullptr);
+        vkGetPhysicalDeviceQueueFamilyProperties(it_Device, &l_Count, nullptr);
         std::vector<VkQueueFamilyProperties> l_Families(l_Count);
-        vkGetPhysicalDeviceQueueFamilyProperties(device, &l_Count, l_Families.data());
+        vkGetPhysicalDeviceQueueFamilyProperties(it_Device, &l_Count, l_Families.data());
 
         for (uint32_t i = 0; i < l_Count; ++i)
         {
@@ -319,7 +341,7 @@ namespace Trident
             }
 
             VkBool32 l_IsPresent = false;
-            vkGetPhysicalDeviceSurfaceSupportKHR(device, i, GetSurface(), &l_IsPresent);
+            vkGetPhysicalDeviceSurfaceSupportKHR(it_Device, i, GetSurface(), &l_IsPresent);
             if (l_IsPresent)
             {
                 l_Indices.PresentFamily = i;
@@ -373,18 +395,18 @@ namespace Trident
         return true;
     }
 
-    bool Application::IsDeviceSuitable(VkPhysicalDevice device)
+    bool Application::IsDeviceSuitable(VkPhysicalDevice it_Device)
     {
         VkPhysicalDeviceProperties l_Properties{};
-        vkGetPhysicalDeviceProperties(device, &l_Properties);
+        vkGetPhysicalDeviceProperties(it_Device, &l_Properties);
 
-        auto a_Indices = FindQueueFamilies(device);
+        auto a_Indices = FindQueueFamilies(it_Device);
 
-        // Check required device extensions
+        // Check required it_Device extensions
         uint32_t l_ExtensionCount = 0;
-        vkEnumerateDeviceExtensionProperties(device, nullptr, &l_ExtensionCount, nullptr);
+        vkEnumerateDeviceExtensionProperties(it_Device, nullptr, &l_ExtensionCount, nullptr);
         std::vector<VkExtensionProperties> l_AvailableExtensions(l_ExtensionCount);
-        vkEnumerateDeviceExtensionProperties(device, nullptr, &l_ExtensionCount, l_AvailableExtensions.data());
+        vkEnumerateDeviceExtensionProperties(it_Device, nullptr, &l_ExtensionCount, l_AvailableExtensions.data());
 
         std::set<std::string> l_RequiredExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
         for (const auto& a_Extensions : l_AvailableExtensions)
@@ -398,10 +420,10 @@ namespace Trident
         if (l_ExtensionsSupported)
         {
             uint32_t l_FormatCount = 0;
-            vkGetPhysicalDeviceSurfaceFormatsKHR(device, GetSurface(), &l_FormatCount, nullptr);
+            vkGetPhysicalDeviceSurfaceFormatsKHR(it_Device, GetSurface(), &l_FormatCount, nullptr);
 
             uint32_t l_PresentModeCount = 0;
-            vkGetPhysicalDeviceSurfacePresentModesKHR(device, GetSurface(), &l_PresentModeCount, nullptr);
+            vkGetPhysicalDeviceSurfacePresentModesKHR(it_Device, GetSurface(), &l_PresentModeCount, nullptr);
 
             l_SwapchainAdequate = l_FormatCount > 0 && l_PresentModeCount > 0;
         }
