@@ -146,8 +146,8 @@ namespace Trident
         vkEndCommandBuffer(m_Commands.GetCommandBuffer(l_ImageIndex));
 
         // Submit
-        VkSemaphore imageAvailable = m_Commands.GetImageAvailableSemaphorePerImage(m_Commands.CurrentFrame());
-        VkSemaphore renderFinished = m_Commands.GetRenderFinishedSemaphorePerImage(m_Commands.CurrentFrame());
+        VkSemaphore imageAvailable = m_Commands.GetImageAvailableSemaphorePerImage(l_ImageIndex);
+        VkSemaphore renderFinished = m_Commands.GetRenderFinishedSemaphorePerImage(l_ImageIndex);
 
         VkSemaphore l_WaitSemaphores[] = { imageAvailable };
         VkSemaphore l_SignalSemaphores[] = { renderFinished };
@@ -182,7 +182,6 @@ namespace Trident
 
         m_Commands.CurrentFrame() = (m_Commands.CurrentFrame() + 1) % m_Commands.GetFrameCount();
     }
-
 
     void Renderer::RecreateSwapchain()
     {
