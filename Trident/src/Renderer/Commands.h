@@ -21,6 +21,8 @@ namespace Trident
         VkFence GetInFlightFence(size_t index) const { return m_InFlightFences[index]; }
         VkFence& GetImageInFlight(size_t index) { return m_ImagesInFlight[index]; }
 
+        void SetImageInFlight(size_t index, VkFence fence) { m_ImagesInFlight[index] = fence; }
+
         size_t GetFrameCount() const { return m_ImageAvailableSemaphoresPerImage.size(); }
         size_t& CurrentFrame() { return m_CurrentFrame; }
         size_t CurrentFrame() const { return m_CurrentFrame; }
