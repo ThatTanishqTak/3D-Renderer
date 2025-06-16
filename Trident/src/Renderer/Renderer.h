@@ -97,6 +97,13 @@ namespace Trident
         void CreateDescriptorPool();
         void CreateDescriptorSets();
 
+        void UpdateUniformBuffer(uint32_t currentImage);
+
+        bool AcquireNextImage(uint32_t& imageIndex, VkFence inFlightFence);
+        bool RecordCommandBuffer(uint32_t imageIndex);
+        bool SubmitFrame(uint32_t imageIndex, VkFence inFlightFence);
+        void PresentFrame(uint32_t imageIndex);
+
         bool IsValidViewport() const { return m_Viewport.Size.x > 0 && m_Viewport.Size.y > 0; }
     };
 }
