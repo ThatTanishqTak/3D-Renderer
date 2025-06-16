@@ -1,5 +1,7 @@
 ﻿#include "Application.h"
 
+#include "Renderer/RenderCommand.h"
+
 #include <string>
 
 namespace Trident
@@ -18,7 +20,7 @@ namespace Trident
         InitVulkan();
 
         m_Renderer = std::make_unique<Renderer>();
-        m_Renderer->Init();
+        RenderCommand::Init();
     }
 
     void Application::Update()
@@ -29,7 +31,7 @@ namespace Trident
 
     void Application::RenderScene()
     {
-        m_Renderer->DrawFrame();
+        RenderCommand::DrawFrame();
     }
 
     void Application::Shutdown()
@@ -64,7 +66,7 @@ namespace Trident
 
         if (m_Renderer)
         {
-            m_Renderer->Shutdown();
+            RenderCommand::Shutdown();
             m_Renderer.reset();
         }
 

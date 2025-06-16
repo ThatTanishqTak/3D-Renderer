@@ -333,8 +333,8 @@ namespace Trident
         l_Model = glm::translate(l_Model, m_CubeProperties.Position);
         l_Model = glm::scale(l_Model, m_CubeProperties.Scale);
         l_Model = glm::rotate(l_Model, static_cast<float>(Utilities::Time::GetTime()), glm::vec3(1.0f, 1.0f, 1.0f));
-        l_CubeUBO.Model = l_Model;
 
+        l_CubeUBO.Model = l_Model;
         l_CubeUBO.View = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
 
         float l_AspectRatio = static_cast<float>(m_Swapchain.GetExtent().width) / static_cast<float>(m_Swapchain.GetExtent().height);
