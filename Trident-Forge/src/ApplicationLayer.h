@@ -22,10 +22,4 @@ public:
 private:
     std::unique_ptr<Trident::Window> m_Window;
     std::unique_ptr<Trident::Application> m_Engine;
-
-    Trident::CubeProperties m_CubeProps{};
-    Trident::ViewportInfo m_Viewport{};
-
-private:
-    void RenderUI();
 };

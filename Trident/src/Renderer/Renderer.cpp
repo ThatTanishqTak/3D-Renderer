@@ -15,9 +15,11 @@ namespace Trident
         m_Swapchain.Init();
         m_Pipeline.Init(m_Swapchain);
         m_Commands.Init(m_Swapchain.GetImageCount());
+        
         m_Buffers.CreateVertexBuffer(Geometry::CubeVertices, m_Commands.GetCommandPool(), m_VertexBuffer, m_VertexBufferMemory);
         m_Buffers.CreateIndexBuffer(Geometry::CubeIndices, m_Commands.GetCommandPool(), m_IndexBuffer, m_IndexBufferMemory, m_IndexCount);
         m_Buffers.CreateUniformBuffers(m_Swapchain.GetImageCount(), m_UniformBuffers, m_UniformBuffersMemory);
+        
         CreateDescriptorPool();
         CreateDescriptorSets();
 
@@ -58,126 +60,128 @@ namespace Trident
 
     void Renderer::DrawFrame()
     {
-        const size_t currentFrame = m_Commands.CurrentFrame();
+        VkFence l_InFlightFence = m_Commands.GetInFlightFence(m_Commands.CurrentFrame());
+        vkWaitForFences(Application::GetDevice(), 1, &l_InFlightFence, VK_TRUE, UINT64_MAX);
 
-        VkFence inFlightFence = m_Commands.GetInFlightFence(currentFrame);
-        vkWaitForFences(Application::GetDevice(), 1, &inFlightFence, VK_TRUE, UINT64_MAX);
+        uint32_t l_ImageIndex;
+        VkResult l_Result = vkAcquireNextImageKHR(Application::GetDevice(), m_Swapchain.GetSwapchain(), UINT64_MAX,
+            m_Commands.GetImageAvailableSemaphorePerImage(m_Commands.CurrentFrame()), VK_NULL_HANDLE, &l_ImageIndex);
 
-        // Acquire next image
-        uint32_t imageIndex;
-        VkSemaphore imageAvailable = m_Commands.GetImageAvailableSemaphorePerImage(currentFrame);
-
-        VkResult result = vkAcquireNextImageKHR(
-            Application::GetDevice(),
-            m_Swapchain.GetSwapchain(),
-            UINT64_MAX,
-            imageAvailable,
-            VK_NULL_HANDLE,
-            &imageIndex
-        );
-
-        if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
+        if (l_Result == VK_ERROR_OUT_OF_DATE_KHR)
+        {
             RecreateSwapchain();
-            return;
-        }
-        else if (result != VK_SUCCESS) {
-            TR_CORE_CRITICAL("Failed to acquire swapchain image: {}", static_cast<int>(result));
+            
             return;
         }
 
-        // If this image is already being used, wait for it
-        if (VkFence imageFence = m_Commands.GetImageInFlight(imageIndex); imageFence != VK_NULL_HANDLE) {
-            vkWaitForFences(Application::GetDevice(), 1, &imageFence, VK_TRUE, UINT64_MAX);
+        else if (l_Result != VK_SUCCESS && l_Result != VK_SUBOPTIMAL_KHR)
+        {
+            TR_CORE_CRITICAL("Failed to acquire swap chain image!");
+        
+            return;
         }
 
-        // Mark this image as now being used by this frame
-        m_Commands.SetImageInFlight(imageIndex, inFlightFence);
+        VkFence& l_ImageFence = m_Commands.GetImageInFlight(l_ImageIndex);
+        if (l_ImageFence != VK_NULL_HANDLE)
+        {
+            vkWaitForFences(Application::GetDevice(), 1, &l_ImageFence, VK_TRUE, UINT64_MAX);
+        }
 
-        // Update UBO
-        UniformBufferObject ubo{};
-        ubo.Model = glm::rotate(glm::mat4(1.0f), Utilities::Time::GetTime() * glm::radians(90.0f), glm::vec3(0, 0, 1));
-        ubo.View = glm::lookAt(glm::vec3(2, 2, 2), glm::vec3(0, 0, 0), glm::vec3(0, 0, 1));
-        ubo.Projection = glm::perspective(glm::radians(45.0f), m_Swapchain.GetExtent().width / float(m_Swapchain.GetExtent().height), 0.1f, 10.0f);
-        ubo.Projection[1][1] *= -1;
+        m_Commands.SetImageInFlight(l_ImageIndex, l_InFlightFence);
 
-        void* data;
-        vkMapMemory(Application::GetDevice(), m_UniformBuffersMemory[imageIndex], 0, sizeof(ubo), 0, &data);
-        memcpy(data, &ubo, sizeof(ubo));
-        vkUnmapMemory(Application::GetDevice(), m_UniformBuffersMemory[imageIndex]);
+        vkResetFences(Application::GetDevice(), 1, &l_InFlightFence);
+        VkCommandBuffer l_CommandBuffer = m_Commands.GetCommandBuffer(l_ImageIndex);
 
-        // Record command buffer
-        VkCommandBuffer cmd = m_Commands.GetCommandBuffer(imageIndex);
-        vkResetCommandBuffer(cmd, 0);
+        VkCommandBufferBeginInfo l_BeginInfo{ VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
+        vkBeginCommandBuffer(l_CommandBuffer, &l_BeginInfo);
 
-        VkCommandBufferBeginInfo beginInfo{ VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
-        vkBeginCommandBuffer(cmd, &beginInfo);
+        VkRenderPassBeginInfo l_RenderPassInfo{ VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO };
+        l_RenderPassInfo.renderPass = m_Pipeline.GetRenderPass();
+        l_RenderPassInfo.framebuffer = m_Pipeline.GetFramebuffers()[l_ImageIndex];
+        l_RenderPassInfo.renderArea.offset = { 0, 0 };
+        l_RenderPassInfo.renderArea.extent = m_Swapchain.GetExtent();
 
-        VkRenderPassBeginInfo renderPassInfo{ VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO };
-        renderPassInfo.renderPass = m_Pipeline.GetRenderPass();
-        renderPassInfo.framebuffer = m_Pipeline.GetFramebuffers()[imageIndex];
-        renderPassInfo.renderArea.offset = { 0, 0 };
-        renderPassInfo.renderArea.extent = m_Swapchain.GetExtent();
+        VkClearValue l_ClearColor = { 0.0f, 0.0f, 0.0f, 1.0f };
+        l_RenderPassInfo.clearValueCount = 1;
+        l_RenderPassInfo.pClearValues = &l_ClearColor;
 
-        VkClearValue clearColor = { {0.0f, 0.0f, 0.0f, 1.0f} };
-        renderPassInfo.clearValueCount = 1;
-        renderPassInfo.pClearValues = &clearColor;
+        vkCmdBeginRenderPass(l_CommandBuffer, &l_RenderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-        vkCmdBeginRenderPass(cmd, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+        VkViewport l_Viewport{};
+        l_Viewport.x = 0.0f;
+        l_Viewport.y = 0.0f;
+        l_Viewport.width = static_cast<float>(m_Swapchain.GetExtent().width);
+        l_Viewport.height = static_cast<float>(m_Swapchain.GetExtent().height);
+        l_Viewport.minDepth = 0.0f;
+        l_Viewport.maxDepth = 1.0f;
+        vkCmdSetViewport(l_CommandBuffer, 0, 1, &l_Viewport);
 
-        VkViewport viewport{ 0.0f, 0.0f,
-                             static_cast<float>(m_Swapchain.GetExtent().width),
-                             static_cast<float>(m_Swapchain.GetExtent().height),
-                             0.0f, 1.0f };
-        vkCmdSetViewport(cmd, 0, 1, &viewport);
+        VkRect2D l_Scissor{};
+        l_Scissor.offset = { 0, 0 };
+        l_Scissor.extent = m_Swapchain.GetExtent();
+        vkCmdSetScissor(l_CommandBuffer, 0, 1, &l_Scissor);
 
-        VkRect2D scissor{ {0, 0}, m_Swapchain.GetExtent() };
-        vkCmdSetScissor(cmd, 0, 1, &scissor);
+        vkCmdBindPipeline(l_CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline.GetPipeline());
 
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline.GetPipeline());
-        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline.GetPipelineLayout(),
-            0, 1, &m_DescriptorSets[imageIndex], 0, nullptr);
+        VkBuffer l_VertexBuffers[] = { m_VertexBuffer };
+        VkDeviceSize l_Offsets[] = { 0 };
 
-        VkBuffer vertexBuffers[] = { m_VertexBuffer };
-        VkDeviceSize offsets[] = { 0 };
-        vkCmdBindVertexBuffers(cmd, 0, 1, vertexBuffers, offsets);
-        vkCmdBindIndexBuffer(cmd, m_IndexBuffer, 0, VK_INDEX_TYPE_UINT16);
+        vkCmdBindVertexBuffers(l_CommandBuffer, 0, 1, l_VertexBuffers, l_Offsets);
+        vkCmdBindIndexBuffer(l_CommandBuffer, m_IndexBuffer, 0, VK_INDEX_TYPE_UINT16);
+        vkCmdBindDescriptorSets(l_CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline.GetPipelineLayout(), 0, 1, &m_DescriptorSets[l_ImageIndex], 0, nullptr);
 
-        vkCmdDrawIndexed(cmd, m_IndexCount, 1, 0, 0, 0);
-        vkCmdEndRenderPass(cmd);
-        vkEndCommandBuffer(cmd);
+        vkCmdDrawIndexed(l_CommandBuffer, m_IndexCount, 1, 0, 0, 0);
+        vkCmdEndRenderPass(l_CommandBuffer);
 
-        // Submit command buffer
-        VkSemaphore renderFinished = m_Commands.GetRenderFinishedSemaphorePerImage(currentFrame);
+        if (vkEndCommandBuffer(l_CommandBuffer) != VK_SUCCESS)
+        {
+            TR_CORE_CRITICAL("Failed to record command buffer!");
 
-        VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
-        VkSubmitInfo submitInfo{ VK_STRUCTURE_TYPE_SUBMIT_INFO };
-        submitInfo.waitSemaphoreCount = 1;
-        submitInfo.pWaitSemaphores = &imageAvailable;
-        submitInfo.pWaitDstStageMask = waitStages;
-        submitInfo.commandBufferCount = 1;
-        submitInfo.pCommandBuffers = &cmd;
-        submitInfo.signalSemaphoreCount = 1;
-        submitInfo.pSignalSemaphores = &renderFinished;
+            return;
+        }
 
-        vkResetFences(Application::GetDevice(), 1, &inFlightFence);
-        vkQueueSubmit(Application::GetGraphicsQueue(), 1, &submitInfo, inFlightFence);
+        VkSemaphore l_WaitSemaphores[] = { m_Commands.GetImageAvailableSemaphorePerImage(m_Commands.CurrentFrame()) };
+        VkPipelineStageFlags l_WaitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+        VkSemaphore l_SignalSemaphores[] = { m_Commands.GetRenderFinishedSemaphorePerImage(l_ImageIndex) };
 
-        // Present
-        VkPresentInfoKHR presentInfo{ VK_STRUCTURE_TYPE_PRESENT_INFO_KHR };
-        presentInfo.waitSemaphoreCount = 1;
-        presentInfo.pWaitSemaphores = &renderFinished;
-        VkSwapchainKHR swapchains[] = { m_Swapchain.GetSwapchain() };
-        presentInfo.swapchainCount = 1;
-        presentInfo.pSwapchains = swapchains;
-        presentInfo.pImageIndices = &imageIndex;
+        VkSubmitInfo l_SubmitInfo{ VK_STRUCTURE_TYPE_SUBMIT_INFO };
+        l_SubmitInfo.waitSemaphoreCount = 1;
+        l_SubmitInfo.pWaitSemaphores = l_WaitSemaphores;
+        l_SubmitInfo.pWaitDstStageMask = l_WaitStages;
+        l_SubmitInfo.commandBufferCount = 1;
+        l_SubmitInfo.pCommandBuffers = &l_CommandBuffer;
+        l_SubmitInfo.signalSemaphoreCount = 1;
+        l_SubmitInfo.pSignalSemaphores = l_SignalSemaphores;
 
-        result = vkQueuePresentKHR(Application::GetPresentQueue(), &presentInfo);
-        if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
+        if (vkQueueSubmit(Application::GetGraphicsQueue(), 1, &l_SubmitInfo, l_InFlightFence) != VK_SUCCESS)
+        {
+            TR_CORE_CRITICAL("Failed to submit draw command buffer!");
+        
+            return;
+        }
+
+        VkPresentInfoKHR l_PresentInfo{ VK_STRUCTURE_TYPE_PRESENT_INFO_KHR };
+        l_PresentInfo.waitSemaphoreCount = 1;
+        l_PresentInfo.pWaitSemaphores = l_SignalSemaphores;
+
+        VkSwapchainKHR l_Swapchains[] = { m_Swapchain.GetSwapchain() };
+        l_PresentInfo.swapchainCount = 1;
+        l_PresentInfo.pSwapchains = l_Swapchains;
+        l_PresentInfo.pImageIndices = &l_ImageIndex;
+
+        VkResult l_PresentResult = vkQueuePresentKHR(Application::GetPresentQueue(), &l_PresentInfo);
+
+        if (l_PresentResult == VK_ERROR_OUT_OF_DATE_KHR || l_PresentResult == VK_SUBOPTIMAL_KHR)
+        {
             RecreateSwapchain();
         }
 
-        // Advance frame
-        m_Commands.CurrentFrame() = (currentFrame + 1) % m_Commands.GetFrameCount();
+        else if (l_PresentResult != VK_SUCCESS)
+        {
+            TR_CORE_CRITICAL("Failed to present swap chain image!");
+        }
+
+        m_Commands.CurrentFrame() = (m_Commands.CurrentFrame() + 1) % m_Commands.GetFrameCount();
     }
 
     void Renderer::RecreateSwapchain()
@@ -192,6 +196,7 @@ namespace Trident
         while (l_Width == 0 || l_Height == 0)
         {
             glfwWaitEvents();
+
             Application::GetWindow().GetFramebufferSize(l_Width, l_Height);
         }
 
@@ -238,16 +243,16 @@ namespace Trident
 
         size_t l_ImageCount = m_Swapchain.GetImageCount();
 
-        std::vector<VkDescriptorSetLayout> layouts(l_ImageCount, m_Pipeline.GetDescriptorSetLayout());
+        std::vector<VkDescriptorSetLayout> l_Layouts(l_ImageCount, m_Pipeline.GetDescriptorSetLayout());
 
-        VkDescriptorSetAllocateInfo allocInfo{};
-        allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        allocInfo.descriptorPool = m_DescriptorPool;
-        allocInfo.descriptorSetCount = l_ImageCount;
-        allocInfo.pSetLayouts = layouts.data();
+        VkDescriptorSetAllocateInfo l_AllocateInfo{};
+        l_AllocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        l_AllocateInfo.descriptorPool = m_DescriptorPool;
+        l_AllocateInfo.descriptorSetCount = l_ImageCount;
+        l_AllocateInfo.pSetLayouts = l_Layouts.data();
 
         m_DescriptorSets.resize(l_ImageCount);
-        if (vkAllocateDescriptorSets(Application::GetDevice(), &allocInfo, m_DescriptorSets.data()) != VK_SUCCESS)
+        if (vkAllocateDescriptorSets(Application::GetDevice(), &l_AllocateInfo, m_DescriptorSets.data()) != VK_SUCCESS)
         {
             TR_CORE_CRITICAL("Failed to allocate descriptor sets");
         }

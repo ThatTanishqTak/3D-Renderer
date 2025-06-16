@@ -30,12 +30,5 @@ void ApplicationLayer::Run()
     {
         m_Engine->Update();
         m_Engine->RenderScene();
-        
-        //RenderUI();
     }
-}
-
-void ApplicationLayer::RenderUI()
-{
-
 }

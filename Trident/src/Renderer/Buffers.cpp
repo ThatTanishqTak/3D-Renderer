@@ -7,16 +7,16 @@ namespace Trident
 {
     void Buffers::Cleanup()
     {
-        for (auto& a_Allocation : m_Allocations)
+        for (auto& it_Allocation : m_Allocations)
         {
-            if (a_Allocation.Buffer != VK_NULL_HANDLE)
+            if (it_Allocation.Buffer != VK_NULL_HANDLE)
             {
-                vkDestroyBuffer(Application::GetDevice(), a_Allocation.Buffer, nullptr);
+                vkDestroyBuffer(Application::GetDevice(), it_Allocation.Buffer, nullptr);
             }
         
-            if (a_Allocation.Memory != VK_NULL_HANDLE)
+            if (it_Allocation.Memory != VK_NULL_HANDLE)
             {
-                vkFreeMemory(Application::GetDevice(), a_Allocation.Memory, nullptr);
+                vkFreeMemory(Application::GetDevice(), it_Allocation.Memory, nullptr);
             }
         }
 
@@ -108,6 +108,8 @@ namespace Trident
 
         return EXIT_FAILURE;
     }
+
+    //----------------------------------------------------------------------------------------------------------------------------------------------------------//
 
     void Buffers::CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory)
     {
