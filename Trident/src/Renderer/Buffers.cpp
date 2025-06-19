@@ -3,6 +3,8 @@
 #include "Application.h"
 #include "Core/Utilities.h"
 
+#include <algorithm>
+
 namespace Trident
 {
     void Buffers::Cleanup()
@@ -169,5 +171,29 @@ namespace Trident
         vkQueueWaitIdle(Application::GetGraphicsQueue());
 
         vkFreeCommandBuffers(Application::GetDevice(), commandPool, 1, &l_CommandBuffer);
+    }
+
+    void Buffers::DestroyBuffer(VkBuffer buffer, VkDeviceMemory memory)
+    {
+        if (buffer != VK_NULL_HANDLE)
+        {
+            vkDestroyBuffer(Application::GetDevice(), buffer, nullptr);
+        }
+
+        if (memory != VK_NULL_HANDLE)
+        {
+            vkFreeMemory(Application::GetDevice(), memory, nullptr);
+        }
+
+        auto it = std::find_if(m_Allocations.begin(), m_Allocations.end(),
+            [&](const Allocation& alloc)
+            {
+                return alloc.Buffer == buffer && alloc.Memory == memory;
+            });
+
+        if (it != m_Allocations.end())
+        {
+            m_Allocations.erase(it);
+        }
     }
 }

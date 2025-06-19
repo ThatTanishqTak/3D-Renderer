@@ -10,6 +10,7 @@
 #include "Renderer/Commands.h"
 
 #include "Geometry/Cube.h"
+#include "Geometry/Mesh.h"
 
 #include <vulkan/vulkan.h>
 #include <glm/glm.hpp>
@@ -41,6 +42,7 @@ namespace Trident
         void DrawFrame();
 
         void RecreateSwapchain();
+        void UploadMesh(const Geometry::Mesh& mesh);
 
         uint32_t GetCurrentFrame() const { return m_Commands.CurrentFrame(); }
 

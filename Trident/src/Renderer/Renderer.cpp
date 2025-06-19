@@ -1,6 +1,7 @@
 ﻿#include "Renderer/Renderer.h"
 
 #include "Application.h"
+#include "Geometry/Mesh.h"
 
 #include <stdexcept>
 
@@ -92,6 +93,27 @@ namespace Trident
         PresentFrame(l_ImageIndex);
 
         m_Commands.CurrentFrame() = (m_Commands.CurrentFrame() + 1) % m_Commands.GetFrameCount();
+    }
+
+    void Renderer::UploadMesh(const Geometry::Mesh& mesh)
+    {
+        if (m_VertexBuffer != VK_NULL_HANDLE)
+        {
+            m_Buffers.DestroyBuffer(m_VertexBuffer, m_VertexBufferMemory);
+            m_VertexBuffer = VK_NULL_HANDLE;
+            m_VertexBufferMemory = VK_NULL_HANDLE;
+        }
+
+        if (m_IndexBuffer != VK_NULL_HANDLE)
+        {
+            m_Buffers.DestroyBuffer(m_IndexBuffer, m_IndexBufferMemory);
+            m_IndexBuffer = VK_NULL_HANDLE;
+            m_IndexBufferMemory = VK_NULL_HANDLE;
+            m_IndexCount = 0;
+        }
+
+        m_Buffers.CreateVertexBuffer(mesh.Vertices, m_Commands.GetCommandPool(), m_VertexBuffer, m_VertexBufferMemory);
+        m_Buffers.CreateIndexBuffer(mesh.Indices, m_Commands.GetCommandPool(), m_IndexBuffer, m_IndexBufferMemory, m_IndexCount);
     }
 
     void Renderer::RecreateSwapchain()

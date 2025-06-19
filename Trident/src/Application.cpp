@@ -172,7 +172,7 @@ namespace Trident
 
         if (!a_Function)
         {
-            TR_CORE_ERROR("vkCreateDebugUtilsMessengerEXT not found");
+            TR_CORE_CRITICAL("vkCreateDebugUtilsMessengerEXT not found");
 
             return;
         }
