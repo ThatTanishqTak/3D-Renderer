@@ -41,6 +41,16 @@ target_include_directories(spdlog INTERFACE
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/vendor/spdlog/include>
 )
 
+add_library(stb INTERFACE)
+target_include_directories(stb INTERFACE
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/vendor/stb>
+)
+
+add_library(tinyobj INTERFACE)
+target_include_directories(tinyobj INTERFACE
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/vendor/stb>
+)
+
 set(IMGUI_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/vendor/imgui")
 file(GLOB IMGUI_SOURCES
   ${IMGUI_ROOT}/*.cpp
@@ -71,6 +81,8 @@ target_link_libraries(Trident PUBLIC
   glm
   spdlog
   imgui
+  stb
+  tinyobj
 )
 
 option(TRIDENT_ENABLE_VALIDATION "Enable Vulkan Validation Layers" ON)

@@ -53,6 +53,30 @@ namespace Trident
         m_UniformBuffers.clear();
         m_UniformBuffersMemory.clear();
 
+        if (m_TextureSampler != VK_NULL_HANDLE)
+        {
+            vkDestroySampler(Application::GetDevice(), m_TextureSampler, nullptr);
+            m_TextureSampler = VK_NULL_HANDLE;
+        }
+
+        if (m_TextureImageView != VK_NULL_HANDLE)
+        {
+            vkDestroyImageView(Application::GetDevice(), m_TextureImageView, nullptr);
+            m_TextureImageView = VK_NULL_HANDLE;
+        }
+
+        if (m_TextureImage != VK_NULL_HANDLE)
+        {
+            vkDestroyImage(Application::GetDevice(), m_TextureImage, nullptr);
+            m_TextureImage = VK_NULL_HANDLE;
+        }
+
+        if (m_TextureImageMemory != VK_NULL_HANDLE)
+        {
+            vkFreeMemory(Application::GetDevice(), m_TextureImageMemory, nullptr);
+            m_TextureImageMemory = VK_NULL_HANDLE;
+        }
+
         if (m_OffscreenSampler != VK_NULL_HANDLE)
         {
             vkDestroySampler(Application::GetDevice(), m_OffscreenSampler, nullptr);
@@ -123,6 +147,13 @@ namespace Trident
         m_Buffers.CreateIndexBuffer(mesh.Indices, m_Commands.GetCommandPool(), m_IndexBuffer, m_IndexBufferMemory, m_IndexCount);
     }
 
+    void Renderer::UploadTexture(const Loader::TextureData& texture)
+    {
+        // Currently just store texture data on CPU side
+        TR_CORE_TRACE("Uploading texture ({}x{})", texture.Width, texture.Height);
+        // Placeholder for future GPU upload implementation
+    }
+
     void Renderer::SetImGuiLayer(UI::ImGuiLayer* layer)
     {
         m_ImGuiLayer = layer;
@@ -163,14 +194,16 @@ namespace Trident
     {
         TR_CORE_TRACE("Creating Descriptor Pool");
 
-        VkDescriptorPoolSize l_PoolSize{};
-        l_PoolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        l_PoolSize.descriptorCount = m_Swapchain.GetImageCount();
+        VkDescriptorPoolSize l_PoolSizes[2]{};
+        l_PoolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        l_PoolSizes[0].descriptorCount = m_Swapchain.GetImageCount();
+        l_PoolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        l_PoolSizes[1].descriptorCount = m_Swapchain.GetImageCount();
 
         VkDescriptorPoolCreateInfo l_PoolInfo{};
         l_PoolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-        l_PoolInfo.poolSizeCount = 1;
-        l_PoolInfo.pPoolSizes = &l_PoolSize;
+        l_PoolInfo.poolSizeCount = 2;
+        l_PoolInfo.pPoolSizes = l_PoolSizes;
         l_PoolInfo.maxSets = m_Swapchain.GetImageCount();
 
         if (vkCreateDescriptorPool(Application::GetDevice(), &l_PoolInfo, nullptr, &m_DescriptorPool) != VK_SUCCESS)
@@ -208,6 +241,11 @@ namespace Trident
             l_BufferInfo.offset = 0;
             l_BufferInfo.range = sizeof(UniformBufferObject);
 
+            VkDescriptorImageInfo l_ImageInfo{};
+            l_ImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            l_ImageInfo.imageView = m_TextureImageView;
+            l_ImageInfo.sampler = m_TextureSampler;
+
             VkWriteDescriptorSet l_DescriptorWrite{};
             l_DescriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             l_DescriptorWrite.dstSet = m_DescriptorSets[i];
@@ -217,7 +255,17 @@ namespace Trident
             l_DescriptorWrite.descriptorCount = 1;
             l_DescriptorWrite.pBufferInfo = &l_BufferInfo;
 
-            vkUpdateDescriptorSets(Application::GetDevice(), 1, &l_DescriptorWrite, 0, nullptr);
+            VkWriteDescriptorSet l_ImageWrite{};
+            l_ImageWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            l_ImageWrite.dstSet = m_DescriptorSets[i];
+            l_ImageWrite.dstBinding = 1;
+            l_ImageWrite.dstArrayElement = 0;
+            l_ImageWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            l_ImageWrite.descriptorCount = 1;
+            l_ImageWrite.pImageInfo = &l_ImageInfo;
+
+            VkWriteDescriptorSet l_Writes[] = { l_DescriptorWrite, l_ImageWrite };
+            vkUpdateDescriptorSets(Application::GetDevice(), 2, l_Writes, 0, nullptr);
         }
 
         TR_CORE_TRACE("Descriptor Sets Allocated ({})", l_ImageCount);

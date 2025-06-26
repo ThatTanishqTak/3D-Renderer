@@ -126,9 +126,18 @@ namespace Trident
         l_UboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
         l_UboLayoutBinding.pImmutableSamplers = nullptr;
 
+        VkDescriptorSetLayoutBinding l_SamplerLayoutBinding{};
+        l_SamplerLayoutBinding.binding = 1;
+        l_SamplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        l_SamplerLayoutBinding.descriptorCount = 1;
+        l_SamplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+        l_SamplerLayoutBinding.pImmutableSamplers = nullptr;
+
+        VkDescriptorSetLayoutBinding l_Bindings[] = { l_UboLayoutBinding, l_SamplerLayoutBinding };
+
         VkDescriptorSetLayoutCreateInfo l_LayoutInfo{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
-        l_LayoutInfo.bindingCount = 1;
-        l_LayoutInfo.pBindings = &l_UboLayoutBinding;
+        l_LayoutInfo.bindingCount = 2;
+        l_LayoutInfo.pBindings = l_Bindings;
 
         if (vkCreateDescriptorSetLayout(Application::GetDevice(), &l_LayoutInfo, nullptr, &m_DescriptorSetLayout) != VK_SUCCESS)
         {

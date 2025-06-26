@@ -11,6 +11,7 @@
 
 #include "Geometry/Cube.h"
 #include "Geometry/Mesh.h"
+#include "Loader/TextureLoader.h"
 
 #include <vulkan/vulkan.h>
 #include <glm/glm.hpp>
@@ -46,6 +47,7 @@ namespace Trident
 
         void RecreateSwapchain();
         void UploadMesh(const Geometry::Mesh& mesh);
+        void UploadTexture(const Loader::TextureData& texture);
         void SetImGuiLayer(UI::ImGuiLayer* layer);
 
         uint32_t GetCurrentFrame() const { return m_Commands.CurrentFrame(); }
@@ -84,6 +86,10 @@ namespace Trident
         std::vector<VkDescriptorSet> m_DescriptorSets;
         std::vector<VkBuffer> m_UniformBuffers;
         std::vector<VkDeviceMemory> m_UniformBuffersMemory;
+        VkImage m_TextureImage = VK_NULL_HANDLE;
+        VkDeviceMemory m_TextureImageMemory = VK_NULL_HANDLE;
+        VkImageView m_TextureImageView = VK_NULL_HANDLE;
+        VkSampler m_TextureSampler = VK_NULL_HANDLE;
 
         // Offscreen rendering
         VkImage m_OffscreenImage = VK_NULL_HANDLE;
