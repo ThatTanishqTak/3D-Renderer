@@ -32,6 +32,9 @@ namespace Trident
     {
         TR_CORE_TRACE("Shutting Down Renderer");
 
+        // Ensure the GPU is idle before destroying resources
+        vkDeviceWaitIdle(Application::GetDevice());
+
         m_Commands.Cleanup();
 
         if (m_DescriptorPool != VK_NULL_HANDLE)
@@ -98,6 +101,9 @@ namespace Trident
 
     void Renderer::UploadMesh(const Geometry::Mesh& mesh)
     {
+        // Ensure no GPU operations are using the old buffers
+        vkDeviceWaitIdle(Application::GetDevice());
+
         if (m_VertexBuffer != VK_NULL_HANDLE)
         {
             m_Buffers.DestroyBuffer(m_VertexBuffer, m_VertexBufferMemory);

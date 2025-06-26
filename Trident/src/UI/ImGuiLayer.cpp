@@ -48,6 +48,9 @@ namespace Trident
 
             IMGUI_CHECKVERSION();
             ImGui::CreateContext();
+            ImGuiIO& io = ImGui::GetIO();
+            io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+            io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
             ImGui::StyleColorsDark();
 
             ImGui_ImplGlfw_InitForVulkan(window, true);
@@ -64,8 +67,9 @@ namespace Trident
             initInfo.MinImageCount = imageCount;
             initInfo.ImageCount = imageCount;
             initInfo.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+            initInfo.RenderPass = renderPass;
 
-            ImGui_ImplVulkan_Init(&initInfo, renderPass);
+            ImGui_ImplVulkan_Init(&initInfo);
 
             VkCommandBufferAllocateInfo allocInfo{ VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO };
             allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
@@ -78,7 +82,7 @@ namespace Trident
             VkCommandBufferBeginInfo beginInfo{ VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
             beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
             vkBeginCommandBuffer(commandBuffer, &beginInfo);
-            ImGui_ImplVulkan_CreateFontsTexture(commandBuffer);
+            ImGui_ImplVulkan_CreateFontsTexture();
             vkEndCommandBuffer(commandBuffer);
 
             VkSubmitInfo submitInfo{ VK_STRUCTURE_TYPE_SUBMIT_INFO };
@@ -86,8 +90,8 @@ namespace Trident
             submitInfo.pCommandBuffers = &commandBuffer;
             vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);
             vkDeviceWaitIdle(device);
-
-            ImGui_ImplVulkan_DestroyFontUploadObjects();
+            
+            ImGui_ImplVulkan_DestroyFontsTexture();
             vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
 
             TR_CORE_INFO("-------IMGUI INITIALIZED-------");
@@ -117,6 +121,11 @@ namespace Trident
         void ImGuiLayer::EndFrame()
         {
             ImGui::Render();
+            if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
+            {
+                ImGui::UpdatePlatformWindows();
+                ImGui::RenderPlatformWindowsDefault();
+            }
         }
 
         void ImGuiLayer::Render(VkCommandBuffer commandBuffer)
