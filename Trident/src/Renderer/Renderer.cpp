@@ -2,6 +2,7 @@
 
 #include "Application.h"
 #include "Geometry/Mesh.h"
+#include "UI/ImGuiLayer.h"
 
 #include <stdexcept>
 
@@ -114,6 +115,11 @@ namespace Trident
 
         m_Buffers.CreateVertexBuffer(mesh.Vertices, m_Commands.GetCommandPool(), m_VertexBuffer, m_VertexBufferMemory);
         m_Buffers.CreateIndexBuffer(mesh.Indices, m_Commands.GetCommandPool(), m_IndexBuffer, m_IndexBufferMemory, m_IndexCount);
+    }
+
+    void Renderer::SetImGuiLayer(UI::ImGuiLayer* layer)
+    {
+        m_ImGuiLayer = layer;
     }
 
     void Renderer::RecreateSwapchain()
@@ -282,6 +288,12 @@ namespace Trident
         vkCmdBindDescriptorSets(l_CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline.GetPipelineLayout(), 0, 1, &m_DescriptorSets[imageIndex], 0, nullptr);
 
         vkCmdDrawIndexed(l_CommandBuffer, m_IndexCount, 1, 0, 0, 0);
+
+        if (m_ImGuiLayer)
+        {
+            m_ImGuiLayer->Render(l_CommandBuffer);
+        }
+
         vkCmdEndRenderPass(l_CommandBuffer);
 
         if (vkEndCommandBuffer(l_CommandBuffer) != VK_SUCCESS)

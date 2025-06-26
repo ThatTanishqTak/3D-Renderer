@@ -15,12 +15,15 @@
 #include <vulkan/vulkan.h>
 #include <glm/glm.hpp>
 #include <imgui.h>
+
 #include <vector>
 #include <array>
 #include <functional>
 
 namespace Trident
 {
+    namespace UI { class ImGuiLayer; }
+
     struct CubeProperties
     {
         glm::vec3 Position{ 0.0f };
@@ -43,6 +46,7 @@ namespace Trident
 
         void RecreateSwapchain();
         void UploadMesh(const Geometry::Mesh& mesh);
+        void SetImGuiLayer(UI::ImGuiLayer* layer);
 
         uint32_t GetCurrentFrame() const { return m_Commands.CurrentFrame(); }
 
@@ -93,6 +97,8 @@ namespace Trident
 
         CubeProperties m_CubeProperties{};
         ViewportInfo m_Viewport{};
+
+        UI::ImGuiLayer* m_ImGuiLayer = nullptr;
 
     private:
         // Core setup

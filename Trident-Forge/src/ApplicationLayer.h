@@ -5,6 +5,7 @@
 #include "Core/Utilities.h"
 #include "Window/Window.h"
 #include "Renderer/Renderer.h"
+#include "UI/ImGuiLayer.h"
 
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
@@ -22,4 +23,5 @@ public:
 private:
     std::unique_ptr<Trident::Window> m_Window;
     std::unique_ptr<Trident::Application> m_Engine;
+    std::unique_ptr<Trident::UI::ImGuiLayer> m_ImGuiLayer;
 };
