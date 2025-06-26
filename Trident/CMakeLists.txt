@@ -48,7 +48,7 @@ target_include_directories(stb INTERFACE
 
 add_library(tinyobj INTERFACE)
 target_include_directories(tinyobj INTERFACE
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/vendor/stb>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/vendor/tinyobjloader>
 )
 
 set(IMGUI_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/vendor/imgui")
@@ -69,13 +69,13 @@ file(GLOB_RECURSE TRIDENT_SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/src/*.h
 )
 
-add_library(Trident STATIC ${TRIDENT_SOURCES})
+add_library(${PROJECT_NAME} STATIC ${TRIDENT_SOURCES})
 
-target_include_directories(Trident PUBLIC
+target_include_directories(${PROJECT_NAME} PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
 )
 
-target_link_libraries(Trident PUBLIC
+target_link_libraries(${PROJECT_NAME} PUBLIC
   Vulkan::Vulkan
   glfw3
   glm
@@ -87,7 +87,7 @@ target_link_libraries(Trident PUBLIC
 
 option(TRIDENT_ENABLE_VALIDATION "Enable Vulkan Validation Layers" ON)
 if(TRIDENT_ENABLE_VALIDATION)
-  target_compile_definitions(Trident PUBLIC TRIDENT_VALIDATION_LAYERS=1)
+  target_compile_definitions(${PROJECT_NAME} PUBLIC TRIDENT_VALIDATION_LAYERS=1)
 endif()
 
 message(STATUS "Vulkan SDK Path: ${VULKAN_SDK_PATH}")

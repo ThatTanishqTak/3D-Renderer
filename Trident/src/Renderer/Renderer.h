@@ -109,6 +109,7 @@ namespace Trident
     private:
         // Core setup
         void CreateDescriptorPool();
+        void CreateDefaultTexture();
         void CreateDescriptorSets();
 
         void UpdateUniformBuffer(uint32_t currentImage);

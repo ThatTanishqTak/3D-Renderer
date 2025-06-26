@@ -13,10 +13,13 @@ namespace Trident
         {
             TextureData l_Texture;
 
-            stbi_uc* l_Pixels = stbi_load(filePath.c_str(), &l_Texture.Width, &l_Texture.Height, &l_Texture.Channels, STBI_rgb_alpha);
+            std::string l_File = Utilities::FileManagement::NormalizePath(filePath);
+            stbi_set_flip_vertically_on_load(true);
+            stbi_uc* l_Pixels = stbi_load(l_File.c_str(), &l_Texture.Width, &l_Texture.Height, &l_Texture.Channels, STBI_rgb_alpha);
             if (!l_Pixels)
             {
-                TR_CORE_CRITICAL("Failed to load texture: {}", filePath);
+                TR_CORE_CRITICAL("Failed to load texture: {} ({})", filePath, stbi_failure_reason());
+
                 return l_Texture;
             }
 

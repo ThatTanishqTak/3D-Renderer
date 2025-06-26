@@ -1,6 +1,7 @@
 #pragma once
 
 #include <fstream>
+#include <filesystem>
 
 #define GLM_ENABLE_EXPERIMENTAL
 #include "glm/gtx/string_cast.hpp"
@@ -36,6 +37,8 @@ namespace Trident
 		{
 		public:
 			static std::vector<char> ReadFile(const std::string& filePath);
+			static std::string NormalizePath(const std::string& path);
+			static std::string GetBaseDirectory(const std::string& filePath);
 		};
 
 		//------------------------------------------------------------------------------------------------------------------------------------------------------//

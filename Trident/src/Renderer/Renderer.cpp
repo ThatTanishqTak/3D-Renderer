@@ -23,6 +23,7 @@ namespace Trident
         m_Buffers.CreateUniformBuffers(m_Swapchain.GetImageCount(), m_UniformBuffers, m_UniformBuffersMemory);
 
         CreateDescriptorPool();
+        CreateDefaultTexture();
         CreateDescriptorSets();
 
         TR_CORE_INFO("-------RENDERER INITIALIZED-------");
@@ -149,9 +150,193 @@ namespace Trident
 
     void Renderer::UploadTexture(const Loader::TextureData& texture)
     {
-        // Currently just store texture data on CPU side
         TR_CORE_TRACE("Uploading texture ({}x{})", texture.Width, texture.Height);
-        // Placeholder for future GPU upload implementation
+
+        if (texture.Pixels.empty())
+        {
+            TR_CORE_WARN("Texture has no data");
+
+            return;
+        }
+
+        VkDevice l_Device = Application::GetDevice();
+
+        vkDeviceWaitIdle(l_Device);
+
+        if (m_TextureSampler != VK_NULL_HANDLE)
+        {
+            vkDestroySampler(l_Device, m_TextureSampler, nullptr);
+            m_TextureSampler = VK_NULL_HANDLE;
+        }
+        
+        if (m_TextureImageView != VK_NULL_HANDLE)
+        {
+            vkDestroyImageView(l_Device, m_TextureImageView, nullptr);
+            m_TextureImageView = VK_NULL_HANDLE;
+        }
+        
+        if (m_TextureImage != VK_NULL_HANDLE)
+        {
+            vkDestroyImage(l_Device, m_TextureImage, nullptr);
+            m_TextureImage = VK_NULL_HANDLE;
+        }
+
+        if (m_TextureImageMemory != VK_NULL_HANDLE)
+        {
+            vkFreeMemory(l_Device, m_TextureImageMemory, nullptr);
+            m_TextureImageMemory = VK_NULL_HANDLE;
+        }
+
+        VkDeviceSize l_ImageSize = static_cast<VkDeviceSize>(texture.Pixels.size());
+
+        VkBuffer l_StagingBuffer = VK_NULL_HANDLE;
+        VkDeviceMemory l_StagingMemory = VK_NULL_HANDLE;
+        m_Buffers.CreateBuffer(l_ImageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, l_StagingBuffer, l_StagingMemory);
+
+        void* l_Data = nullptr;
+        vkMapMemory(l_Device, l_StagingMemory, 0, l_ImageSize, 0, &l_Data);
+        memcpy(l_Data, texture.Pixels.data(), static_cast<size_t>(l_ImageSize));
+        vkUnmapMemory(l_Device, l_StagingMemory);
+
+        VkImageCreateInfo l_ImageInfo{ VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO };
+        l_ImageInfo.imageType = VK_IMAGE_TYPE_2D;
+        l_ImageInfo.extent.width = static_cast<uint32_t>(texture.Width);
+        l_ImageInfo.extent.height = static_cast<uint32_t>(texture.Height);
+        l_ImageInfo.extent.depth = 1;
+        l_ImageInfo.mipLevels = 1;
+        l_ImageInfo.arrayLayers = 1;
+        l_ImageInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
+        l_ImageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+        l_ImageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        l_ImageInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+        l_ImageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        l_ImageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+
+        if (vkCreateImage(l_Device, &l_ImageInfo, nullptr, &m_TextureImage) != VK_SUCCESS)
+        {
+            TR_CORE_CRITICAL("Failed to create texture image");
+        }
+
+        VkMemoryRequirements l_MemReq{};
+        vkGetImageMemoryRequirements(l_Device, m_TextureImage, &l_MemReq);
+
+        VkMemoryAllocateInfo l_AllocInfo{ VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO };
+        l_AllocInfo.allocationSize = l_MemReq.size;
+        l_AllocInfo.memoryTypeIndex = m_Buffers.FindMemoryType(l_MemReq.memoryTypeBits,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+        if (vkAllocateMemory(l_Device, &l_AllocInfo, nullptr, &m_TextureImageMemory) != VK_SUCCESS)
+        {
+            TR_CORE_CRITICAL("Failed to allocate texture memory");
+        }
+
+        vkBindImageMemory(l_Device, m_TextureImage, m_TextureImageMemory, 0);
+
+        VkCommandBuffer l_Cmd = m_Commands.BeginSingleTimeCommands();
+
+        VkImageMemoryBarrier l_BarrierToTransfer{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+        l_BarrierToTransfer.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        l_BarrierToTransfer.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        l_BarrierToTransfer.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        l_BarrierToTransfer.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        l_BarrierToTransfer.image = m_TextureImage;
+        l_BarrierToTransfer.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        l_BarrierToTransfer.subresourceRange.baseMipLevel = 0;
+        l_BarrierToTransfer.subresourceRange.levelCount = 1;
+        l_BarrierToTransfer.subresourceRange.baseArrayLayer = 0;
+        l_BarrierToTransfer.subresourceRange.layerCount = 1;
+        l_BarrierToTransfer.srcAccessMask = 0;
+        l_BarrierToTransfer.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+
+        vkCmdPipelineBarrier(l_Cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &l_BarrierToTransfer);
+
+        VkBufferImageCopy l_Region{};
+        l_Region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        l_Region.imageSubresource.mipLevel = 0;
+        l_Region.imageSubresource.baseArrayLayer = 0;
+        l_Region.imageSubresource.layerCount = 1;
+        l_Region.imageOffset = { 0, 0, 0 };
+        l_Region.imageExtent = { static_cast<uint32_t>(texture.Width), static_cast<uint32_t>(texture.Height), 1 };
+
+        vkCmdCopyBufferToImage(l_Cmd, l_StagingBuffer, m_TextureImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &l_Region);
+
+        VkImageMemoryBarrier l_BarrierToShader{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+        l_BarrierToShader.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        l_BarrierToShader.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        l_BarrierToShader.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        l_BarrierToShader.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        l_BarrierToShader.image = m_TextureImage;
+        l_BarrierToShader.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        l_BarrierToShader.subresourceRange.baseMipLevel = 0;
+        l_BarrierToShader.subresourceRange.levelCount = 1;
+        l_BarrierToShader.subresourceRange.baseArrayLayer = 0;
+        l_BarrierToShader.subresourceRange.layerCount = 1;
+        l_BarrierToShader.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        l_BarrierToShader.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+        vkCmdPipelineBarrier(l_Cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &l_BarrierToShader);
+
+        m_Commands.EndSingleTimeCommands(l_Cmd);
+
+        m_Buffers.DestroyBuffer(l_StagingBuffer, l_StagingMemory);
+
+        VkImageViewCreateInfo l_ViewInfo{ VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
+        l_ViewInfo.image = m_TextureImage;
+        l_ViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        l_ViewInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
+        l_ViewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        l_ViewInfo.subresourceRange.baseMipLevel = 0;
+        l_ViewInfo.subresourceRange.levelCount = 1;
+        l_ViewInfo.subresourceRange.baseArrayLayer = 0;
+        l_ViewInfo.subresourceRange.layerCount = 1;
+
+        if (vkCreateImageView(l_Device, &l_ViewInfo, nullptr, &m_TextureImageView) != VK_SUCCESS)
+        {
+            TR_CORE_CRITICAL("Failed to create texture image view");
+        }
+
+        VkSamplerCreateInfo l_SamplerInfo{ VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO };
+        l_SamplerInfo.magFilter = VK_FILTER_LINEAR;
+        l_SamplerInfo.minFilter = VK_FILTER_LINEAR;
+        l_SamplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        l_SamplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        l_SamplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        l_SamplerInfo.anisotropyEnable = VK_FALSE;
+        l_SamplerInfo.maxAnisotropy = 1.0f;
+        l_SamplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_WHITE;
+        l_SamplerInfo.unnormalizedCoordinates = VK_FALSE;
+        l_SamplerInfo.compareEnable = VK_FALSE;
+        l_SamplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+        l_SamplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+        l_SamplerInfo.mipLodBias = 0.0f;
+        l_SamplerInfo.minLod = 0.0f;
+        l_SamplerInfo.maxLod = 0.0f;
+
+        if (vkCreateSampler(l_Device, &l_SamplerInfo, nullptr, &m_TextureSampler) != VK_SUCCESS)
+        {
+            TR_CORE_CRITICAL("Failed to create texture sampler");
+        }
+
+        for (size_t i = 0; i < m_DescriptorSets.size(); ++i)
+        {
+            VkDescriptorImageInfo l_ImageInfo{};
+            l_ImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            l_ImageInfo.imageView = m_TextureImageView;
+            l_ImageInfo.sampler = m_TextureSampler;
+
+            VkWriteDescriptorSet l_ImageWrite{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
+            l_ImageWrite.dstSet = m_DescriptorSets[i];
+            l_ImageWrite.dstBinding = 1;
+            l_ImageWrite.dstArrayElement = 0;
+            l_ImageWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            l_ImageWrite.descriptorCount = 1;
+            l_ImageWrite.pImageInfo = &l_ImageInfo;
+
+            vkUpdateDescriptorSets(l_Device, 1, &l_ImageWrite, 0, nullptr);
+        }
+
+        TR_CORE_TRACE("Texture uploaded");
     }
 
     void Renderer::SetImGuiLayer(UI::ImGuiLayer* layer)
@@ -212,6 +397,147 @@ namespace Trident
         }
 
         TR_CORE_TRACE("Descriptor Pool Created (MaxSets = {})", l_PoolInfo.maxSets);
+    }
+
+    void Renderer::CreateDefaultTexture()
+    {
+        TR_CORE_TRACE("Creating Default Texture");
+
+        const uint32_t l_Pixel = 0xffffffff;
+        VkDeviceSize l_ImageSize = sizeof(l_Pixel);
+
+        VkBuffer l_StagingBuffer = VK_NULL_HANDLE;
+        VkDeviceMemory l_StagingMemory = VK_NULL_HANDLE;
+        m_Buffers.CreateBuffer(l_ImageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            l_StagingBuffer, l_StagingMemory);
+
+        void* l_Data = nullptr;
+        vkMapMemory(Application::GetDevice(), l_StagingMemory, 0, l_ImageSize, 0, &l_Data);
+        memcpy(l_Data, &l_Pixel, static_cast<size_t>(l_ImageSize));
+        vkUnmapMemory(Application::GetDevice(), l_StagingMemory);
+
+        VkImageCreateInfo l_ImageInfo{ VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO };
+        l_ImageInfo.imageType = VK_IMAGE_TYPE_2D;
+        l_ImageInfo.extent.width = 1;
+        l_ImageInfo.extent.height = 1;
+        l_ImageInfo.extent.depth = 1;
+        l_ImageInfo.mipLevels = 1;
+        l_ImageInfo.arrayLayers = 1;
+        l_ImageInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
+        l_ImageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+        l_ImageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        l_ImageInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+        l_ImageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        l_ImageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+
+        if (vkCreateImage(Application::GetDevice(), &l_ImageInfo, nullptr, &m_TextureImage) != VK_SUCCESS)
+        {
+            TR_CORE_CRITICAL("Failed to create default texture image");
+        }
+
+        VkMemoryRequirements l_MemRequirements{};
+        vkGetImageMemoryRequirements(Application::GetDevice(), m_TextureImage, &l_MemRequirements);
+
+        VkMemoryAllocateInfo l_AllocInfo{ VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO };
+        l_AllocInfo.allocationSize = l_MemRequirements.size;
+        l_AllocInfo.memoryTypeIndex = m_Buffers.FindMemoryType(l_MemRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+        if (vkAllocateMemory(Application::GetDevice(), &l_AllocInfo, nullptr, &m_TextureImageMemory) != VK_SUCCESS)
+        {
+            TR_CORE_CRITICAL("Failed to allocate default texture memory");
+        }
+
+        vkBindImageMemory(Application::GetDevice(), m_TextureImage, m_TextureImageMemory, 0);
+
+        VkCommandBuffer l_CommandBuffer = m_Commands.BeginSingleTimeCommands();
+
+        VkImageMemoryBarrier l_BarrierToTransfer{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+        l_BarrierToTransfer.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        l_BarrierToTransfer.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        l_BarrierToTransfer.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        l_BarrierToTransfer.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        l_BarrierToTransfer.image = m_TextureImage;
+        l_BarrierToTransfer.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        l_BarrierToTransfer.subresourceRange.baseMipLevel = 0;
+        l_BarrierToTransfer.subresourceRange.levelCount = 1;
+        l_BarrierToTransfer.subresourceRange.baseArrayLayer = 0;
+        l_BarrierToTransfer.subresourceRange.layerCount = 1;
+        l_BarrierToTransfer.srcAccessMask = 0;
+        l_BarrierToTransfer.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+
+        vkCmdPipelineBarrier(l_CommandBuffer,
+            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+            0, 0, nullptr, 0, nullptr, 1, &l_BarrierToTransfer);
+
+        VkBufferImageCopy l_Region{};
+        l_Region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        l_Region.imageSubresource.mipLevel = 0;
+        l_Region.imageSubresource.baseArrayLayer = 0;
+        l_Region.imageSubresource.layerCount = 1;
+        l_Region.imageOffset = { 0, 0, 0 };
+        l_Region.imageExtent = { 1, 1, 1 };
+
+        vkCmdCopyBufferToImage(l_CommandBuffer, l_StagingBuffer, m_TextureImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &l_Region);
+
+        VkImageMemoryBarrier l_BarrierToShader{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+        l_BarrierToShader.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        l_BarrierToShader.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        l_BarrierToShader.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        l_BarrierToShader.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        l_BarrierToShader.image = m_TextureImage;
+        l_BarrierToShader.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        l_BarrierToShader.subresourceRange.baseMipLevel = 0;
+        l_BarrierToShader.subresourceRange.levelCount = 1;
+        l_BarrierToShader.subresourceRange.baseArrayLayer = 0;
+        l_BarrierToShader.subresourceRange.layerCount = 1;
+        l_BarrierToShader.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        l_BarrierToShader.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+        vkCmdPipelineBarrier(l_CommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &l_BarrierToShader);
+
+        m_Commands.EndSingleTimeCommands(l_CommandBuffer);
+
+        m_Buffers.DestroyBuffer(l_StagingBuffer, l_StagingMemory);
+
+        VkImageViewCreateInfo l_ViewInfo{ VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
+        l_ViewInfo.image = m_TextureImage;
+        l_ViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        l_ViewInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
+        l_ViewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        l_ViewInfo.subresourceRange.baseMipLevel = 0;
+        l_ViewInfo.subresourceRange.levelCount = 1;
+        l_ViewInfo.subresourceRange.baseArrayLayer = 0;
+        l_ViewInfo.subresourceRange.layerCount = 1;
+
+        if (vkCreateImageView(Application::GetDevice(), &l_ViewInfo, nullptr, &m_TextureImageView) != VK_SUCCESS)
+        {
+            TR_CORE_CRITICAL("Failed to create texture image view");
+        }
+
+        VkSamplerCreateInfo l_SamplerInfo{ VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO };
+        l_SamplerInfo.magFilter = VK_FILTER_LINEAR;
+        l_SamplerInfo.minFilter = VK_FILTER_LINEAR;
+        l_SamplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        l_SamplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        l_SamplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        l_SamplerInfo.anisotropyEnable = VK_FALSE;
+        l_SamplerInfo.maxAnisotropy = 1.0f;
+        l_SamplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_WHITE;
+        l_SamplerInfo.unnormalizedCoordinates = VK_FALSE;
+        l_SamplerInfo.compareEnable = VK_FALSE;
+        l_SamplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+        l_SamplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+        l_SamplerInfo.mipLodBias = 0.0f;
+        l_SamplerInfo.minLod = 0.0f;
+        l_SamplerInfo.maxLod = 0.0f;
+
+        if (vkCreateSampler(Application::GetDevice(), &l_SamplerInfo, nullptr, &m_TextureSampler) != VK_SUCCESS)
+        {
+            TR_CORE_CRITICAL("Failed to create texture sampler");
+        }
+
+        TR_CORE_TRACE("Default Texture Created");
     }
 
     void Renderer::CreateDescriptorSets()

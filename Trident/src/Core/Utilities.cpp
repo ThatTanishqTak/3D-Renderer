@@ -47,8 +47,20 @@ namespace Trident
 			l_File.seekg(0);
 			l_File.read(l_Buffer.data(), l_Size);
 			l_File.close();
-			
+
 			return l_Buffer;
+		}
+
+		std::string FileManagement::NormalizePath(const std::string& path)
+		{
+			std::filesystem::path l_Path(path);
+			return l_Path.lexically_normal().generic_string();
+		}
+
+		std::string FileManagement::GetBaseDirectory(const std::string& filePath)
+		{
+			std::filesystem::path l_Path(filePath);
+			return l_Path.has_parent_path() ? l_Path.parent_path().string() : "";
 		}
 
 		double Time::s_LastTime = 0.0;

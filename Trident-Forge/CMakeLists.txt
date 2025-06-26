@@ -45,18 +45,18 @@ file(GLOB_RECURSE FORGE_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/*.h
 )
-add_executable(Trident-Forge ${FORGE_SOURCES})
+add_executable(${PROJECT_NAME} ${FORGE_SOURCES})
 
-target_link_options(Trident-Forge PRIVATE
+target_link_options(${PROJECT_NAME} PRIVATE
     $<$<CONFIG:Release>:/SUBSYSTEM:WINDOWS>
     $<$<CONFIG:Release>:/ENTRY:mainCRTStartup>
 )
 
-add_dependencies(Trident-Forge Shaders)
+add_dependencies(${PROJECT_NAME} Shaders)
 
-target_include_directories(Trident-Forge
+target_include_directories(${PROJECT_NAME}
     PRIVATE ${CMAKE_SOURCE_DIR}/Trident/src
 )
-target_link_libraries(Trident-Forge
+target_link_libraries(${PROJECT_NAME}
     PRIVATE Trident
 )
