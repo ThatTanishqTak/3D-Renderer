@@ -46,8 +46,10 @@ target_include_directories(stb INTERFACE
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/vendor/stb>
 )
 
-add_library(tinyobj INTERFACE)
-target_include_directories(tinyobj INTERFACE
+add_library(tinyobj STATIC
+  ${CMAKE_CURRENT_SOURCE_DIR}/vendor/tinyobjloader/tiny_obj_loader.cc
+)
+target_include_directories(tinyobj PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/vendor/tinyobjloader>
 )
 

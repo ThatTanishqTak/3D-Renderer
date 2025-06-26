@@ -38,8 +38,8 @@ ApplicationLayer::~ApplicationLayer()
 
 void ApplicationLayer::Run()
 {
-    static char l_ModelPath[256] = "Trident-Forge/Assets/Models/cube.obj";
-    static char l_TexturePath[256] = "Trident-Forge/Assets/Textures/default.png";
+    static char l_ModelPath[256] = "Assets/Models/cube.obj";
+    static char l_TexturePath[256] = "Assets/Textures/default.jpg";
 
     while (!m_Window->ShouldClose())
     {
