@@ -57,24 +57,28 @@ namespace Trident
         if (m_TextureSampler != VK_NULL_HANDLE)
         {
             vkDestroySampler(Application::GetDevice(), m_TextureSampler, nullptr);
+
             m_TextureSampler = VK_NULL_HANDLE;
         }
 
         if (m_TextureImageView != VK_NULL_HANDLE)
         {
             vkDestroyImageView(Application::GetDevice(), m_TextureImageView, nullptr);
+
             m_TextureImageView = VK_NULL_HANDLE;
         }
 
         if (m_TextureImage != VK_NULL_HANDLE)
         {
             vkDestroyImage(Application::GetDevice(), m_TextureImage, nullptr);
+
             m_TextureImage = VK_NULL_HANDLE;
         }
 
         if (m_TextureImageMemory != VK_NULL_HANDLE)
         {
             vkFreeMemory(Application::GetDevice(), m_TextureImageMemory, nullptr);
+
             m_TextureImageMemory = VK_NULL_HANDLE;
         }
 
@@ -223,8 +227,7 @@ namespace Trident
 
         VkMemoryAllocateInfo l_AllocInfo{ VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO };
         l_AllocInfo.allocationSize = l_MemReq.size;
-        l_AllocInfo.memoryTypeIndex = m_Buffers.FindMemoryType(l_MemReq.memoryTypeBits,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+        l_AllocInfo.memoryTypeIndex = m_Buffers.FindMemoryType(l_MemReq.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
         if (vkAllocateMemory(l_Device, &l_AllocInfo, nullptr, &m_TextureImageMemory) != VK_SUCCESS)
         {
@@ -409,8 +412,7 @@ namespace Trident
         VkBuffer l_StagingBuffer = VK_NULL_HANDLE;
         VkDeviceMemory l_StagingMemory = VK_NULL_HANDLE;
         m_Buffers.CreateBuffer(l_ImageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            l_StagingBuffer, l_StagingMemory);
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, l_StagingBuffer, l_StagingMemory);
 
         void* l_Data = nullptr;
         vkMapMemory(Application::GetDevice(), l_StagingMemory, 0, l_ImageSize, 0, &l_Data);
@@ -466,9 +468,7 @@ namespace Trident
         l_BarrierToTransfer.srcAccessMask = 0;
         l_BarrierToTransfer.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
 
-        vkCmdPipelineBarrier(l_CommandBuffer,
-            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
-            0, 0, nullptr, 0, nullptr, 1, &l_BarrierToTransfer);
+        vkCmdPipelineBarrier(l_CommandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &l_BarrierToTransfer);
 
         VkBufferImageCopy l_Region{};
         l_Region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;

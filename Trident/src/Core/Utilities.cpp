@@ -30,6 +30,8 @@ namespace Trident
 			s_ClientLogger->flush_on(spdlog::level::trace);
 		}
 
+		//------------------------------------------------------------------------------------------------------------------------------------------------------//
+
 		std::vector<char> FileManagement::ReadFile(const std::string& filePath)
 		{
 			std::ifstream l_File(filePath, std::ios::ate | std::ios::binary);
@@ -62,6 +64,8 @@ namespace Trident
 			std::filesystem::path l_Path(filePath);
 			return l_Path.has_parent_path() ? l_Path.parent_path().string() : "";
 		}
+
+		//------------------------------------------------------------------------------------------------------------------------------------------------------//
 
 		double Time::s_LastTime = 0.0;
 		float Time::s_DeltaTime = 0.0f;

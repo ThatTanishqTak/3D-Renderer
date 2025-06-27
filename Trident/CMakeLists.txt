@@ -1,9 +1,6 @@
 ﻿cmake_minimum_required(VERSION 3.20)
 project(Trident LANGUAGES CXX)
 
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
 add_definitions(-DGLFW_INCLUDE_VULKAN)
 
 if(NOT DEFINED ENV{VULKAN_SDK})

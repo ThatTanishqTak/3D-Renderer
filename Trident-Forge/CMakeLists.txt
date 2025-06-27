@@ -1,9 +1,6 @@
 ﻿cmake_minimum_required(VERSION 3.20)
 project(Trident-Forge LANGUAGES CXX)
 
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
 find_program(GLSLANG_VALIDATOR glslangValidator
     HINTS $ENV{VULKAN_SDK}/Bin
 )
@@ -54,10 +51,11 @@ target_link_options(${PROJECT_NAME} PRIVATE
 
 add_dependencies(${PROJECT_NAME} Shaders)
 
-# Copy Models and Fonts to the runtime output directory
+# Copy Models, Textures and Fonts to the runtime output directory
 set(MODELS_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/Assets/Models)
 set(TEXTURES_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/Assets/Textures)
 set(FONTS_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/Assets/Fonts)
+
 set(MODELS_DST_DIR ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/Assets/Models)
 set(TEXTURES_DST_DIR ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/Assets/Textures)
 set(FONTS_DST_DIR ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/Assets/Fonts)
