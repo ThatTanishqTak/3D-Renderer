@@ -51,23 +51,15 @@ target_link_options(${PROJECT_NAME} PRIVATE
 
 add_dependencies(${PROJECT_NAME} Shaders)
 
-# Copy Models, Textures and Fonts to the runtime output directory
-set(MODELS_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/Assets/Models)
-set(TEXTURES_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/Assets/Textures)
+# Copy Fonts to the runtime output directory
 set(FONTS_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/Assets/Fonts)
-
-set(MODELS_DST_DIR ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/Assets/Models)
-set(TEXTURES_DST_DIR ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/Assets/Textures)
 set(FONTS_DST_DIR ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/Assets/Fonts)
 
-file(MAKE_DIRECTORY ${MODELS_DST_DIR})
 file(MAKE_DIRECTORY ${FONTS_DST_DIR})
 
 add_custom_target(Assets
-    COMMAND ${CMAKE_COMMAND} -E copy_directory ${MODELS_SRC_DIR} ${MODELS_DST_DIR}
-    COMMAND ${CMAKE_COMMAND} -E copy_directory ${TEXTURES_SRC_DIR} ${TEXTURES_DST_DIR}
     COMMAND ${CMAKE_COMMAND} -E copy_directory ${FONTS_SRC_DIR} ${FONTS_DST_DIR}
-    COMMENT "Copying models, textures and fonts..."
+    COMMENT "Copying fonts..."
 )
 
 add_dependencies(Trident-Forge Assets)

@@ -69,11 +69,11 @@ namespace Trident
         Swapchain m_Swapchain;
 
         // Buffers
-        VkBuffer m_VertexBuffer;
-        VkDeviceMemory m_VertexBufferMemory;
-        VkBuffer m_IndexBuffer;
-        VkDeviceMemory m_IndexBufferMemory;
-        uint32_t m_IndexCount;
+        VkBuffer m_VertexBuffer = VK_NULL_HANDLE;
+        VkDeviceMemory m_VertexBufferMemory = VK_NULL_HANDLE;
+        VkBuffer m_IndexBuffer = VK_NULL_HANDLE;
+        VkDeviceMemory m_IndexBufferMemory = VK_NULL_HANDLE;
+        uint32_t m_IndexCount = 0;
 
         // Pipeline
         Pipeline m_Pipeline;

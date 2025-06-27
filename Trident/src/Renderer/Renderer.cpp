@@ -18,8 +18,6 @@ namespace Trident
         m_Pipeline.Init(m_Swapchain);
         m_Commands.Init(m_Swapchain.GetImageCount());
 
-        m_Buffers.CreateVertexBuffer(Geometry::CubeVertices, m_Commands.GetCommandPool(), m_VertexBuffer, m_VertexBufferMemory);
-        m_Buffers.CreateIndexBuffer(Geometry::CubeIndices, m_Commands.GetCommandPool(), m_IndexBuffer, m_IndexBufferMemory, m_IndexCount);
         m_Buffers.CreateUniformBuffers(m_Swapchain.GetImageCount(), m_UniformBuffers, m_UniformBuffersMemory);
 
         CreateDescriptorPool();
@@ -660,14 +658,17 @@ namespace Trident
 
         vkCmdBindPipeline(l_CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline.GetPipeline());
 
-        VkBuffer l_VertexBuffers[] = { m_VertexBuffer };
-        VkDeviceSize l_Offsets[] = { 0 };
+        if (m_VertexBuffer != VK_NULL_HANDLE && m_IndexBuffer != VK_NULL_HANDLE && m_IndexCount > 0)
+        {
+            VkBuffer l_VertexBuffers[] = { m_VertexBuffer };
+            VkDeviceSize l_Offsets[] = { 0 };
 
-        vkCmdBindVertexBuffers(l_CommandBuffer, 0, 1, l_VertexBuffers, l_Offsets);
-        vkCmdBindIndexBuffer(l_CommandBuffer, m_IndexBuffer, 0, VK_INDEX_TYPE_UINT16);
-        vkCmdBindDescriptorSets(l_CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline.GetPipelineLayout(), 0, 1, &m_DescriptorSets[imageIndex], 0, nullptr);
+            vkCmdBindVertexBuffers(l_CommandBuffer, 0, 1, l_VertexBuffers, l_Offsets);
+            vkCmdBindIndexBuffer(l_CommandBuffer, m_IndexBuffer, 0, VK_INDEX_TYPE_UINT16);
+            vkCmdBindDescriptorSets(l_CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline.GetPipelineLayout(), 0, 1, &m_DescriptorSets[imageIndex], 0, nullptr);
 
-        vkCmdDrawIndexed(l_CommandBuffer, m_IndexCount, 1, 0, 0, 0);
+            vkCmdDrawIndexed(l_CommandBuffer, m_IndexCount, 1, 0, 0, 0);
+        }
 
         if (m_ImGuiLayer)
         {
