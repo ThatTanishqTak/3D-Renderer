@@ -234,7 +234,7 @@ namespace Trident
 
         vkBindImageMemory(l_Device, m_TextureImage, m_TextureImageMemory, 0);
 
-        VkCommandBuffer l_Cmd = m_Commands.BeginSingleTimeCommands();
+        VkCommandBuffer l_CommandBuffer = m_Commands.BeginSingleTimeCommands();
 
         VkImageMemoryBarrier l_BarrierToTransfer{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
         l_BarrierToTransfer.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -250,7 +250,7 @@ namespace Trident
         l_BarrierToTransfer.srcAccessMask = 0;
         l_BarrierToTransfer.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
 
-        vkCmdPipelineBarrier(l_Cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &l_BarrierToTransfer);
+        vkCmdPipelineBarrier(l_CommandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &l_BarrierToTransfer);
 
         VkBufferImageCopy l_Region{};
         l_Region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -260,7 +260,7 @@ namespace Trident
         l_Region.imageOffset = { 0, 0, 0 };
         l_Region.imageExtent = { static_cast<uint32_t>(texture.Width), static_cast<uint32_t>(texture.Height), 1 };
 
-        vkCmdCopyBufferToImage(l_Cmd, l_StagingBuffer, m_TextureImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &l_Region);
+        vkCmdCopyBufferToImage(l_CommandBuffer, l_StagingBuffer, m_TextureImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &l_Region);
 
         VkImageMemoryBarrier l_BarrierToShader{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
         l_BarrierToShader.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
@@ -276,9 +276,9 @@ namespace Trident
         l_BarrierToShader.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
         l_BarrierToShader.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 
-        vkCmdPipelineBarrier(l_Cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &l_BarrierToShader);
+        vkCmdPipelineBarrier(l_CommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &l_BarrierToShader);
 
-        m_Commands.EndSingleTimeCommands(l_Cmd);
+        m_Commands.EndSingleTimeCommands(l_CommandBuffer);
 
         m_Buffers.DestroyBuffer(l_StagingBuffer, l_StagingMemory);
 
@@ -742,23 +742,23 @@ namespace Trident
 
     void Renderer::UpdateUniformBuffer(uint32_t currentImage)
     {
-        UniformBufferObject l_CubeUBO{};
+        UniformBufferObject l_UBO{};
 
         glm::mat4 l_Model = glm::mat4(1.0f);
         l_Model = glm::translate(l_Model, m_CubeProperties.Position);
         l_Model = glm::scale(l_Model, m_CubeProperties.Scale);
-        l_Model = glm::rotate(l_Model, static_cast<float>(Utilities::Time::GetTime()), glm::vec3(1.0f, 1.0f, 1.0f));
+        l_Model = glm::rotate(l_Model, 0.0f, glm::vec3(1.0f, 1.0f, 1.0f));
 
-        l_CubeUBO.Model = l_Model;
-        l_CubeUBO.View = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+        l_UBO.Model = l_Model;
+        l_UBO.View = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
 
         float l_AspectRatio = static_cast<float>(m_Swapchain.GetExtent().width) / static_cast<float>(m_Swapchain.GetExtent().height);
-        l_CubeUBO.Projection = glm::perspective(glm::radians(45.0f), l_AspectRatio, 0.1f, 10.0f);
-        l_CubeUBO.Projection[1][1] *= -1.0f;
+        l_UBO.Projection = glm::perspective(glm::radians(45.0f), l_AspectRatio, 0.1f, 10.0f);
+        l_UBO.Projection[1][1] *= -1.0f;
 
         void* l_Data = nullptr;
-        vkMapMemory(Application::GetDevice(), m_UniformBuffersMemory[currentImage], 0, sizeof(l_CubeUBO), 0, &l_Data);
-        memcpy(l_Data, &l_CubeUBO, sizeof(l_CubeUBO));
+        vkMapMemory(Application::GetDevice(), m_UniformBuffersMemory[currentImage], 0, sizeof(l_UBO), 0, &l_Data);
+        memcpy(l_Data, &l_UBO, sizeof(l_UBO));
         vkUnmapMemory(Application::GetDevice(), m_UniformBuffersMemory[currentImage]);
     }
 }

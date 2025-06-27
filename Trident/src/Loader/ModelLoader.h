@@ -11,7 +11,7 @@ namespace Trident
         class ModelLoader
         {
         public:
-            static Geometry::Mesh LoadOBJ(const std::string& filePath);
+            static Geometry::Mesh Load(const std::string& filePath);
         };
     }
 }

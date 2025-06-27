@@ -46,7 +46,8 @@ namespace Trident
                 TR_CORE_CRITICAL("Failed to create ImGui descriptor pool");
             }
 
-            IMGUI_CHECKVERSION();
+            TR_CORE_TRACE("ImGui version: {}", IMGUI_VERSION);
+
             ImGui::CreateContext();
             ImGuiIO& io = ImGui::GetIO();
             io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
