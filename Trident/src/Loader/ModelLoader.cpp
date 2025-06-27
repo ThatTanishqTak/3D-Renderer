@@ -2,68 +2,129 @@
 
 #include "Core/Utilities.h"
 
-#include <assimp/Importer.hpp>
-#include <assimp/scene.h>
-#include <assimp/postprocess.h>
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include <tiny_gltf.h>
+#include <algorithm>
 
 namespace Trident
 {
     namespace Loader
     {
-        static void ProcessMesh(aiMesh* mesh, Geometry::Mesh& outMesh)
-        {
-            for (unsigned i = 0; i < mesh->mNumVertices; ++i)
-            {
-                Vertex l_Vertex{};
-                l_Vertex.Position = { mesh->mVertices[i].x, mesh->mVertices[i].y, mesh->mVertices[i].z };
-                l_Vertex.Color = { 1.0f, 1.0f, 1.0f };
-                if (mesh->mTextureCoords[0])
-                {
-                    l_Vertex.TexCoord = { mesh->mTextureCoords[0][i].x, 1.0f - mesh->mTextureCoords[0][i].y };
-                }
-                outMesh.Vertices.push_back(l_Vertex);
-            }
-
-            for (unsigned i = 0; i < mesh->mNumFaces; ++i)
-            {
-                const aiFace& l_Face = mesh->mFaces[i];
-                for (unsigned j = 0; j < l_Face.mNumIndices; ++j)
-                {
-                    outMesh.Indices.push_back(static_cast<uint16_t>(l_Face.mIndices[j]));
-                }
-            }
-        }
-
         Geometry::Mesh ModelLoader::Load(const std::string& filePath)
         {
             Geometry::Mesh l_Mesh{};
 
-            Assimp::Importer l_Importer;
-            const aiScene* l_Scene = l_Importer.ReadFile(
-                filePath,
-                aiProcess_Triangulate | aiProcess_FlipUVs | aiProcess_JoinIdenticalVertices);
+            tinygltf::TinyGLTF l_Loader;
+            tinygltf::Model l_Model{};
+            std::string l_Err;
+            std::string l_Warn;
 
-            if (!l_Scene || l_Scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !l_Scene->mRootNode)
+            bool l_Binary = false;
+            if (filePath.size() > 4)
             {
-                TR_CORE_CRITICAL("Failed to load model: {} ({})", filePath, l_Importer.GetErrorString());
+                std::string l_Ext = filePath.substr(filePath.size() - 4);
+                std::transform(l_Ext.begin(), l_Ext.end(), l_Ext.begin(), ::tolower);
+                
+                l_Binary = l_Ext == ".glb";
+            }
+
+            bool l_Loaded = false;
+            if (l_Binary)
+            {
+                l_Loaded = l_Loader.LoadBinaryFromFile(&l_Model, &l_Err, &l_Warn, filePath);
+            }
+            else
+            {
+                l_Loaded = l_Loader.LoadASCIIFromFile(&l_Model, &l_Err, &l_Warn, filePath);
+            }
+
+            if (!l_Warn.empty())
+            {
+                TR_CORE_WARN("{}", l_Warn);
+            }
+
+            if (!l_Loaded)
+            {
+                TR_CORE_CRITICAL("Failed to load model: {} ({})", filePath, l_Err);
+                
                 return l_Mesh;
             }
 
-            std::function<void(aiNode*)> l_Traverse = [&](aiNode* node)
+            if (l_Model.meshes.empty())
+            {
+                TR_CORE_WARN("No mesh found in {}", filePath);
+                return l_Mesh;
+            }
+
+            const tinygltf::Mesh& l_FirstMesh = l_Model.meshes[0];
+            if (l_FirstMesh.primitives.empty())
+            {
+                TR_CORE_WARN("No primitives in {}", l_FirstMesh.name);
+                
+                return l_Mesh;
+            }
+
+            const tinygltf::Primitive& l_Prim = l_FirstMesh.primitives[0];
+            auto l_PosIt = l_Prim.attributes.find("POSITION");
+            if (l_PosIt == l_Prim.attributes.end())
+            {
+                TR_CORE_CRITICAL("Primitive has no POSITION attribute");
+                
+                return l_Mesh;
+            }
+
+            const tinygltf::Accessor& l_PosAcc = l_Model.accessors[l_PosIt->second];
+            const tinygltf::BufferView& l_PosView = l_Model.bufferViews[l_PosAcc.bufferView];
+            const tinygltf::Buffer& l_PosBuf = l_Model.buffers[l_PosView.buffer];
+            const float* l_Positions = reinterpret_cast<const float*>(&l_PosBuf.data[l_PosView.byteOffset + l_PosAcc.byteOffset]);
+
+            const float* l_Texcoords = nullptr;
+            bool l_HasTexcoord = false;
+            auto l_TexIt = l_Prim.attributes.find("TEXCOORD_0");
+            if (l_TexIt != l_Prim.attributes.end())
+            {
+                const tinygltf::Accessor& l_TexAcc = l_Model.accessors[l_TexIt->second];
+                const tinygltf::BufferView& l_TexView = l_Model.bufferViews[l_TexAcc.bufferView];
+                const tinygltf::Buffer& l_TexBuf = l_Model.buffers[l_TexView.buffer];
+                
+                l_Texcoords = reinterpret_cast<const float*>(&l_TexBuf.data[l_TexView.byteOffset + l_TexAcc.byteOffset]);
+                l_HasTexcoord = true;
+            }
+
+            for (size_t i = 0; i < l_PosAcc.count; ++i)
+            {
+                Vertex l_Vertex{};
+                l_Vertex.Position = { l_Positions[i * 3 + 0], l_Positions[i * 3 + 1], l_Positions[i * 3 + 2] };
+                l_Vertex.Color = { 1.0f, 1.0f, 1.0f };
+                if (l_HasTexcoord)
                 {
-                    for (unsigned i = 0; i < node->mNumMeshes; ++i)
-                    {
-                        aiMesh* l_MeshPtr = l_Scene->mMeshes[node->mMeshes[i]];
-                        ProcessMesh(l_MeshPtr, l_Mesh);
-                    }
+                    l_Vertex.TexCoord = { l_Texcoords[i * 2 + 0], 1.0f - l_Texcoords[i * 2 + 1] };
+                }
 
-                    for (unsigned i = 0; i < node->mNumChildren; ++i)
-                    {
-                        l_Traverse(node->mChildren[i]);
-                    }
-                };
+                l_Mesh.Vertices.push_back(l_Vertex);
+            }
 
-            l_Traverse(l_Scene->mRootNode);
+            if (l_Prim.indices >= 0)
+            {
+                const tinygltf::Accessor& l_IndAcc = l_Model.accessors[l_Prim.indices];
+                const tinygltf::BufferView& l_IndView = l_Model.bufferViews[l_IndAcc.bufferView];
+                const tinygltf::Buffer& l_IndBuf = l_Model.buffers[l_IndView.buffer];
+
+                if (l_IndAcc.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT)
+                {
+                    const uint16_t* l_Indices = reinterpret_cast<const uint16_t*>(&l_IndBuf.data[l_IndView.byteOffset + l_IndAcc.byteOffset]);
+                    l_Mesh.Indices.insert(l_Mesh.Indices.end(), l_Indices, l_Indices + l_IndAcc.count);
+                }
+
+                else if (l_IndAcc.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT)
+                {
+                    const uint32_t* l_Indices = reinterpret_cast<const uint32_t*>(&l_IndBuf.data[l_IndView.byteOffset + l_IndAcc.byteOffset]);
+                    for (size_t i = 0; i < l_IndAcc.count; ++i)
+                    {
+                        l_Mesh.Indices.push_back(static_cast<uint16_t>(l_Indices[i]));
+                    }
+                }
+            }
 
             return l_Mesh;
         }

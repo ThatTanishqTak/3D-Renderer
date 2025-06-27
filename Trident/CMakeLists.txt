@@ -43,8 +43,10 @@ target_include_directories(stb INTERFACE
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/vendor/stb>
 )
 
-set(ASSIMP_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/vendor/assimp")
-add_subdirectory("${ASSIMP_ROOT}")
+add_library(tinygltf INTERFACE)
+target_include_directories(tinygltf INTERFACE
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/vendor/tinygltf>
+)
 
 set(IMGUI_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/vendor/imgui")
 file(GLOB IMGUI_SOURCES
@@ -77,7 +79,7 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
   spdlog
   imgui
   stb
-  assimp::assimp
+  tinygltf
 )
 
 option(TRIDENT_ENABLE_VALIDATION "Enable Vulkan Validation Layers" ON)

@@ -11,6 +11,6 @@
 [submodule "Trident/vendor/stb"]
 	path = Trident/vendor/stb
 	url = https://github.com/ThatTanishqTak/stb.git
-[submodule "Trident/vendor/assimp"]
-	path = Trident/vendor/assimp
-	url = https://github.com/ThatTanishqTak/assimp.git
+[submodule "Trident/vendor/tinygltf"]
+	path = Trident/vendor/tinygltf
+	url = https://github.com/ThatTanishqTak/tinygltf.git
