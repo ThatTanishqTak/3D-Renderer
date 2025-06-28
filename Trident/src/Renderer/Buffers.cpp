@@ -29,6 +29,15 @@ namespace Trident
     {
         TR_CORE_TRACE("Creating Vertex Buffer");
 
+        if (vertices.empty())
+        {
+            TR_CORE_WARN("No vertices provided - skipping vertex buffer creation");
+            vertexBuffer = VK_NULL_HANDLE;
+            vertexBufferMemory = VK_NULL_HANDLE;
+            
+            return;
+        }
+
         VkDeviceSize l_BufferSize = sizeof(vertices[0]) * vertices.size();
 
         VkBuffer l_StagingBuffer;
@@ -41,12 +50,18 @@ namespace Trident
         vkUnmapMemory(Application::GetDevice(), l_StagingBufferMemory);
 
         CreateBuffer(l_BufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer, vertexBufferMemory);
-        CopyBuffer(l_StagingBuffer, vertexBuffer, l_BufferSize, commandPool);
+        if (vertexBuffer != VK_NULL_HANDLE)
+        {
+            CopyBuffer(l_StagingBuffer, vertexBuffer, l_BufferSize, commandPool);
+        }
 
         vkDestroyBuffer(Application::GetDevice(), l_StagingBuffer, nullptr);
         vkFreeMemory(Application::GetDevice(), l_StagingBufferMemory, nullptr);
 
-        m_Allocations.push_back({ vertexBuffer, vertexBufferMemory });
+        if (vertexBuffer != VK_NULL_HANDLE)
+        {
+            m_Allocations.push_back({ vertexBuffer, vertexBufferMemory });
+        }
     }
 
     void Buffers::CreateIndexBuffer(const std::vector<uint16_t>& indices, VkCommandPool commandPool, VkBuffer& indexBuffer, VkDeviceMemory& indexBufferMemory, uint32_t& indexCount)
@@ -54,6 +69,14 @@ namespace Trident
         TR_CORE_TRACE("Creating Index Buffer");
 
         indexCount = static_cast<uint32_t>(indices.size());
+        if (indices.empty())
+        {
+            TR_CORE_WARN("No indices provided - skipping index buffer creation");
+            indexBuffer = VK_NULL_HANDLE;
+            indexBufferMemory = VK_NULL_HANDLE;
+            return;
+        }
+
         VkDeviceSize l_BufferSize = sizeof(indices[0]) * indices.size();
 
         VkBuffer l_StagingBuffer;
@@ -66,12 +89,18 @@ namespace Trident
         vkUnmapMemory(Application::GetDevice(), l_StagingBufferMemory);
 
         CreateBuffer(l_BufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexBuffer, indexBufferMemory);
-        CopyBuffer(l_StagingBuffer, indexBuffer, l_BufferSize, commandPool);
+        if (indexBuffer != VK_NULL_HANDLE)
+        {
+            CopyBuffer(l_StagingBuffer, indexBuffer, l_BufferSize, commandPool);
+        }
 
         vkDestroyBuffer(Application::GetDevice(), l_StagingBuffer, nullptr);
         vkFreeMemory(Application::GetDevice(), l_StagingBufferMemory, nullptr);
 
-        m_Allocations.push_back({ indexBuffer, indexBufferMemory });
+        if (indexBuffer != VK_NULL_HANDLE)
+        {
+            m_Allocations.push_back({ indexBuffer, indexBufferMemory });
+        }
     }
 
     void Buffers::CreateUniformBuffers(uint32_t imageCount, std::vector<VkBuffer>& uniformBuffers, std::vector<VkDeviceMemory>& uniformBuffersMemory)
@@ -115,6 +144,14 @@ namespace Trident
 
     void Buffers::CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory)
     {
+        if (size == 0)
+        {
+            TR_CORE_WARN("Attempted to create buffer with size 0");
+            buffer = VK_NULL_HANDLE;
+            bufferMemory = VK_NULL_HANDLE;
+            
+            return;
+        }
         VkBufferCreateInfo l_BufferInfo{ VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
         l_BufferInfo.size = size;
         l_BufferInfo.usage = usage;

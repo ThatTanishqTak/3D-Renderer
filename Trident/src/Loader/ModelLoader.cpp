@@ -119,6 +119,7 @@ namespace Trident
 
             return !a_Mesh.Vertices.empty();
         }
+
         Geometry::Mesh ModelLoader::Load(const std::string& filePath)
         {
             Geometry::Mesh l_Mesh{};
