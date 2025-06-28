@@ -87,5 +87,10 @@ if(TRIDENT_ENABLE_VALIDATION)
   target_compile_definitions(${PROJECT_NAME} PUBLIC TRIDENT_VALIDATION_LAYERS=1)
 endif()
 
+option(TRIDENT_ENABLE_VIEWPORTS "Enable ImGui Viewports" ON)
+if(TRIDENT_ENABLE_VIEWPORTS)
+  target_compile_definitions(${PROJECT_NAME} PUBLIC TRIDENT_IMGUI_VIEWPORTS=1)
+endif()
+
 message(STATUS "Vulkan SDK Path: ${VULKAN_SDK_PATH}")
 message(STATUS "GLFW Root: ${GLFW_ROOT}")

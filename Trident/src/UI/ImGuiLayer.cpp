@@ -7,6 +7,44 @@
 #include <imgui_impl_vulkan.h>
 #include <algorithm>
 
+namespace
+{
+    struct ScopedCommandBuffer
+    {
+        VkDevice Device = VK_NULL_HANDLE;
+        VkCommandPool CommandPool = VK_NULL_HANDLE;
+        VkQueue Queue = VK_NULL_HANDLE;
+        VkCommandBuffer CommandBuffer = VK_NULL_HANDLE;
+
+        ScopedCommandBuffer(VkDevice device, VkCommandPool pool, VkQueue queue) : Device(device), CommandPool(pool), Queue(queue)
+        {
+            VkCommandBufferAllocateInfo allocInfo{ VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO };
+            allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+            allocInfo.commandPool = CommandPool;
+            allocInfo.commandBufferCount = 1;
+
+            vkAllocateCommandBuffers(Device, &allocInfo, &CommandBuffer);
+
+            VkCommandBufferBeginInfo beginInfo{ VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
+            beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+            vkBeginCommandBuffer(CommandBuffer, &beginInfo);
+        }
+
+        ~ScopedCommandBuffer()
+        {
+            vkEndCommandBuffer(CommandBuffer);
+
+            VkSubmitInfo submitInfo{ VK_STRUCTURE_TYPE_SUBMIT_INFO };
+            submitInfo.commandBufferCount = 1;
+            submitInfo.pCommandBuffers = &CommandBuffer;
+            vkQueueSubmit(Queue, 1, &submitInfo, VK_NULL_HANDLE);
+            vkQueueWaitIdle(Queue);
+
+            vkFreeCommandBuffers(Device, CommandPool, 1, &CommandBuffer);
+        }
+    };
+}
+
 namespace Trident
 {
     namespace UI
@@ -48,15 +86,24 @@ namespace Trident
 
             TR_CORE_TRACE("ImGui version: {}", IMGUI_VERSION);
 
+            IMGUI_CHECKVERSION();
             ImGui::CreateContext();
             ImGuiIO& io = ImGui::GetIO();
             io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
             io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
             ImGui::StyleColorsDark();
 
+            if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
+            {
+                ImGuiStyle& style = ImGui::GetStyle();
+                style.WindowRounding = 0.0f;
+                style.Colors[ImGuiCol_WindowBg].w = 1.0f;
+            }
+
             ImGui_ImplGlfw_InitForVulkan(window, true);
 
             ImGui_ImplVulkan_InitInfo initInfo{};
+            initInfo.ApiVersion = VK_API_VERSION_1_0;
             initInfo.Instance = instance;
             initInfo.PhysicalDevice = physicalDevice;
             initInfo.Device = device;
@@ -69,31 +116,14 @@ namespace Trident
             initInfo.ImageCount = imageCount;
             initInfo.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
             initInfo.RenderPass = renderPass;
+            //initInfo.CheckVkResultFn = [](VkResult err) { TR_CORE_ERROR("ImGui VkResult: {}", static_cast<int32_t>(err)); };
 
             ImGui_ImplVulkan_Init(&initInfo);
+            ImGui_ImplVulkan_SetMinImageCount(imageCount);
 
-            VkCommandBufferAllocateInfo allocInfo{ VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO };
-            allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-            allocInfo.commandPool = commandPool;
-            allocInfo.commandBufferCount = 1;
-
-            VkCommandBuffer commandBuffer;
-            vkAllocateCommandBuffers(device, &allocInfo, &commandBuffer);
-
-            VkCommandBufferBeginInfo beginInfo{ VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
-            beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-            vkBeginCommandBuffer(commandBuffer, &beginInfo);
+            ScopedCommandBuffer fontCmd{ device, commandPool, queue };
             ImGui_ImplVulkan_CreateFontsTexture();
-            vkEndCommandBuffer(commandBuffer);
-
-            VkSubmitInfo submitInfo{ VK_STRUCTURE_TYPE_SUBMIT_INFO };
-            submitInfo.commandBufferCount = 1;
-            submitInfo.pCommandBuffers = &commandBuffer;
-            vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);
-            vkDeviceWaitIdle(device);
-            
             ImGui_ImplVulkan_DestroyFontsTexture();
-            vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
 
             TR_CORE_INFO("-------IMGUI INITIALIZED-------");
         }
