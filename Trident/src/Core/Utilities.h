@@ -39,6 +39,10 @@ namespace Trident
 			static std::vector<char> ReadFile(const std::string& filePath);
 			static std::string NormalizePath(const std::string& path);
 			static std::string GetBaseDirectory(const std::string& filePath);
+
+			static std::vector<char> ReadBinaryFile(const std::string& filePath) { return ReadFile(filePath); }
+			static std::string GetExtension(const std::string& filePath);
+			static std::string JoinPath(const std::string& base, const std::string& addition);
 		};
 
 		//------------------------------------------------------------------------------------------------------------------------------------------------------//

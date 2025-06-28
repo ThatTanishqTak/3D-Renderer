@@ -27,6 +27,7 @@ namespace Trident
             {
                 return {};
             }
+
             size_t l_End = content.find('}', l_Start);
             if (l_End == std::string::npos)
             {
@@ -39,6 +40,8 @@ namespace Trident
         static std::vector<float> ParseFloatList(const std::string& data)
         {
             std::vector<float> l_Result;
+            l_Result.reserve(std::count(data.begin(), data.end(), ',') + 1);
+
             std::stringstream l_Stream(data);
             std::string l_Token;
             while (std::getline(l_Stream, l_Token, ','))
@@ -55,6 +58,8 @@ namespace Trident
         static std::vector<int> ParseIntList(const std::string& data)
         {
             std::vector<int> l_Result;
+            l_Result.reserve(std::count(data.begin(), data.end(), ',') + 1);
+
             std::stringstream l_Stream(data);
             std::string l_Token;
             while (std::getline(l_Stream, l_Token, ','))
@@ -70,7 +75,7 @@ namespace Trident
 
         static bool ParseFBX(const std::string& path, Geometry::Mesh& mesh)
         {
-            std::ifstream l_File(path);
+            std::ifstream l_File(path, std::ios::in | std::ios::binary);
             if (!l_File.is_open())
             {
                 TR_CORE_ERROR("Failed to open FBX file: {}", path);
@@ -91,6 +96,7 @@ namespace Trident
             }
 
             auto l_Vertices = ParseFloatList(l_VertData);
+            mesh.Vertices.reserve(l_Vertices.size() / 3);
             for (size_t i = 0; i + 2 < l_Vertices.size(); i += 3)
             {
                 Vertex l_Vertex{};
@@ -101,6 +107,7 @@ namespace Trident
             }
 
             auto l_Indices = ParseIntList(l_IndexData);
+            mesh.Indices.reserve(l_Indices.size());
             std::vector<uint16_t> l_Polygon;
             for (int l_Value : l_Indices)
             {
@@ -124,7 +131,7 @@ namespace Trident
 
         static bool ParseOBJ(const std::string& path, Geometry::Mesh& mesh)
         {
-            std::ifstream l_File(path);
+            std::ifstream l_File(path, std::ios::in | std::ios::binary);
             if (!l_File.is_open())
             {
                 TR_CORE_ERROR("Failed to open OBJ file: {}", path);
@@ -132,13 +139,39 @@ namespace Trident
                 return false;
             }
 
-            std::vector<glm::vec3> l_Positions;
-            std::vector<glm::vec2> l_Texcoords;
-            std::unordered_map<std::string, uint16_t> l_Unique;
+            std::vector<std::string> l_Lines;
             std::string l_Line;
             while (std::getline(l_File, l_Line))
             {
-                std::stringstream l_Stream(l_Line);
+                l_Lines.push_back(l_Line);
+            }
+
+            size_t l_PosCount = 0;
+            size_t l_FaceCount = 0;
+            for (const auto& l_RawLine : l_Lines)
+            {
+                if (l_RawLine.rfind("v ", 0) == 0)
+                {
+                    ++l_PosCount;
+                }
+                else if (l_RawLine.rfind("f ", 0) == 0)
+                {
+                    ++l_FaceCount;
+                }
+            }
+
+            std::vector<glm::vec3> l_Positions;
+            l_Positions.reserve(l_PosCount);
+            std::vector<glm::vec2> l_Texcoords;
+            l_Texcoords.reserve(l_PosCount);
+            std::unordered_map<std::string, uint16_t> l_Unique;
+
+            mesh.Vertices.reserve(l_PosCount);
+            mesh.Indices.reserve(l_FaceCount * 3);
+
+            for (const auto& l_RawLine : l_Lines)
+            {
+                std::stringstream l_Stream(l_RawLine);
                 std::string l_Prefix;
                 l_Stream >> l_Prefix;
 
@@ -235,19 +268,8 @@ namespace Trident
             std::string l_Warn;
 
             bool l_Binary = false;
-            std::string l_Ext;
-            if (filePath.size() > 4)
-            {
-                l_Ext = filePath.substr(filePath.size() - 4);
-                std::transform(l_Ext.begin(), l_Ext.end(), l_Ext.begin(), ::tolower);
-            }
-
-            if (l_Ext != ".gltf" && l_Ext != ".glb" && l_Ext != ".fbx" && l_Ext != ".obj")
-            {
-                TR_CORE_CRITICAL("Unsupported model format: {}", filePath);
-
-                return l_Mesh;
-            }
+            std::string l_Ext = Utilities::FileManagement::GetExtension(filePath);
+            std::transform(l_Ext.begin(), l_Ext.end(), l_Ext.begin(), ::tolower);
 
             if (l_Ext == ".fbx")
             {
@@ -329,6 +351,8 @@ namespace Trident
             const tinygltf::Buffer& l_PosBuf = l_Model.buffers[l_PosView.buffer];
             const float* l_Positions = reinterpret_cast<const float*>(&l_PosBuf.data[l_PosView.byteOffset + l_PosAcc.byteOffset]);
 
+            l_Mesh.Vertices.reserve(l_PosAcc.count);
+
             const float* l_Texcoords = nullptr;
             bool l_HasTexcoord = false;
             auto l_TexIt = l_Prim.attributes.find("TEXCOORD_0");
@@ -360,6 +384,8 @@ namespace Trident
                 const tinygltf::Accessor& l_IndAcc = l_Model.accessors[l_Prim.indices];
                 const tinygltf::BufferView& l_IndView = l_Model.bufferViews[l_IndAcc.bufferView];
                 const tinygltf::Buffer& l_IndBuf = l_Model.buffers[l_IndView.buffer];
+
+                l_Mesh.Indices.reserve(l_IndAcc.count);
 
                 if (l_IndAcc.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT)
                 {

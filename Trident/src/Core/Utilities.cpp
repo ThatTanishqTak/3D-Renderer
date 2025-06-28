@@ -65,6 +65,18 @@ namespace Trident
 			return l_Path.has_parent_path() ? l_Path.parent_path().string() : "";
 		}
 
+		std::string FileManagement::GetExtension(const std::string& filePath)
+		{
+			std::filesystem::path l_Path(filePath);
+			return l_Path.has_extension() ? l_Path.extension().string() : "";
+		}
+
+		std::string FileManagement::JoinPath(const std::string& base, const std::string& addition)
+		{
+			std::filesystem::path l_Path = std::filesystem::path(base) / addition;
+			return NormalizePath(l_Path.string());
+		}
+
 		//------------------------------------------------------------------------------------------------------------------------------------------------------//
 
 		double Time::s_LastTime = 0.0;
