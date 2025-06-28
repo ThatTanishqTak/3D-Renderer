@@ -5,12 +5,120 @@
 #define TINYGLTF_IMPLEMENTATION
 #include <tiny_gltf.h>
 
+#include <fstream>
+#include <sstream>
 #include <algorithm>
 
 namespace Trident
 {
     namespace Loader
     {
+        static std::string GetSection(const std::string& a_Content, const std::string& a_Marker)
+        {
+            size_t l_Start = a_Content.find(a_Marker);
+            if (l_Start == std::string::npos)
+            {
+                return {};
+            }
+
+            l_Start = a_Content.find('{', l_Start);
+            if (l_Start == std::string::npos)
+            {
+                return {};
+            }
+            size_t l_End = a_Content.find('}', l_Start);
+            if (l_End == std::string::npos)
+            {
+                return {};
+            }
+
+            return a_Content.substr(l_Start + 1, l_End - l_Start - 1);
+        }
+
+        static std::vector<float> ParseFloatList(const std::string& a_Data)
+        {
+            std::vector<float> l_Result;
+            std::stringstream l_Stream(a_Data);
+            std::string l_Token;
+            while (std::getline(l_Stream, l_Token, ','))
+            {
+                if (!l_Token.empty())
+                {
+                    l_Result.push_back(std::stof(l_Token));
+                }
+            }
+
+            return l_Result;
+        }
+
+        static std::vector<int> ParseIntList(const std::string& a_Data)
+        {
+            std::vector<int> l_Result;
+            std::stringstream l_Stream(a_Data);
+            std::string l_Token;
+            while (std::getline(l_Stream, l_Token, ','))
+            {
+                if (!l_Token.empty())
+                {
+                    l_Result.push_back(std::stoi(l_Token));
+                }
+            }
+
+            return l_Result;
+        }
+
+        static bool ParseFBX(const std::string& a_Path, Geometry::Mesh& a_Mesh)
+        {
+            std::ifstream l_File(a_Path);
+            if (!l_File.is_open())
+            {
+                TR_CORE_ERROR("Failed to open FBX file: {}", a_Path);
+
+                return false;
+            }
+
+            std::string l_Content((std::istreambuf_iterator<char>(l_File)), std::istreambuf_iterator<char>());
+
+            std::string l_VertData = GetSection(l_Content, "Vertices:");
+            std::string l_IndexData = GetSection(l_Content, "PolygonVertexIndex:");
+
+            if (l_VertData.empty() || l_IndexData.empty())
+            {
+                TR_CORE_CRITICAL("Incomplete FBX data in {}", a_Path);
+
+                return false;
+            }
+
+            auto l_Vertices = ParseFloatList(l_VertData);
+            for (size_t i = 0; i + 2 < l_Vertices.size(); i += 3)
+            {
+                Vertex l_Vertex{};
+                l_Vertex.Position = { l_Vertices[i], l_Vertices[i + 1], l_Vertices[i + 2] };
+                l_Vertex.Color = { 1.0f, 1.0f, 1.0f };
+                a_Mesh.Vertices.push_back(l_Vertex);
+            }
+
+            auto l_Indices = ParseIntList(l_IndexData);
+            std::vector<uint16_t> l_Polygon;
+            for (int l_Value : l_Indices)
+            {
+                bool l_End = l_Value < 0;
+                uint16_t l_Index = static_cast<uint16_t>(l_End ? ~l_Value : l_Value);
+                l_Polygon.push_back(l_Index);
+                if (l_End)
+                {
+                    for (size_t i = 1; i + 1 < l_Polygon.size(); ++i)
+                    {
+                        a_Mesh.Indices.push_back(l_Polygon[0]);
+                        a_Mesh.Indices.push_back(l_Polygon[i]);
+                        a_Mesh.Indices.push_back(l_Polygon[i + 1]);
+                    }
+                    l_Polygon.clear();
+                }
+            }
+
+            return !a_Mesh.Vertices.empty();
+        }
         Geometry::Mesh ModelLoader::Load(const std::string& filePath)
         {
             Geometry::Mesh l_Mesh{};
@@ -21,13 +129,31 @@ namespace Trident
             std::string l_Warn;
 
             bool l_Binary = false;
+            std::string l_Ext;
             if (filePath.size() > 4)
             {
-                std::string l_Ext = filePath.substr(filePath.size() - 4);
+                l_Ext = filePath.substr(filePath.size() - 4);
                 std::transform(l_Ext.begin(), l_Ext.end(), l_Ext.begin(), ::tolower);
-                
-                l_Binary = l_Ext == ".glb";
             }
+
+            if (l_Ext != ".gltf" && l_Ext != ".glb" && l_Ext != ".fbx")
+            {
+                TR_CORE_CRITICAL("Unsupported model format: {}", filePath);
+
+                return l_Mesh;
+            }
+
+            if (l_Ext == ".fbx")
+            {
+                if (!ParseFBX(filePath, l_Mesh))
+                {
+                    TR_CORE_CRITICAL("Failed to load FBX model: {}", filePath);
+                }
+
+                return l_Mesh;
+            }
+
+            l_Binary = l_Ext == ".glb";
 
             bool l_Loaded = false;
             if (l_Binary)
@@ -47,6 +173,13 @@ namespace Trident
             if (!l_Loaded)
             {
                 TR_CORE_CRITICAL("Failed to load model: {} ({})", filePath, l_Err);
+
+                return l_Mesh;
+            }
+
+            if (l_Model.meshes.empty())
+            {
+                TR_CORE_WARN("No mesh found in {}", filePath);
                 
                 return l_Mesh;
             }
