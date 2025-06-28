@@ -2,8 +2,10 @@
 
 #include "Core/Utilities.h"
 
-#define STB_IMAGE_WRITE_IMPLEMENTATION
+#define TINYGLTF_IMPLEMENTATION
+#define STB_IMAGE_IMPLEMENTATION
 #include <tiny_gltf.h>
+
 #include <algorithm>
 
 namespace Trident
@@ -53,6 +55,7 @@ namespace Trident
             if (l_Model.meshes.empty())
             {
                 TR_CORE_WARN("No mesh found in {}", filePath);
+
                 return l_Mesh;
             }
 
