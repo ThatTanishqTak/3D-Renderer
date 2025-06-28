@@ -8,37 +8,38 @@
 #include <fstream>
 #include <sstream>
 #include <algorithm>
+#include <unordered_map>
 
 namespace Trident
 {
     namespace Loader
     {
-        static std::string GetSection(const std::string& a_Content, const std::string& a_Marker)
+        static std::string GetSection(const std::string& content, const std::string& marker)
         {
-            size_t l_Start = a_Content.find(a_Marker);
+            size_t l_Start = content.find(marker);
             if (l_Start == std::string::npos)
             {
                 return {};
             }
 
-            l_Start = a_Content.find('{', l_Start);
+            l_Start = content.find('{', l_Start);
             if (l_Start == std::string::npos)
             {
                 return {};
             }
-            size_t l_End = a_Content.find('}', l_Start);
+            size_t l_End = content.find('}', l_Start);
             if (l_End == std::string::npos)
             {
                 return {};
             }
 
-            return a_Content.substr(l_Start + 1, l_End - l_Start - 1);
+            return content.substr(l_Start + 1, l_End - l_Start - 1);
         }
 
-        static std::vector<float> ParseFloatList(const std::string& a_Data)
+        static std::vector<float> ParseFloatList(const std::string& data)
         {
             std::vector<float> l_Result;
-            std::stringstream l_Stream(a_Data);
+            std::stringstream l_Stream(data);
             std::string l_Token;
             while (std::getline(l_Stream, l_Token, ','))
             {
@@ -51,10 +52,10 @@ namespace Trident
             return l_Result;
         }
 
-        static std::vector<int> ParseIntList(const std::string& a_Data)
+        static std::vector<int> ParseIntList(const std::string& data)
         {
             std::vector<int> l_Result;
-            std::stringstream l_Stream(a_Data);
+            std::stringstream l_Stream(data);
             std::string l_Token;
             while (std::getline(l_Stream, l_Token, ','))
             {
@@ -67,12 +68,12 @@ namespace Trident
             return l_Result;
         }
 
-        static bool ParseFBX(const std::string& a_Path, Geometry::Mesh& a_Mesh)
+        static bool ParseFBX(const std::string& path, Geometry::Mesh& mesh)
         {
-            std::ifstream l_File(a_Path);
+            std::ifstream l_File(path);
             if (!l_File.is_open())
             {
-                TR_CORE_ERROR("Failed to open FBX file: {}", a_Path);
+                TR_CORE_ERROR("Failed to open FBX file: {}", path);
 
                 return false;
             }
@@ -84,7 +85,7 @@ namespace Trident
 
             if (l_VertData.empty() || l_IndexData.empty())
             {
-                TR_CORE_CRITICAL("Incomplete FBX data in {}", a_Path);
+                TR_CORE_CRITICAL("Incomplete FBX data in {}", path);
 
                 return false;
             }
@@ -93,9 +94,10 @@ namespace Trident
             for (size_t i = 0; i + 2 < l_Vertices.size(); i += 3)
             {
                 Vertex l_Vertex{};
+
                 l_Vertex.Position = { l_Vertices[i], l_Vertices[i + 1], l_Vertices[i + 2] };
                 l_Vertex.Color = { 1.0f, 1.0f, 1.0f };
-                a_Mesh.Vertices.push_back(l_Vertex);
+                mesh.Vertices.push_back(l_Vertex);
             }
 
             auto l_Indices = ParseIntList(l_IndexData);
@@ -109,15 +111,118 @@ namespace Trident
                 {
                     for (size_t i = 1; i + 1 < l_Polygon.size(); ++i)
                     {
-                        a_Mesh.Indices.push_back(l_Polygon[0]);
-                        a_Mesh.Indices.push_back(l_Polygon[i]);
-                        a_Mesh.Indices.push_back(l_Polygon[i + 1]);
+                        mesh.Indices.push_back(l_Polygon[0]);
+                        mesh.Indices.push_back(l_Polygon[i]);
+                        mesh.Indices.push_back(l_Polygon[i + 1]);
                     }
                     l_Polygon.clear();
                 }
             }
 
-            return !a_Mesh.Vertices.empty();
+            return !mesh.Vertices.empty();
+        }
+
+        static bool ParseOBJ(const std::string& path, Geometry::Mesh& mesh)
+        {
+            std::ifstream l_File(path);
+            if (!l_File.is_open())
+            {
+                TR_CORE_ERROR("Failed to open OBJ file: {}", path);
+
+                return false;
+            }
+
+            std::vector<glm::vec3> l_Positions;
+            std::vector<glm::vec2> l_Texcoords;
+            std::unordered_map<std::string, uint16_t> l_Unique;
+            std::string l_Line;
+            while (std::getline(l_File, l_Line))
+            {
+                std::stringstream l_Stream(l_Line);
+                std::string l_Prefix;
+                l_Stream >> l_Prefix;
+
+                if (l_Prefix == "v")
+                {
+                    glm::vec3 l_Pos;
+                    l_Stream >> l_Pos.x >> l_Pos.y >> l_Pos.z;
+                    l_Positions.push_back(l_Pos);
+                }
+
+                else if (l_Prefix == "vt")
+                {
+                    glm::vec2 l_Tex;
+                    l_Stream >> l_Tex.x >> l_Tex.y;
+                    l_Texcoords.push_back(l_Tex);
+                }
+
+                else if (l_Prefix == "f")
+                {
+                    std::vector<uint16_t> l_Face;
+                    std::string l_VertexData;
+                    while (l_Stream >> l_VertexData)
+                    {
+                        auto l_It = l_Unique.find(l_VertexData);
+                        if (l_It == l_Unique.end())
+                        {
+                            uint32_t l_PosIndex = 0;
+                            uint32_t l_TexIndex = 0;
+
+                            size_t l_First = l_VertexData.find('/');
+                            size_t l_Second = l_VertexData.find('/', l_First + 1);
+
+                            if (l_First == std::string::npos)
+                            {
+                                l_PosIndex = std::stoul(l_VertexData);
+                            }
+                            else
+                            {
+                                l_PosIndex = std::stoul(l_VertexData.substr(0, l_First));
+                                if (l_Second != std::string::npos && l_Second > l_First + 1)
+                                {
+                                    l_TexIndex = std::stoul(l_VertexData.substr(l_First + 1, l_Second - l_First - 1));
+                                }
+
+                                else if (l_First + 1 < l_VertexData.size())
+                                {
+                                    l_TexIndex = std::stoul(l_VertexData.substr(l_First + 1));
+                                }
+                            }
+
+                            Vertex l_Vertex{};
+                            if (l_PosIndex > 0 && l_PosIndex <= l_Positions.size())
+                            {
+                                l_Vertex.Position = l_Positions[l_PosIndex - 1];
+                            }
+                            
+                            l_Vertex.Color = { 1.0f, 1.0f, 1.0f };
+                            if (l_TexIndex > 0 && l_TexIndex <= l_Texcoords.size())
+                            {
+                                glm::vec2 l_Tex = l_Texcoords[l_TexIndex - 1];
+                                l_Vertex.TexCoord = { l_Tex.x, 1.0f - l_Tex.y };
+                            }
+
+                            uint16_t l_Index = static_cast<uint16_t>(mesh.Vertices.size());
+                            mesh.Vertices.push_back(l_Vertex);
+                            l_Unique[l_VertexData] = l_Index;
+                            l_Face.push_back(l_Index);
+                        }
+                        else
+                        {
+                            l_Face.push_back(l_It->second);
+                        }
+                    }
+
+                    for (size_t i = 1; i + 1 < l_Face.size(); ++i)
+                    {
+                        mesh.Indices.push_back(l_Face[0]);
+                        mesh.Indices.push_back(l_Face[i]);
+                        mesh.Indices.push_back(l_Face[i + 1]);
+                    }
+                }
+            }
+
+            return !mesh.Vertices.empty();
         }
 
         Geometry::Mesh ModelLoader::Load(const std::string& filePath)
@@ -137,7 +242,7 @@ namespace Trident
                 std::transform(l_Ext.begin(), l_Ext.end(), l_Ext.begin(), ::tolower);
             }
 
-            if (l_Ext != ".gltf" && l_Ext != ".glb" && l_Ext != ".fbx")
+            if (l_Ext != ".gltf" && l_Ext != ".glb" && l_Ext != ".fbx" && l_Ext != ".obj")
             {
                 TR_CORE_CRITICAL("Unsupported model format: {}", filePath);
 
@@ -149,6 +254,16 @@ namespace Trident
                 if (!ParseFBX(filePath, l_Mesh))
                 {
                     TR_CORE_CRITICAL("Failed to load FBX model: {}", filePath);
+                }
+
+                return l_Mesh;
+            }
+
+            if (l_Ext == ".obj")
+            {
+                if (!ParseOBJ(filePath, l_Mesh))
+                {
+                    TR_CORE_CRITICAL("Failed to load OBJ model: {}", filePath);
                 }
 
                 return l_Mesh;

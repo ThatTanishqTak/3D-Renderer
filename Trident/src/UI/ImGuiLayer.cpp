@@ -101,6 +101,12 @@ namespace Trident
         void ImGuiLayer::Shutdown()
         {
             TR_CORE_TRACE("Shutting Down ImGui");
+
+            if (m_Device != VK_NULL_HANDLE)
+            {
+                vkDeviceWaitIdle(m_Device);
+            }
+
             ImGui_ImplVulkan_Shutdown();
             ImGui_ImplGlfw_Shutdown();
             ImGui::DestroyContext();
