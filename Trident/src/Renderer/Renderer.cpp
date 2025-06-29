@@ -8,6 +8,21 @@
 
 #include <glm/gtc/matrix_transform.hpp>
 
+namespace
+{
+    glm::mat4 ComposeTransform(const Trident::Transform& t)
+    {
+        glm::mat4 l_Mat{ 1.0f };
+        l_Mat = glm::translate(l_Mat, t.Position);
+        l_Mat = glm::rotate(l_Mat, glm::radians(t.Rotation.x), glm::vec3{ 1.0f, 0.0f, 0.0f });
+        l_Mat = glm::rotate(l_Mat, glm::radians(t.Rotation.y), glm::vec3{ 0.0f, 1.0f, 0.0f });
+        l_Mat = glm::rotate(l_Mat, glm::radians(t.Rotation.z), glm::vec3{ 0.0f, 0.0f, 1.0f });
+        l_Mat = glm::scale(l_Mat, t.Scale);
+
+        return l_Mat;
+    }
+}
+
 namespace Trident
 {
     void Renderer::Init()
@@ -672,20 +687,19 @@ namespace Trident
 
         vkCmdBindPipeline(l_CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline.GetPipeline());
 
-        for (auto& model : m_Models)
+        if (m_VertexBuffer != VK_NULL_HANDLE && m_IndexBuffer != VK_NULL_HANDLE && m_IndexCount > 0)
         {
-            if (model.VertexBuffer == VK_NULL_HANDLE || model.IndexBuffer == VK_NULL_HANDLE || model.IndexCount == 0)
-                continue;
-
-            VkBuffer l_VertexBuffers[] = { model.VertexBuffer };
+            VkBuffer l_VertexBuffers[] = { m_VertexBuffer };
             VkDeviceSize l_Offsets[] = { 0 };
 
             vkCmdBindVertexBuffers(l_CommandBuffer, 0, 1, l_VertexBuffers, l_Offsets);
-            vkCmdBindIndexBuffer(l_CommandBuffer, model.IndexBuffer, 0, VK_INDEX_TYPE_UINT32);
+            vkCmdBindIndexBuffer(l_CommandBuffer, m_IndexBuffer, 0, VK_INDEX_TYPE_UINT32);
             vkCmdBindDescriptorSets(l_CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline.GetPipelineLayout(), 0, 1, &m_DescriptorSets[imageIndex], 0, nullptr);
-            vkCmdPushConstants(l_CommandBuffer, m_Pipeline.GetPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &model.Transform);
 
-            vkCmdDrawIndexed(l_CommandBuffer, model.IndexCount, 1, 0, 0, 0);
+            glm::mat4 l_Transform = ComposeTransform(m_Transform);
+            vkCmdPushConstants(l_CommandBuffer, m_Pipeline.GetPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &l_Transform);
+
+            vkCmdDrawIndexed(l_CommandBuffer, m_IndexCount, 1, 0, 0, 0);
         }
 
         if (m_ImGuiLayer)
