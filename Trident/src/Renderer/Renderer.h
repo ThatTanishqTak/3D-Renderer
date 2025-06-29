@@ -46,7 +46,7 @@ namespace Trident
         void DrawFrame();
 
         void RecreateSwapchain();
-        void UploadMesh(const Geometry::Mesh& mesh);
+        void UploadMesh(const std::vector<Geometry::Mesh>& meshes);
         void UploadTexture(const Loader::TextureData& texture);
         void SetImGuiLayer(UI::ImGuiLayer* layer);
 

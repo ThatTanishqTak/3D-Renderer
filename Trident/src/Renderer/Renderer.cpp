@@ -45,6 +45,19 @@ namespace Trident
 
         m_DescriptorSets.clear();
 
+        for (auto& model : m_Models)
+        {
+            if (model.VertexBuffer != VK_NULL_HANDLE)
+            {
+                m_Buffers.DestroyBuffer(model.VertexBuffer, model.VertexBufferMemory);
+            }
+            if (model.IndexBuffer != VK_NULL_HANDLE)
+            {
+                m_Buffers.DestroyBuffer(model.IndexBuffer, model.IndexBufferMemory);
+            }
+        }
+        m_Models.clear();
+
         m_Pipeline.Cleanup();
         m_Swapchain.Cleanup();
         m_Buffers.Cleanup();
@@ -126,7 +139,7 @@ namespace Trident
         m_Commands.CurrentFrame() = (m_Commands.CurrentFrame() + 1) % m_Commands.GetFrameCount();
     }
 
-    void Renderer::UploadMesh(const Geometry::Mesh& mesh)
+    void Renderer::UploadMesh(const std::vector<Geometry::Mesh>& meshes)
     {
         // Ensure no GPU operations are using the old buffers
         vkDeviceWaitIdle(Application::GetDevice());
@@ -146,8 +159,22 @@ namespace Trident
             m_IndexCount = 0;
         }
 
-        m_Buffers.CreateVertexBuffer(mesh.Vertices, m_Commands.GetCommandPool(), m_VertexBuffer, m_VertexBufferMemory);
-        m_Buffers.CreateIndexBuffer(mesh.Indices, m_Commands.GetCommandPool(), m_IndexBuffer, m_IndexBufferMemory, m_IndexCount);
+        std::vector<Vertex> l_AllVertices;
+        std::vector<uint16_t> l_AllIndices;
+        uint16_t l_Offset = 0;
+
+        for (const auto& l_Mesh : meshes)
+        {
+            l_AllVertices.insert(l_AllVertices.end(), l_Mesh.Vertices.begin(), l_Mesh.Vertices.end());
+            for (auto index : l_Mesh.Indices)
+            {
+                l_AllIndices.push_back(index + l_Offset);
+            }
+            l_Offset += static_cast<uint16_t>(l_Mesh.Vertices.size());
+        }
+
+        m_Buffers.CreateVertexBuffer(l_AllVertices, m_Commands.GetCommandPool(), m_VertexBuffer, m_VertexBufferMemory);
+        m_Buffers.CreateIndexBuffer(l_AllIndices, m_Commands.GetCommandPool(), m_IndexBuffer, m_IndexBufferMemory, m_IndexCount);
     }
 
     void Renderer::UploadTexture(const Loader::TextureData& texture)
@@ -658,16 +685,20 @@ namespace Trident
 
         vkCmdBindPipeline(l_CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline.GetPipeline());
 
-        if (m_VertexBuffer != VK_NULL_HANDLE && m_IndexBuffer != VK_NULL_HANDLE && m_IndexCount > 0)
+        for (auto& model : m_Models)
         {
-            VkBuffer l_VertexBuffers[] = { m_VertexBuffer };
+            if (model.VertexBuffer == VK_NULL_HANDLE || model.IndexBuffer == VK_NULL_HANDLE || model.IndexCount == 0)
+                continue;
+
+            VkBuffer l_VertexBuffers[] = { model.VertexBuffer };
             VkDeviceSize l_Offsets[] = { 0 };
 
             vkCmdBindVertexBuffers(l_CommandBuffer, 0, 1, l_VertexBuffers, l_Offsets);
-            vkCmdBindIndexBuffer(l_CommandBuffer, m_IndexBuffer, 0, VK_INDEX_TYPE_UINT16);
+            vkCmdBindIndexBuffer(l_CommandBuffer, model.IndexBuffer, 0, VK_INDEX_TYPE_UINT16);
             vkCmdBindDescriptorSets(l_CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline.GetPipelineLayout(), 0, 1, &m_DescriptorSets[imageIndex], 0, nullptr);
+            vkCmdPushConstants(l_CommandBuffer, m_Pipeline.GetPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &model.Transform);
 
-            vkCmdDrawIndexed(l_CommandBuffer, m_IndexCount, 1, 0, 0, 0);
+            vkCmdDrawIndexed(l_CommandBuffer, model.IndexCount, 1, 0, 0, 0);
         }
 
         if (m_ImGuiLayer)
@@ -744,12 +775,6 @@ namespace Trident
     {
         UniformBufferObject l_UBO{};
 
-        glm::mat4 l_Model = glm::mat4(1.0f);
-        l_Model = glm::translate(l_Model, m_CubeProperties.Position);
-        l_Model = glm::scale(l_Model, m_CubeProperties.Scale);
-        l_Model = glm::rotate(l_Model, 0.0f, glm::vec3(1.0f, 1.0f, 1.0f));
-
-        l_UBO.Model = l_Model;
         l_UBO.View = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
 
         float l_AspectRatio = static_cast<float>(m_Swapchain.GetExtent().width) / static_cast<float>(m_Swapchain.GetExtent().height);

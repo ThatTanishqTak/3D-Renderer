@@ -6,6 +6,8 @@
 
 #include "Core/Utilities.h"
 
+#include <glm/glm.hpp>
+
 namespace Trident
 {
     void Pipeline::Init(Swapchain& swapchain)
@@ -231,9 +233,16 @@ namespace Trident
         l_DynamicState.dynamicStateCount = 2;
         l_DynamicState.pDynamicStates = l_DynamicStates;
 
+        VkPushConstantRange l_PushConstant{};
+        l_PushConstant.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+        l_PushConstant.offset = 0;
+        l_PushConstant.size = sizeof(glm::mat4);
+
         VkPipelineLayoutCreateInfo l_PipelineLayoutInfo{ VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO };
         l_PipelineLayoutInfo.setLayoutCount = 1;
         l_PipelineLayoutInfo.pSetLayouts = &m_DescriptorSetLayout;
+        l_PipelineLayoutInfo.pushConstantRangeCount = 1;
+        l_PipelineLayoutInfo.pPushConstantRanges = &l_PushConstant;
 
         if (vkCreatePipelineLayout(Application::GetDevice(), &l_PipelineLayoutInfo, nullptr, &m_PipelineLayout) != VK_SUCCESS)
         {

@@ -2,7 +2,10 @@
 
 #include "Geometry/Mesh.h"
 
+#include <tiny_gltf.h>
+
 #include <string>
+#include <vector>
 
 namespace Trident
 {
@@ -11,7 +14,7 @@ namespace Trident
         class ModelLoader
         {
         public:
-            static Geometry::Mesh Load(const std::string& filePath);
+            static std::vector<Geometry::Mesh> Load(const std::string& filePath);
         };
     }
 }
