@@ -45,19 +45,6 @@ namespace Trident
 
         m_DescriptorSets.clear();
 
-        for (auto& model : m_Models)
-        {
-            if (model.VertexBuffer != VK_NULL_HANDLE)
-            {
-                m_Buffers.DestroyBuffer(model.VertexBuffer, model.VertexBufferMemory);
-            }
-            if (model.IndexBuffer != VK_NULL_HANDLE)
-            {
-                m_Buffers.DestroyBuffer(model.IndexBuffer, model.IndexBufferMemory);
-            }
-        }
-        m_Models.clear();
-
         m_Pipeline.Cleanup();
         m_Swapchain.Cleanup();
         m_Buffers.Cleanup();
@@ -160,8 +147,8 @@ namespace Trident
         }
 
         std::vector<Vertex> l_AllVertices;
-        std::vector<uint16_t> l_AllIndices;
-        uint16_t l_Offset = 0;
+        std::vector<uint32_t> l_AllIndices;
+        uint32_t l_Offset = 0;
 
         for (const auto& l_Mesh : meshes)
         {
@@ -170,7 +157,7 @@ namespace Trident
             {
                 l_AllIndices.push_back(index + l_Offset);
             }
-            l_Offset += static_cast<uint16_t>(l_Mesh.Vertices.size());
+            l_Offset += static_cast<uint32_t>(l_Mesh.Vertices.size());
         }
 
         m_Buffers.CreateVertexBuffer(l_AllVertices, m_Commands.GetCommandPool(), m_VertexBuffer, m_VertexBufferMemory);
@@ -694,7 +681,7 @@ namespace Trident
             VkDeviceSize l_Offsets[] = { 0 };
 
             vkCmdBindVertexBuffers(l_CommandBuffer, 0, 1, l_VertexBuffers, l_Offsets);
-            vkCmdBindIndexBuffer(l_CommandBuffer, model.IndexBuffer, 0, VK_INDEX_TYPE_UINT16);
+            vkCmdBindIndexBuffer(l_CommandBuffer, model.IndexBuffer, 0, VK_INDEX_TYPE_UINT32);
             vkCmdBindDescriptorSets(l_CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline.GetPipelineLayout(), 0, 1, &m_DescriptorSets[imageIndex], 0, nullptr);
             vkCmdPushConstants(l_CommandBuffer, m_Pipeline.GetPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &model.Transform);
 

@@ -14,7 +14,7 @@ namespace Trident
         void Cleanup();
 
         void CreateVertexBuffer(const std::vector<Vertex>& vertices, VkCommandPool commandPool, VkBuffer& vertexBuffer, VkDeviceMemory& vertexBufferMemory);
-        void CreateIndexBuffer(const std::vector<uint16_t>& indices, VkCommandPool commandPool, VkBuffer& indexBuffer, VkDeviceMemory& indexBufferMemory, uint32_t& indexCount);
+        void CreateIndexBuffer(const std::vector<uint32_t>& indices, VkCommandPool commandPool, VkBuffer& indexBuffer, VkDeviceMemory& indexBufferMemory, uint32_t& indexCount);
         void CreateUniformBuffers(uint32_t imageCount, std::vector<VkBuffer>& uniformBuffers, std::vector<VkDeviceMemory>& uniformBuffersMemory);
 
         uint32_t FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);

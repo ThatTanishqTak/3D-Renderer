@@ -64,7 +64,7 @@ namespace Trident
         }
     }
 
-    void Buffers::CreateIndexBuffer(const std::vector<uint16_t>& indices, VkCommandPool commandPool, VkBuffer& indexBuffer, VkDeviceMemory& indexBufferMemory, uint32_t& indexCount)
+    void Buffers::CreateIndexBuffer(const std::vector<uint32_t>& indices, VkCommandPool commandPool, VkBuffer& indexBuffer, VkDeviceMemory& indexBufferMemory, uint32_t& indexCount)
     {
         TR_CORE_TRACE("Creating Index Buffer");
 

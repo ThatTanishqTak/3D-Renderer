@@ -11,7 +11,7 @@ namespace Trident
         struct Mesh
         {
             std::vector<Vertex> Vertices;
-            std::vector<uint16_t> Indices;
+            std::vector<uint32_t> Indices;
         };
     }
 }

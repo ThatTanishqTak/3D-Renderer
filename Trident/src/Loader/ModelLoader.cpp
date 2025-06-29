@@ -108,11 +108,11 @@ namespace Trident
 
             auto l_Indices = ParseIntList(l_IndexData);
             mesh.Indices.reserve(l_Indices.size());
-            std::vector<uint16_t> l_Polygon;
+            std::vector<uint32_t> l_Polygon;
             for (int l_Value : l_Indices)
             {
                 bool l_End = l_Value < 0;
-                uint16_t l_Index = static_cast<uint16_t>(l_End ? ~l_Value : l_Value);
+                uint32_t l_Index = static_cast<uint32_t>(l_End ? ~l_Value : l_Value);
                 l_Polygon.push_back(l_Index);
                 if (l_End)
                 {
@@ -129,7 +129,7 @@ namespace Trident
             return !mesh.Vertices.empty();
         }
 
-        static bool ParseOBJ(const std::string& path, Geometry::Mesh& mesh)
+        static bool ParseOBJ(const std::string& path, std::vector<Geometry::Mesh>& meshes)
         {
             std::ifstream l_File(path, std::ios::in | std::ios::binary);
             if (!l_File.is_open())
@@ -164,10 +164,11 @@ namespace Trident
             l_Positions.reserve(l_PosCount);
             std::vector<glm::vec2> l_Texcoords;
             l_Texcoords.reserve(l_PosCount);
-            std::unordered_map<std::string, uint16_t> l_Unique;
+            Geometry::Mesh l_Mesh{};
+            std::unordered_map<std::string, uint32_t> l_Unique;
 
-            mesh.Vertices.reserve(l_PosCount);
-            mesh.Indices.reserve(l_FaceCount * 3);
+            l_Mesh.Vertices.reserve(l_PosCount);
+            l_Mesh.Indices.reserve(l_FaceCount * 3);
 
             for (const auto& l_RawLine : l_Lines)
             {
@@ -191,7 +192,7 @@ namespace Trident
 
                 else if (l_Prefix == "f")
                 {
-                    std::vector<uint16_t> l_Face;
+                    std::vector<uint32_t> l_Face;
                     std::string l_VertexData;
                     while (l_Stream >> l_VertexData)
                     {
@@ -235,8 +236,8 @@ namespace Trident
                                 l_Vertex.TexCoord = { l_Tex.x, 1.0f - l_Tex.y };
                             }
 
-                            uint16_t l_Index = static_cast<uint16_t>(mesh.Vertices.size());
-                            mesh.Vertices.push_back(l_Vertex);
+                            uint32_t l_Index = static_cast<uint32_t>(l_Mesh.Vertices.size());
+                            l_Mesh.Vertices.push_back(l_Vertex);
                             l_Unique[l_VertexData] = l_Index;
                             l_Face.push_back(l_Index);
                         }
@@ -248,14 +249,21 @@ namespace Trident
 
                     for (size_t i = 1; i + 1 < l_Face.size(); ++i)
                     {
-                        mesh.Indices.push_back(l_Face[0]);
-                        mesh.Indices.push_back(l_Face[i]);
-                        mesh.Indices.push_back(l_Face[i + 1]);
+                        l_Mesh.Indices.push_back(l_Face[0]);
+                        l_Mesh.Indices.push_back(l_Face[i]);
+                        l_Mesh.Indices.push_back(l_Face[i + 1]);
                     }
                 }
             }
 
-            return !mesh.Vertices.empty();
+            if (!l_Mesh.Vertices.empty())
+            {
+                meshes.push_back(std::move(l_Mesh));
+                
+                return true;
+            }
+
+            return false;
         }
 
         std::vector<Geometry::Mesh> ModelLoader::Load(const std::string& filePath)
@@ -289,15 +297,9 @@ namespace Trident
 
             if (l_Ext == ".obj")
             {
-                Geometry::Mesh l_Mesh{};
-                if (!ParseOBJ(filePath, l_Mesh))
+                if (!ParseOBJ(filePath, l_Meshes))
                 {
                     TR_CORE_CRITICAL("Failed to load OBJ model: {}", filePath);
-                }
-
-                if (!l_Mesh.Vertices.empty())
-                {
-                    l_Meshes.push_back(std::move(l_Mesh));
                 }
 
                 return l_Meshes;
@@ -397,15 +399,15 @@ namespace Trident
                         if (l_IndAcc.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT)
                         {
                             const uint16_t* l_Indices = reinterpret_cast<const uint16_t*>(&l_IndBuf.data[l_IndView.byteOffset + l_IndAcc.byteOffset]);
-                            l_Mesh.Indices.insert(l_Mesh.Indices.end(), l_Indices, l_Indices + l_IndAcc.count);
+                            for (size_t i = 0; i < l_IndAcc.count; ++i)
+                            {
+                                l_Mesh.Indices.push_back(static_cast<uint32_t>(l_Indices[i]));
+                            }
                         }
                         else if (l_IndAcc.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT)
                         {
                             const uint32_t* l_Indices = reinterpret_cast<const uint32_t*>(&l_IndBuf.data[l_IndView.byteOffset + l_IndAcc.byteOffset]);
-                            for (size_t i = 0; i < l_IndAcc.count; ++i)
-                            {
-                                l_Mesh.Indices.push_back(static_cast<uint16_t>(l_Indices[i]));
-                            }
+                            l_Mesh.Indices.insert(l_Mesh.Indices.end(), l_Indices, l_Indices + l_IndAcc.count);
                         }
                     }
 

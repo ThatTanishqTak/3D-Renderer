@@ -153,8 +153,8 @@ namespace Trident
     {
         TR_CORE_TRACE("Creating Graphics Pipeline");
 
-        auto a_VertexCode = Utilities::FileManagement::ReadFile("Assets/Shaders/Cube.vert.spv");
-        auto a_FragmentCode = Utilities::FileManagement::ReadFile("Assets/Shaders/Cube.frag.spv");
+        auto a_VertexCode = Utilities::FileManagement::ReadFile("Assets/Shaders/Default.vert.spv");
+        auto a_FragmentCode = Utilities::FileManagement::ReadFile("Assets/Shaders/Default.frag.spv");
 
         VkShaderModule l_VertexModule = VK_NULL_HANDLE;
         VkShaderModule l_FragmentModule = VK_NULL_HANDLE;

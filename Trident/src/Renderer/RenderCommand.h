@@ -12,10 +12,10 @@ namespace Trident
         static void DrawFrame();
         static void RecreateSwapchain();
 
-        static void SetCubeProperties(const CubeProperties& props);
+        static void SetTransform(const Transform& props);
         static void SetViewport(const ViewportInfo& info);
 
-        static CubeProperties GetCubeProperties();
+        static Transform GetTransform();
         static ViewportInfo GetViewport();
         static uint32_t GetCurrentFrame();
     };

@@ -24,9 +24,9 @@ namespace Trident
         Application::GetRenderer().RecreateSwapchain();
     }
 
-    void RenderCommand::SetCubeProperties(const CubeProperties& props)
+    void RenderCommand::SetTransform(const Transform& props)
     {
-        Application::GetRenderer().SetCubeProperties(props);
+        Application::GetRenderer().SetTransform(props);
     }
 
     void RenderCommand::SetViewport(const ViewportInfo& info)
@@ -34,9 +34,9 @@ namespace Trident
         Application::GetRenderer().SetViewport(info);
     }
 
-    CubeProperties RenderCommand::GetCubeProperties()
+    Transform RenderCommand::GetTransform()
     {
-        return Application::GetRenderer().GetCubeProperties();
+        return Application::GetRenderer().GetTransform();
     }
 
     ViewportInfo RenderCommand::GetViewport()

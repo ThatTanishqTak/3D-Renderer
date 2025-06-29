@@ -9,7 +9,6 @@
 #include "Renderer/Buffers.h"
 #include "Renderer/Commands.h"
 
-#include "Geometry/Cube.h"
 #include "Geometry/Mesh.h"
 #include "Loader/TextureLoader.h"
 
@@ -25,7 +24,7 @@ namespace Trident
 {
     namespace UI { class ImGuiLayer; }
 
-    struct CubeProperties
+    struct Transform
     {
         glm::vec3 Position{ 0.0f };
         glm::vec3 Rotation{ 0.0f };
@@ -52,9 +51,9 @@ namespace Trident
 
         uint32_t GetCurrentFrame() const { return m_Commands.CurrentFrame(); }
 
-        void SetCubeProperties(const CubeProperties& props) { m_CubeProperties = props; }
+        void SetTransform(const Transform& props) { m_Transform = props; }
         void SetViewport(const ViewportInfo& info) { m_Viewport = info; }
-        CubeProperties GetCubeProperties() const { return m_CubeProperties; }
+        Transform GetTransform() const { return m_Transform; }
         ViewportInfo GetViewport() const { return m_Viewport; }
 
         VkRenderPass GetRenderPass() const { return m_Pipeline.GetRenderPass(); }
@@ -101,7 +100,7 @@ namespace Trident
 
         Buffers m_Buffers;
 
-        CubeProperties m_CubeProperties{};
+        Transform m_Transform{};
         ViewportInfo m_Viewport{};
 
         UI::ImGuiLayer* m_ImGuiLayer = nullptr;
