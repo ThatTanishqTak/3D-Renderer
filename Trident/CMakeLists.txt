@@ -38,6 +38,8 @@ target_include_directories(spdlog INTERFACE
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/vendor/spdlog/include>
 )
 
+add_subdirectory(vendor/assimp)
+
 add_library(stb INTERFACE)
 target_include_directories(stb INTERFACE
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/vendor/stb>
@@ -80,6 +82,7 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
   imgui
   stb
   tinygltf
+  assimp::assimp
 )
 
 option(TRIDENT_ENABLE_VALIDATION "Enable Vulkan Validation Layers" ON)

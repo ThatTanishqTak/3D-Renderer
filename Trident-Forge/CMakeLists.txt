@@ -62,7 +62,7 @@ add_custom_target(Assets
     COMMENT "Copying fonts..."
 )
 
-add_dependencies(Trident-Forge Assets)
+add_dependencies(${PROJECT_NAME} Assets)
 
 target_include_directories(${PROJECT_NAME}
     PRIVATE ${CMAKE_SOURCE_DIR}/Trident/src
