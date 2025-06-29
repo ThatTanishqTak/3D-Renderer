@@ -789,6 +789,11 @@ namespace Trident
             return EXIT_FAILURE;
         }
 
+        if (vkGetFenceStatus(Application::GetDevice(), m_ResourceFence) == VK_NOT_READY)
+        {
+            vkWaitForFences(Application::GetDevice(), 1, &m_ResourceFence, VK_TRUE, UINT64_MAX);
+        }
+
         vkResetFences(Application::GetDevice(), 1, &m_ResourceFence);
         VkSubmitInfo l_FenceSubmit{ VK_STRUCTURE_TYPE_SUBMIT_INFO };
         l_FenceSubmit.commandBufferCount = 0;
