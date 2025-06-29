@@ -25,6 +25,14 @@ namespace
 
 namespace Trident
 {
+    Renderer::~Renderer()
+    {
+        if (!m_Shutdown)
+        {
+            Shutdown();
+        }
+    }
+
     void Renderer::Init()
     {
         TR_CORE_INFO("-------INITIALIZING RENDERER-------");
@@ -39,6 +47,13 @@ namespace Trident
         CreateDefaultTexture();
         CreateDescriptorSets();
 
+        VkFenceCreateInfo l_FenceInfo{ VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
+        l_FenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+        if (vkCreateFence(Application::GetDevice(), &l_FenceInfo, nullptr, &m_ResourceFence) != VK_SUCCESS)
+        {
+            TR_CORE_CRITICAL("Failed to create resource fence");
+        }
+
         TR_CORE_INFO("-------RENDERER INITIALIZED-------");
     }
 
@@ -46,8 +61,8 @@ namespace Trident
     {
         TR_CORE_TRACE("Shutting Down Renderer");
 
-        // Ensure the GPU is idle before destroying resources
-        vkDeviceWaitIdle(Application::GetDevice());
+        // Application::CleanupVulkan waits for the device to become idle
+        // before calling this function. No additional wait is necessary here.
 
         m_Commands.Cleanup();
 
@@ -102,6 +117,15 @@ namespace Trident
             m_OffscreenSampler = VK_NULL_HANDLE;
         }
 
+        if (m_ResourceFence != VK_NULL_HANDLE)
+        {
+            vkDestroyFence(Application::GetDevice(), m_ResourceFence, nullptr);
+
+            m_ResourceFence = VK_NULL_HANDLE;
+        }
+
+        m_Shutdown = true;
+
         TR_CORE_TRACE("Renderer Shutdown Complete");
     }
 
@@ -144,7 +168,7 @@ namespace Trident
     void Renderer::UploadMesh(const std::vector<Geometry::Mesh>& meshes)
     {
         // Ensure no GPU operations are using the old buffers
-        vkDeviceWaitIdle(Application::GetDevice());
+        vkWaitForFences(Application::GetDevice(), 1, &m_ResourceFence, VK_TRUE, UINT64_MAX);
 
         if (m_VertexBuffer != VK_NULL_HANDLE)
         {
@@ -192,7 +216,7 @@ namespace Trident
 
         VkDevice l_Device = Application::GetDevice();
 
-        vkDeviceWaitIdle(l_Device);
+        vkWaitForFences(l_Device, 1, &m_ResourceFence, VK_TRUE, UINT64_MAX);
 
         if (m_TextureSampler != VK_NULL_HANDLE)
         {
@@ -396,6 +420,28 @@ namespace Trident
 
         m_Swapchain.Cleanup();
         m_Swapchain.Init();
+
+        uint32_t l_ImageCount = m_Swapchain.GetImageCount();
+        if (l_ImageCount != m_UniformBuffers.size())
+        {
+            for (size_t i = 0; i < m_UniformBuffers.size(); ++i)
+            {
+                m_Buffers.DestroyBuffer(m_UniformBuffers[i], m_UniformBuffersMemory[i]);
+            }
+
+            if (!m_DescriptorSets.empty())
+            {
+                vkFreeDescriptorSets(Application::GetDevice(), m_DescriptorPool, static_cast<uint32_t>(m_DescriptorSets.size()), m_DescriptorSets.data());
+                m_DescriptorSets.clear();
+            }
+
+            m_UniformBuffers.clear();
+            m_UniformBuffersMemory.clear();
+
+            m_Buffers.CreateUniformBuffers(l_ImageCount, m_UniformBuffers, m_UniformBuffersMemory);
+            CreateDescriptorSets();
+        }
+
         m_Pipeline.CreateFramebuffers(m_Swapchain);
 
         m_Commands.Recreate(m_Swapchain.GetImageCount());
@@ -741,6 +787,14 @@ namespace Trident
             TR_CORE_CRITICAL("Failed to submit draw command buffer!");
 
             return EXIT_FAILURE;
+        }
+
+        vkResetFences(Application::GetDevice(), 1, &m_ResourceFence);
+        VkSubmitInfo l_FenceSubmit{ VK_STRUCTURE_TYPE_SUBMIT_INFO };
+        l_FenceSubmit.commandBufferCount = 0;
+        if (vkQueueSubmit(Application::GetGraphicsQueue(), 1, &l_FenceSubmit, m_ResourceFence) != VK_SUCCESS)
+        {
+            TR_CORE_CRITICAL("Failed to submit resource fence");
         }
 
         return true;

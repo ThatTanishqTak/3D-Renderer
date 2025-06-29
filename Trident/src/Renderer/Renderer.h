@@ -40,6 +40,8 @@ namespace Trident
     class Renderer
     {
     public:
+        ~Renderer();
+
         void Init();
         void Shutdown();
         void DrawFrame();
@@ -63,6 +65,8 @@ namespace Trident
         VkCommandPool GetCommandPool() const { return m_Commands.GetCommandPool(); }
         std::vector<VkCommandBuffer> GetCommandBuffer() const { return m_Commands.GetCommandBuffers(); }
 
+        bool m_Shutdown = false;
+
     private:
         // Swapchain
         Swapchain m_Swapchain;
@@ -79,6 +83,7 @@ namespace Trident
 
         // Command pool, buffers and sync objects
         Commands m_Commands;
+        VkFence m_ResourceFence = VK_NULL_HANDLE;
 
         // Descriptor sets & uniform buffers
         VkDescriptorPool m_DescriptorPool = VK_NULL_HANDLE;
