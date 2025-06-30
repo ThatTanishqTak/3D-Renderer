@@ -22,36 +22,44 @@ namespace Trident
             return;
         }
 
-        if (glfwGetMouseButton(m_Window, GLFW_MOUSE_BUTTON_1) == GLFW_PRESS)
+        bool l_RightMouse = glfwGetMouseButton(m_Window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
+
+        if (l_RightMouse)
         {
+            float l_Speed = m_MoveSpeed;
+            if (glfwGetKey(m_Window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(m_Window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS)
+            {
+                l_Speed *= 5.0f;
+            }
+
             if (glfwGetKey(m_Window, GLFW_KEY_W) == GLFW_PRESS)
             {
-                m_Position += m_Front * m_MoveSpeed * deltaTime;
+                m_Position += m_Front * l_Speed * deltaTime;
             }
 
             if (glfwGetKey(m_Window, GLFW_KEY_S) == GLFW_PRESS)
             {
-                m_Position -= m_Front * m_MoveSpeed * deltaTime;
+                m_Position -= m_Front * l_Speed * deltaTime;
             }
 
             if (glfwGetKey(m_Window, GLFW_KEY_A) == GLFW_PRESS)
             {
-                m_Position -= m_Right * m_MoveSpeed * deltaTime;
+                m_Position -= m_Right * l_Speed * deltaTime;
             }
 
             if (glfwGetKey(m_Window, GLFW_KEY_D) == GLFW_PRESS)
             {
-                m_Position += m_Right * m_MoveSpeed * deltaTime;
+                m_Position += m_Right * l_Speed * deltaTime;
             }
 
             if (glfwGetKey(m_Window, GLFW_KEY_Q) == GLFW_PRESS)
             {
-                m_Position += m_Up * m_MoveSpeed * deltaTime;
+                m_Position += m_Up * l_Speed * deltaTime;
             }
 
             if (glfwGetKey(m_Window, GLFW_KEY_E) == GLFW_PRESS)
             {
-                m_Position -= m_Up * m_MoveSpeed * deltaTime;
+                m_Position -= m_Up * l_Speed * deltaTime;
             }
         }
 
@@ -63,20 +71,31 @@ namespace Trident
         {
             m_LastX = l_X;
             m_LastY = l_Y;
-            
+
             m_FirstMouse = false;
         }
 
-        float l_XOffset = static_cast<float>(l_X - m_LastX) * m_MouseSensitivity;
-        float l_YOffset = static_cast<float>(m_LastY - l_Y) * m_MouseSensitivity;
-        
+        if (l_RightMouse)
+        {
+            float l_XOffset = static_cast<float>(m_LastX - l_X) * m_MouseSensitivity;
+            float l_YOffset = static_cast<float>(m_LastY - l_Y) * m_MouseSensitivity;
+
+            m_Yaw += l_XOffset;
+            m_Pitch += l_YOffset;
+
+            if (m_Pitch > 89.0f)
+            {
+                m_Pitch = 89.0f;
+            }
+
+            if (m_Pitch < -89.0f)
+            {
+                m_Pitch = -89.0f;
+            }
+        }
+
         m_LastX = l_X;
         m_LastY = l_Y;
-
-        m_Yaw += l_XOffset;
-        m_Pitch += l_YOffset;
-        if (m_Pitch > 89.0f) m_Pitch = 89.0f;
-        if (m_Pitch < -89.0f) m_Pitch = -89.0f;
 
         UpdateVectors();
     }
@@ -84,7 +103,7 @@ namespace Trident
     void Camera::UpdateVectors()
     {
         glm::vec3 l_Front;
-        
+
         l_Front.x = cos(glm::radians(m_Yaw)) * cos(glm::radians(m_Pitch));
         l_Front.y = sin(glm::radians(m_Yaw)) * cos(glm::radians(m_Pitch));
         l_Front.z = sin(glm::radians(m_Pitch));
