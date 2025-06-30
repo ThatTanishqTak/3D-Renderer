@@ -12,6 +12,8 @@
 #include "Geometry/Mesh.h"
 #include "Loader/TextureLoader.h"
 
+#include "Camera/Camera.h"
+
 #include <vulkan/vulkan.h>
 #include <glm/glm.hpp>
 #include <imgui.h>
@@ -57,6 +59,9 @@ namespace Trident
         void SetViewport(const ViewportInfo& info) { m_Viewport = info; }
         Transform GetTransform() const { return m_Transform; }
         ViewportInfo GetViewport() const { return m_Viewport; }
+
+        Camera& GetCamera() { return m_Camera; }
+        const Camera& GetCamera() const { return m_Camera; }
 
         VkRenderPass GetRenderPass() const { return m_Pipeline.GetRenderPass(); }
         uint32_t GetImageCount() const { return m_Swapchain.GetImageCount(); }
@@ -107,6 +112,7 @@ namespace Trident
 
         Transform m_Transform{};
         ViewportInfo m_Viewport{};
+        Camera m_Camera{};
 
         UI::ImGuiLayer* m_ImGuiLayer = nullptr;
 

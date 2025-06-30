@@ -42,8 +42,9 @@ namespace Trident
             static std::vector<float> ParseFloats(std::string_view data)
             {
                 std::vector<float> l_Result;
-                std::stringstream l_Stream(std::string(data));
+                std::stringstream l_Stream{ std::string(data) };
                 std::string l_Token;
+                
                 while (std::getline(l_Stream, l_Token, ','))
                 {
                     if (!l_Token.empty())
@@ -58,8 +59,9 @@ namespace Trident
             static std::vector<int> ParseInts(std::string_view data)
             {
                 std::vector<int> l_Result;
-                std::stringstream l_Stream(std::string(data));
+                std::stringstream l_Stream{ std::string(data) };
                 std::string l_Token;
+                
                 while (std::getline(l_Stream, l_Token, ','))
                 {
                     if (!l_Token.empty())
@@ -77,6 +79,7 @@ namespace Trident
                 if (!l_File.is_open())
                 {
                     TR_CORE_ERROR("Failed to open FBX file: {}", path.string());
+                    
                     return false;
                 }
 
@@ -137,8 +140,8 @@ namespace Trident
                 std::vector<glm::vec2> l_Texcoords;
                 Geometry::Mesh l_Mesh{};
                 std::unordered_map<std::string, uint32_t> l_Unique;
-
                 std::string l_Line;
+
                 while (std::getline(l_File, l_Line))
                 {
                     std::stringstream l_Stream(l_Line);
@@ -161,6 +164,7 @@ namespace Trident
                     {
                         std::vector<uint32_t> l_Face;
                         std::string l_VertexData;
+                        
                         while (l_Stream >> l_VertexData)
                         {
                             auto l_It = l_Unique.find(l_VertexData);
@@ -194,6 +198,7 @@ namespace Trident
                                 {
                                     l_Vertex.Position = l_Positions[l_PosIndex - 1];
                                 }
+                        
                                 l_Vertex.Color = { 1.0f, 1.0f, 1.0f };
                                 if (l_TexIndex > 0 && l_TexIndex <= l_Texcoords.size())
                                 {
@@ -224,6 +229,7 @@ namespace Trident
                 if (!l_Mesh.Vertices.empty())
                 {
                     meshes.push_back(std::move(l_Mesh));
+                    
                     return true;
                 }
 
@@ -238,8 +244,7 @@ namespace Trident
                 std::string l_Warn;
 
                 bool l_Binary = path.extension() == ".glb";
-                bool l_Loaded = l_Binary ? l_Loader.LoadBinaryFromFile(&l_Model, &l_Err, &l_Warn, path.string())
-                    : l_Loader.LoadASCIIFromFile(&l_Model, &l_Err, &l_Warn, path.string());
+                bool l_Loaded = l_Binary ? l_Loader.LoadBinaryFromFile(&l_Model, &l_Err, &l_Warn, path.string()) : l_Loader.LoadASCIIFromFile(&l_Model, &l_Err, &l_Warn, path.string());
 
                 if (!l_Warn.empty())
                 {
@@ -260,6 +265,7 @@ namespace Trident
                         if (l_PosIt == l_Prim.attributes.end())
                         {
                             TR_CORE_CRITICAL("Primitive has no POSITION attribute");
+                            
                             continue;
                         }
 
@@ -326,7 +332,7 @@ namespace Trident
 
                 return !meshes.empty();
             }
-        } // namespace
+        }
 
         std::vector<Geometry::Mesh> ModelLoader::Load(const std::string& filePath)
         {
@@ -373,6 +379,7 @@ namespace Trident
             }
 
             TR_CORE_CRITICAL("Unsupported model format: {}", filePath);
+         
             return l_Meshes;
         }
     }

@@ -47,6 +47,8 @@ namespace Trident
         CreateDefaultTexture();
         CreateDescriptorSets();
 
+        m_Camera = Camera(Application::GetWindow().GetNativeWindow());
+
         VkFenceCreateInfo l_FenceInfo{ VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
         l_FenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
         if (vkCreateFence(Application::GetDevice(), &l_FenceInfo, nullptr, &m_ResourceFence) != VK_SUCCESS)
@@ -131,6 +133,8 @@ namespace Trident
 
     void Renderer::DrawFrame()
     {
+        m_Camera.Update(Utilities::Time::GetDeltaTime());
+
         VkFence l_InFlightFence = m_Commands.GetInFlightFence(m_Commands.CurrentFrame());
         vkWaitForFences(Application::GetDevice(), 1, &l_InFlightFence, VK_TRUE, UINT64_MAX);
 
@@ -835,10 +839,10 @@ namespace Trident
     {
         UniformBufferObject l_UBO{};
 
-        l_UBO.View = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+        l_UBO.View = m_Camera.GetViewMatrix();
 
         float l_AspectRatio = static_cast<float>(m_Swapchain.GetExtent().width) / static_cast<float>(m_Swapchain.GetExtent().height);
-        l_UBO.Projection = glm::perspective(glm::radians(45.0f), l_AspectRatio, 0.1f, 10.0f);
+        l_UBO.Projection = glm::perspective(glm::radians(m_Camera.GetFOV()), l_AspectRatio, m_Camera.GetNearClip(), m_Camera.GetFarClip());
         l_UBO.Projection[1][1] *= -1.0f;
 
         void* l_Data = nullptr;
