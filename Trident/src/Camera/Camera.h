@@ -36,6 +36,7 @@ namespace Trident
         float m_FarClip = 100.0f;
 
         float m_MoveSpeed = 3.0f;
+        float m_SpeedMultiplier = 5.0f;
         float m_MouseSensitivity = 0.05f;
 
         bool m_FirstMouse = true;

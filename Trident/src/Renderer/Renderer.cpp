@@ -45,6 +45,7 @@ namespace Trident
 
         CreateDescriptorPool();
         CreateDefaultTexture();
+        CreateDefaultSkybox();
         CreateDescriptorSets();
 
         m_Camera = Camera(Application::GetWindow().GetNativeWindow());
@@ -111,6 +112,8 @@ namespace Trident
 
             m_TextureImageMemory = VK_NULL_HANDLE;
         }
+
+        m_Skybox.Cleanup(m_Buffers);
 
         if (m_OffscreenSampler != VK_NULL_HANDLE)
         {
@@ -617,6 +620,15 @@ namespace Trident
         TR_CORE_TRACE("Default Texture Created");
     }
 
+    void Renderer::CreateDefaultSkybox()
+    {
+        TR_CORE_TRACE("Creating Default Skybox");
+
+        m_Skybox.Init(m_Buffers, m_Commands.GetCommandPool());
+
+        TR_CORE_TRACE("Default Skybox Created");
+    }
+
     void Renderer::CreateDescriptorSets()
     {
         TR_CORE_TRACE("Allocating Descriptor Sets");
@@ -736,6 +748,9 @@ namespace Trident
         vkCmdSetScissor(l_CommandBuffer, 0, 1, &l_Scissor);
 
         vkCmdBindPipeline(l_CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline.GetPipeline());
+        
+        // Draw skybox first
+        m_Skybox.Record(l_CommandBuffer, m_Pipeline.GetPipelineLayout(), m_DescriptorSets.data(), imageIndex);
 
         if (m_VertexBuffer != VK_NULL_HANDLE && m_IndexBuffer != VK_NULL_HANDLE && m_IndexCount > 0)
         {

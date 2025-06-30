@@ -29,7 +29,7 @@ namespace Trident
             float l_Speed = m_MoveSpeed;
             if (glfwGetKey(m_Window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(m_Window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS)
             {
-                l_Speed *= 5.0f;
+                l_Speed *= m_SpeedMultiplier;
             }
 
             if (glfwGetKey(m_Window, GLFW_KEY_W) == GLFW_PRESS)
@@ -102,7 +102,7 @@ namespace Trident
 
     void Camera::UpdateVectors()
     {
-        glm::vec3 l_Front;
+        glm::vec3 l_Front{};
 
         l_Front.x = cos(glm::radians(m_Yaw)) * cos(glm::radians(m_Pitch));
         l_Front.y = sin(glm::radians(m_Yaw)) * cos(glm::radians(m_Pitch));

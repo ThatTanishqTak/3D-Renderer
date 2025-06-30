@@ -8,6 +8,7 @@
 #include "Renderer/Pipeline.h"
 #include "Renderer/Buffers.h"
 #include "Renderer/Commands.h"
+#include "Renderer/Skybox.h"
 
 #include "Geometry/Mesh.h"
 #include "Loader/TextureLoader.h"
@@ -113,6 +114,7 @@ namespace Trident
         Transform m_Transform{};
         ViewportInfo m_Viewport{};
         Camera m_Camera{};
+        Skybox m_Skybox{};
 
         UI::ImGuiLayer* m_ImGuiLayer = nullptr;
 
@@ -120,6 +122,7 @@ namespace Trident
         // Core setup
         void CreateDescriptorPool();
         void CreateDefaultTexture();
+        void CreateDefaultSkybox();
         void CreateDescriptorSets();
 
         void UpdateUniformBuffer(uint32_t currentImage);
