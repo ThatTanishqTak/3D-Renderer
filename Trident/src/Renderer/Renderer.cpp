@@ -64,9 +64,6 @@ namespace Trident
     {
         TR_CORE_TRACE("Shutting Down Renderer");
 
-        // Application::CleanupVulkan waits for the device to become idle
-        // before calling this function. No additional wait is necessary here.
-
         m_Commands.Cleanup();
 
         if (m_DescriptorPool != VK_NULL_HANDLE)
@@ -77,11 +74,10 @@ namespace Trident
         }
 
         m_DescriptorSets.clear();
-
         m_Pipeline.Cleanup();
         m_Swapchain.Cleanup();
+        m_Skybox.Cleanup(m_Buffers);
         m_Buffers.Cleanup();
-
         m_UniformBuffers.clear();
         m_UniformBuffersMemory.clear();
 
@@ -112,8 +108,6 @@ namespace Trident
 
             m_TextureImageMemory = VK_NULL_HANDLE;
         }
-
-        m_Skybox.Cleanup(m_Buffers);
 
         if (m_OffscreenSampler != VK_NULL_HANDLE)
         {

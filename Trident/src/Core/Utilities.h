@@ -7,10 +7,14 @@
 #include "glm/gtx/string_cast.hpp"
 
 // This ignores all warnings raised inside External headers
+#ifdef _MSC_VER
 #pragma warning(push, 0)
+#endif
 #include <spdlog/spdlog.h>
 #include <spdlog/fmt/ostr.h>
+#ifdef _MSC_VER
 #pragma warning(pop)
+#endif
 
 #include <GLFW/glfw3.h>
 

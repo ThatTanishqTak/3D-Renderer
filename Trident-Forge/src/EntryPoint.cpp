@@ -1,3 +1,5 @@
+// Application entry point for Trident-Forge
+
 #include "ApplicationLayer.h"
 
 int main()
@@ -11,6 +13,7 @@ int main()
 
     catch (const std::exception& e)
     {
+        // Log any exception and report GLFW errors
         TR_CRITICAL("[Fatal] {}", e.what());
 
         const char* l_Description = nullptr;

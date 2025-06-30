@@ -22,11 +22,16 @@ set_target_properties(Vulkan::Vulkan PROPERTIES
 )
 
 set(GLFW_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/vendor/glfw")
-add_library(glfw3 STATIC IMPORTED GLOBAL)
-set_target_properties(glfw3 PROPERTIES
-  IMPORTED_LOCATION "${GLFW_ROOT}/lib-vc2022/glfw3.lib"
-  INTERFACE_INCLUDE_DIRECTORIES "${GLFW_ROOT}/include"
-)
+if(WIN32)
+  add_library(glfw3 STATIC IMPORTED GLOBAL)
+  set_target_properties(glfw3 PROPERTIES
+    IMPORTED_LOCATION "${GLFW_ROOT}/lib-vc2022/glfw3.lib"
+    INTERFACE_INCLUDE_DIRECTORIES "${GLFW_ROOT}/include"
+  )
+else()
+  add_subdirectory(${GLFW_ROOT} glfw_build)
+  add_library(glfw3 ALIAS glfw)
+endif()
 
 add_library(glm INTERFACE)
 target_include_directories(glm INTERFACE
@@ -94,3 +99,24 @@ endif()
 
 message(STATUS "Vulkan SDK Path: ${VULKAN_SDK_PATH}")
 message(STATUS "GLFW Root: ${GLFW_ROOT}")
+
+include(FetchContent)
+
+FetchContent_Declare(
+    onnxruntime_prebuilt
+    URL https://github.com/microsoft/onnxruntime/releases/download/v1.17.0/onnxruntime-linux-x64-1.17.0.tgz
+)
+
+FetchContent_MakeAvailable(onnxruntime_prebuilt)
+
+file(GLOB ONNX_DIR LIST_DIRECTORIES true "${onnxruntime_prebuilt_SOURCE_DIR}/*")
+list(FILTER ONNX_DIR INCLUDE REGEX "onnxruntime")
+list(GET ONNX_DIR 0 ONNXRUNTIME_ROOT)
+
+message(STATUS "ONNX Runtime Root: ${ONNXRUNTIME_ROOT}")
+
+add_library(onnxruntime INTERFACE)
+target_include_directories(onnxruntime INTERFACE "${ONNXRUNTIME_ROOT}/include")
+target_link_directories(onnxruntime INTERFACE "${ONNXRUNTIME_ROOT}/lib")
+
+target_link_libraries(${PROJECT_NAME} PUBLIC onnxruntime)

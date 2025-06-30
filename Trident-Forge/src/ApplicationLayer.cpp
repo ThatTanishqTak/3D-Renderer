@@ -10,13 +10,16 @@
 
 ApplicationLayer::ApplicationLayer()
 {
+    // Initialize logging and the Forge window
     Trident::Utilities::Log::Init();
 
     m_Window = std::make_unique<Trident::Window>(1920, 1080, "Trident-Forge");
     m_Engine = std::make_unique<Trident::Application>(*m_Window);
 
+    // Start the engine
     m_Engine->Init();
 
+    // Set up the ImGui layer
     m_ImGuiLayer = std::make_unique<Trident::UI::ImGuiLayer>();
     m_ImGuiLayer->Init(m_Window->GetNativeWindow(), Trident::Application::GetInstance(), Trident::Application::GetPhysicalDevice(), Trident::Application::GetDevice(),
         Trident::Application::GetQueueFamilyIndices().GraphicsFamily.value(), Trident::Application::GetGraphicsQueue(), Trident::Application::GetRenderer().GetRenderPass(),
@@ -27,7 +30,8 @@ ApplicationLayer::ApplicationLayer()
 
 ApplicationLayer::~ApplicationLayer()
 {
-    TR_INFO("-------SHUTING DOWN APPLICATION-------");
+    // Gracefully shut down engine and UI
+    TR_INFO("-------SHUTTING DOWN APPLICATION-------");
 
     if (m_ImGuiLayer)
     {
@@ -49,10 +53,11 @@ void ApplicationLayer::Run()
     static bool l_OpenModelDialog = false;
     static bool l_OpenTextureDialog = false;
 
+    // Main application loop
     while (!m_Window->ShouldClose())
     {
+        // Update the engine and render the UI
         m_Engine->Update();
-
         m_ImGuiLayer->BeginFrame();
         
         ImGui::Begin("Stats");

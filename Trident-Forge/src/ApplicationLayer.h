@@ -1,4 +1,12 @@
-﻿#pragma once
+﻿//----------------------------------------------------------------------------------//
+// ApplicationLayer.h
+// High level layer managing the Forge window, rendering engine and ImGui interface.
+// m_Window     - platform window wrapped by Trident.
+// m_Engine     - main Trident application instance.
+// m_ImGuiLayer - user interface layer built with ImGui.
+//----------------------------------------------------------------------------------//
+
+#pragma once
 
 #include "Application.h"
 
@@ -21,7 +29,7 @@ public:
     void Run();
 
 private:
-    std::unique_ptr<Trident::Window> m_Window;
-    std::unique_ptr<Trident::Application> m_Engine;
-    std::unique_ptr<Trident::UI::ImGuiLayer> m_ImGuiLayer;
+    std::unique_ptr<Trident::Window> m_Window; // OS window wrapper
+    std::unique_ptr<Trident::Application> m_Engine; // Core engine instance
+    std::unique_ptr<Trident::UI::ImGuiLayer> m_ImGuiLayer; // ImGui interface layer
 };
