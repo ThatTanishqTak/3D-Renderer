@@ -2,7 +2,7 @@
 
 #include "Core/Utilities.h"
 
-#include <onnx/include/onnxruntime_cxx_api.h>
+#include <onnxruntime/core/session/onnxruntime_cxx_api.h>
 #include <vector>
 #include <string>
 

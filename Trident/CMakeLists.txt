@@ -100,23 +100,19 @@ endif()
 message(STATUS "Vulkan SDK Path: ${VULKAN_SDK_PATH}")
 message(STATUS "GLFW Root: ${GLFW_ROOT}")
 
-include(FetchContent)
+set(ONNXRUNTIME_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/vendor/onnxruntime")
 
-FetchContent_Declare(
-    onnxruntime_prebuilt
-    URL https://github.com/microsoft/onnxruntime/releases/download/v1.17.0/onnxruntime-linux-x64-1.17.0.tgz
-)
+if(EXISTS "${ONNXRUNTIME_ROOT}/include" AND EXISTS "${ONNXRUNTIME_ROOT}/lib")
+    message(STATUS "Using ONNX Runtime from submodule: ${ONNXRUNTIME_ROOT}")
+else()
+    include(FetchContent)
+    FetchContent_Declare(
+        onnxruntime_prebuilt
+        URL https://github.com/microsoft/onnxruntime/releases/download/v1.17.0/onnxruntime-linux-x64-1.17.0.tgz
+    )
+    FetchContent_MakeAvailable(onnxruntime_prebuilt)
 
-FetchContent_MakeAvailable(onnxruntime_prebuilt)
-
-file(GLOB ONNX_DIR LIST_DIRECTORIES true "${onnxruntime_prebuilt_SOURCE_DIR}/*")
-list(FILTER ONNX_DIR INCLUDE REGEX "onnxruntime")
-list(GET ONNX_DIR 0 ONNXRUNTIME_ROOT)
-
-message(STATUS "ONNX Runtime Root: ${ONNXRUNTIME_ROOT}")
-
-add_library(onnxruntime INTERFACE)
-target_include_directories(onnxruntime INTERFACE "${ONNXRUNTIME_ROOT}/include")
-target_link_directories(onnxruntime INTERFACE "${ONNXRUNTIME_ROOT}/lib")
-
-target_link_libraries(${PROJECT_NAME} PUBLIC onnxruntime)
+    file(GLOB ONNX_DIR LIST_DIRECTORIES true "${onnxruntime_prebuilt_SOURCE_DIR}/*")
+    list(FILTER ONNX_DIR INCLUDE REGEX "onnxruntime")
+    list(GET ONNX_DIR 0 ONNXRUNTIME_ROOT)
+endif()
