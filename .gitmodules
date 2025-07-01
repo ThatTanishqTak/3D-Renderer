@@ -14,6 +14,3 @@
 [submodule "Trident/vendor/tinygltf"]
 	path = Trident/vendor/tinygltf
 	url = https://github.com/ThatTanishqTak/tinygltf.git
-[submodule "Trident/vendor/onnxruntime"]
-	path = Trident/vendor/onnxruntime
-	url = https://github.com/ThatTanishqTak/onnxruntime.git
