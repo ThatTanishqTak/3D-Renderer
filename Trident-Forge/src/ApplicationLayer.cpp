@@ -50,8 +50,11 @@ void ApplicationLayer::Run()
 {
     static std::string l_ModelPath;
     static std::string l_TexturePath;
+    static std::string l_OnnxPath;
     static bool l_OpenModelDialog = false;
     static bool l_OpenTextureDialog = false;
+    static bool l_OpenOnnxDialog = false;
+    static bool l_OnnxLoaded = false;
 
     // Main application loop
     while (!m_Window->ShouldClose())
@@ -110,6 +113,39 @@ void ApplicationLayer::Run()
                 l_OpenTextureDialog = false;
             }
         }
+
+        ImGui::Text("ONNX: %s", l_OnnxPath.c_str());
+        if (ImGui::Button("Load ONNX"))
+        {
+            l_OpenOnnxDialog = true;
+            ImGui::OpenPopup("ONNXDialog");
+        }
+
+        if (l_OpenOnnxDialog)
+        {
+            if (Trident::UI::FileDialog::Open("ONNXDialog", l_OnnxPath, ".onnx"))
+            {
+                l_OnnxLoaded = m_ONNX.LoadModel(l_OnnxPath);
+                l_OpenOnnxDialog = false;
+            }
+
+            if (!ImGui::IsPopupOpen("ONNXDialog"))
+            {
+                l_OpenOnnxDialog = false;
+            }
+        }
+
+        if (l_OnnxLoaded && ImGui::Button("Run Inference"))
+        {
+            std::vector<float> l_Input{ 0.0f };
+            std::vector<int64_t> l_Shape{ 1 };
+            auto l_Output = m_ONNX.Run(l_Input, l_Shape);
+            if (!l_Output.empty())
+            {
+                TR_INFO("Inference result: {}", l_Output[0]);
+            }
+        }
+
         ImGui::End();
 
         m_ImGuiLayer->EndFrame();
