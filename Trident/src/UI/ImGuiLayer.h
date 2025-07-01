@@ -23,6 +23,7 @@ namespace Trident
             void Shutdown();
 
             void BeginFrame();
+            void Dockspace();
             void EndFrame();
             void Render(VkCommandBuffer commandBuffer);
 

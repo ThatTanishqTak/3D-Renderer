@@ -54,6 +54,8 @@ namespace Trident
         {
             TR_CORE_INFO("-------INITIALIZING IMGUI-------");
 
+            TR_CORE_TRACE("ImGui avaiable: {}", IMGUI_CHECKVERSION());
+
             m_Device = device;
             m_Queue = queue;
 
@@ -86,7 +88,6 @@ namespace Trident
 
             TR_CORE_TRACE("ImGui version: {}", IMGUI_VERSION);
 
-            IMGUI_CHECKVERSION();
             ImGui::CreateContext();
             ImGuiIO& io = ImGui::GetIO();
             io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
@@ -153,6 +154,12 @@ namespace Trident
             ImGui_ImplVulkan_NewFrame();
             ImGui_ImplGlfw_NewFrame();
             ImGui::NewFrame();
+            Dockspace();
+        }
+
+        void ImGuiLayer::Dockspace()
+        {
+            ImGui::DockSpaceOverViewport();
         }
 
         void ImGuiLayer::EndFrame()
