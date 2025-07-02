@@ -5,7 +5,6 @@
 #include "UI/ImGuiLayer.h"
 
 #include <stdexcept>
-#include <imgui_impl_vulkan.h>
 
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -40,7 +39,6 @@ namespace Trident
 
         m_Swapchain.Init();
         m_Pipeline.Init(m_Swapchain);
-        m_SwapchainImageInitialized.assign(m_Swapchain.GetImageCount(), false);
         m_Commands.Init(m_Swapchain.GetImageCount());
 
         m_Buffers.CreateUniformBuffers(m_Swapchain.GetImageCount(), m_UniformBuffers, m_UniformBuffersMemory);
@@ -49,7 +47,6 @@ namespace Trident
         CreateDefaultTexture();
         CreateDefaultSkybox();
         CreateDescriptorSets();
-        CreateOffscreenResources();
 
         m_Camera = Camera(Application::GetWindow().GetNativeWindow());
 
@@ -68,7 +65,6 @@ namespace Trident
         TR_CORE_TRACE("Shutting Down Renderer");
 
         m_Commands.Cleanup();
-        CleanupOffscreenResources();
 
         if (m_DescriptorPool != VK_NULL_HANDLE)
         {
@@ -111,6 +107,13 @@ namespace Trident
             vkFreeMemory(Application::GetDevice(), m_TextureImageMemory, nullptr);
 
             m_TextureImageMemory = VK_NULL_HANDLE;
+        }
+
+        if (m_OffscreenSampler != VK_NULL_HANDLE)
+        {
+            vkDestroySampler(Application::GetDevice(), m_OffscreenSampler, nullptr);
+
+            m_OffscreenSampler = VK_NULL_HANDLE;
         }
 
         if (m_ResourceFence != VK_NULL_HANDLE)
@@ -419,8 +422,6 @@ namespace Trident
         m_Swapchain.Cleanup();
         m_Swapchain.Init();
 
-        m_SwapchainImageInitialized.assign(m_Swapchain.GetImageCount(), false);
-
         uint32_t l_ImageCount = m_Swapchain.GetImageCount();
         if (l_ImageCount != m_UniformBuffers.size())
         {
@@ -443,9 +444,6 @@ namespace Trident
         }
 
         m_Pipeline.CreateFramebuffers(m_Swapchain);
-
-        CleanupOffscreenResources();
-        CreateOffscreenResources();
 
         m_Commands.Recreate(m_Swapchain.GetImageCount());
 
@@ -682,150 +680,6 @@ namespace Trident
         TR_CORE_TRACE("Descriptor Sets Allocated ({})", l_ImageCount);
     }
 
-    void Renderer::CreateOffscreenResources()
-    {
-        if (!IsValidViewport())
-        {
-            return;
-        }
-
-        m_OffscreenImageInitialized = false;
-
-        VkFormat l_Format = m_Swapchain.GetImageFormat();
-
-        VkImageCreateInfo l_ImageInfo{ VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO };
-        l_ImageInfo.imageType = VK_IMAGE_TYPE_2D;
-        l_ImageInfo.extent.width = static_cast<uint32_t>(m_Viewport.Size.x);
-        l_ImageInfo.extent.height = static_cast<uint32_t>(m_Viewport.Size.y);
-        l_ImageInfo.extent.depth = 1;
-        l_ImageInfo.mipLevels = 1;
-        l_ImageInfo.arrayLayers = 1;
-        l_ImageInfo.format = l_Format;
-        l_ImageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-        l_ImageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        l_ImageInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-        l_ImageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        l_ImageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-
-        if (vkCreateImage(Application::GetDevice(), &l_ImageInfo, nullptr, &m_OffscreenImage) != VK_SUCCESS)
-        {
-            TR_CORE_CRITICAL("Failed to create offscreen image");
-            return;
-        }
-
-        VkMemoryRequirements l_MemReq{};
-        vkGetImageMemoryRequirements(Application::GetDevice(), m_OffscreenImage, &l_MemReq);
-
-        VkMemoryAllocateInfo l_AllocInfo{ VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO };
-        l_AllocInfo.allocationSize = l_MemReq.size;
-        l_AllocInfo.memoryTypeIndex = m_Buffers.FindMemoryType(l_MemReq.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-
-        if (vkAllocateMemory(Application::GetDevice(), &l_AllocInfo, nullptr, &m_OffscreenMemory) != VK_SUCCESS)
-        {
-            TR_CORE_CRITICAL("Failed to allocate offscreen memory");
-            return;
-        }
-
-        vkBindImageMemory(Application::GetDevice(), m_OffscreenImage, m_OffscreenMemory, 0);
-
-        VkImageViewCreateInfo l_ViewInfo{ VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
-        l_ViewInfo.image = m_OffscreenImage;
-        l_ViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        l_ViewInfo.format = l_Format;
-        l_ViewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        l_ViewInfo.subresourceRange.baseMipLevel = 0;
-        l_ViewInfo.subresourceRange.levelCount = 1;
-        l_ViewInfo.subresourceRange.baseArrayLayer = 0;
-        l_ViewInfo.subresourceRange.layerCount = 1;
-
-        if (vkCreateImageView(Application::GetDevice(), &l_ViewInfo, nullptr, &m_OffscreenImageView) != VK_SUCCESS)
-        {
-            TR_CORE_CRITICAL("Failed to create offscreen image view");
-            return;
-        }
-
-        VkSamplerCreateInfo l_SamplerInfo{ VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO };
-        l_SamplerInfo.magFilter = VK_FILTER_LINEAR;
-        l_SamplerInfo.minFilter = VK_FILTER_LINEAR;
-        l_SamplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        l_SamplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        l_SamplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        l_SamplerInfo.anisotropyEnable = VK_FALSE;
-        l_SamplerInfo.maxAnisotropy = 1.0f;
-        l_SamplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_WHITE;
-        l_SamplerInfo.unnormalizedCoordinates = VK_FALSE;
-        l_SamplerInfo.compareEnable = VK_FALSE;
-        l_SamplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
-        l_SamplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-
-        if (vkCreateSampler(Application::GetDevice(), &l_SamplerInfo, nullptr, &m_OffscreenSampler) != VK_SUCCESS)
-        {
-            TR_CORE_CRITICAL("Failed to create offscreen sampler");
-
-            return;
-        }
-
-        VkImageView attachments[] = { m_OffscreenImageView };
-        VkFramebufferCreateInfo l_FBInfo{ VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO };
-        l_FBInfo.renderPass = m_Pipeline.GetRenderPass();
-        l_FBInfo.attachmentCount = 1;
-        l_FBInfo.pAttachments = attachments;
-        l_FBInfo.width = static_cast<uint32_t>(m_Viewport.Size.x);
-        l_FBInfo.height = static_cast<uint32_t>(m_Viewport.Size.y);
-        l_FBInfo.layers = 1;
-
-        if (vkCreateFramebuffer(Application::GetDevice(), &l_FBInfo, nullptr, &m_OffscreenFramebuffer) != VK_SUCCESS)
-        {
-            TR_CORE_CRITICAL("Failed to create offscreen framebuffer");
-
-            return;
-        }
-
-        if (m_ImGuiLayer)
-        {
-            m_OffscreenTextureID = ImGui_ImplVulkan_AddTexture(m_OffscreenSampler, m_OffscreenImageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-        }
-    }
-
-    void Renderer::CleanupOffscreenResources()
-    {
-        if (m_ImGuiLayer && m_OffscreenTextureID)
-        {
-            ImGui_ImplVulkan_RemoveTexture(m_OffscreenTextureID);
-            m_OffscreenTextureID = nullptr;
-        }
-
-        if (m_OffscreenFramebuffer != VK_NULL_HANDLE)
-        {
-            vkDestroyFramebuffer(Application::GetDevice(), m_OffscreenFramebuffer, nullptr);
-            m_OffscreenFramebuffer = VK_NULL_HANDLE;
-        }
-
-        if (m_OffscreenSampler != VK_NULL_HANDLE)
-        {
-            vkDestroySampler(Application::GetDevice(), m_OffscreenSampler, nullptr);
-            m_OffscreenSampler = VK_NULL_HANDLE;
-        }
-
-        if (m_OffscreenImageView != VK_NULL_HANDLE)
-        {
-            vkDestroyImageView(Application::GetDevice(), m_OffscreenImageView, nullptr);
-            m_OffscreenImageView = VK_NULL_HANDLE;
-        }
-
-        if (m_OffscreenImage != VK_NULL_HANDLE)
-        {
-            vkDestroyImage(Application::GetDevice(), m_OffscreenImage, nullptr);
-            m_OffscreenImage = VK_NULL_HANDLE;
-        }
-
-        if (m_OffscreenMemory != VK_NULL_HANDLE)
-        {
-            vkFreeMemory(Application::GetDevice(), m_OffscreenMemory, nullptr);
-            m_OffscreenMemory = VK_NULL_HANDLE;
-        }
-    }
-
     bool Renderer::AcquireNextImage(uint32_t& imageIndex, VkFence inFlightFence)
     {
         VkResult l_Result = vkAcquireNextImageKHR(Application::GetDevice(), m_Swapchain.GetSwapchain(), UINT64_MAX,
@@ -863,74 +717,9 @@ namespace Trident
 
         VkRenderPassBeginInfo l_RenderPassInfo{ VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO };
         l_RenderPassInfo.renderPass = m_Pipeline.GetRenderPass();
-        if (IsValidViewport())
-        {
-            l_RenderPassInfo.framebuffer = m_OffscreenFramebuffer;
-            l_RenderPassInfo.renderArea.offset = { 0, 0 };
-            l_RenderPassInfo.renderArea.extent = { static_cast<uint32_t>(m_Viewport.Size.x), static_cast<uint32_t>(m_Viewport.Size.y) };
-
-            if (!m_SwapchainImageInitialized[imageIndex])
-            {
-                VkImageMemoryBarrier l_InitBarrier{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
-                l_InitBarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-                l_InitBarrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-                l_InitBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-                l_InitBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-                l_InitBarrier.image = m_Swapchain.GetImages()[imageIndex];
-                l_InitBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-                l_InitBarrier.subresourceRange.baseMipLevel = 0;
-                l_InitBarrier.subresourceRange.levelCount = 1;
-                l_InitBarrier.subresourceRange.baseArrayLayer = 0;
-                l_InitBarrier.subresourceRange.layerCount = 1;
-                l_InitBarrier.srcAccessMask = 0;
-                l_InitBarrier.dstAccessMask = 0;
-                vkCmdPipelineBarrier(l_CommandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-                    0, 0, nullptr, 0, nullptr, 1, &l_InitBarrier);
-
-                m_SwapchainImageInitialized[imageIndex] = true;
-            }
-
-            VkImageMemoryBarrier barrier{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
-            barrier.oldLayout = m_OffscreenImageInitialized ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED;
-            barrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-            barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            barrier.image = m_OffscreenImage;
-            barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            barrier.subresourceRange.baseMipLevel = 0;
-            barrier.subresourceRange.levelCount = 1;
-            barrier.subresourceRange.baseArrayLayer = 0;
-            barrier.subresourceRange.layerCount = 1;
-            barrier.srcAccessMask = m_OffscreenImageInitialized ? VK_ACCESS_SHADER_READ_BIT : 0;
-            barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-            vkCmdPipelineBarrier(l_CommandBuffer, m_OffscreenImageInitialized ? VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT : VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 
-                VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
-            
-            m_OffscreenImageInitialized = true;
-        }
-        else
-        {
-            l_RenderPassInfo.framebuffer = m_Pipeline.GetFramebuffers()[imageIndex];
-            l_RenderPassInfo.renderArea.offset = { 0, 0 };
-            l_RenderPassInfo.renderArea.extent = m_Swapchain.GetExtent();
-
-            VkImageMemoryBarrier barrier{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
-            barrier.oldLayout = m_SwapchainImageInitialized[imageIndex] ? VK_IMAGE_LAYOUT_PRESENT_SRC_KHR : VK_IMAGE_LAYOUT_UNDEFINED;
-            barrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-            barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            barrier.image = m_Swapchain.GetImages()[imageIndex];
-            barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            barrier.subresourceRange.baseMipLevel = 0;
-            barrier.subresourceRange.levelCount = 1;
-            barrier.subresourceRange.baseArrayLayer = 0;
-            barrier.subresourceRange.layerCount = 1;
-            barrier.srcAccessMask = 0;
-            barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-            vkCmdPipelineBarrier(l_CommandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
-
-            m_SwapchainImageInitialized[imageIndex] = true;
-        }
+        l_RenderPassInfo.framebuffer = m_Pipeline.GetFramebuffers()[imageIndex];
+        l_RenderPassInfo.renderArea.offset = { 0, 0 };
+        l_RenderPassInfo.renderArea.extent = m_Swapchain.GetExtent();
 
         VkClearValue l_ClearColor = { 0.0f, 0.0f, 0.0f, 1.0f };
         l_RenderPassInfo.clearValueCount = 1;
@@ -941,15 +730,15 @@ namespace Trident
         VkViewport l_Viewport{};
         l_Viewport.x = 0.0f;
         l_Viewport.y = 0.0f;
-        l_Viewport.width = IsValidViewport() ? m_Viewport.Size.x : static_cast<float>(m_Swapchain.GetExtent().width);
-        l_Viewport.height = IsValidViewport() ? m_Viewport.Size.y : static_cast<float>(m_Swapchain.GetExtent().height);
+        l_Viewport.width = static_cast<float>(m_Swapchain.GetExtent().width);
+        l_Viewport.height = static_cast<float>(m_Swapchain.GetExtent().height);
         l_Viewport.minDepth = 0.0f;
         l_Viewport.maxDepth = 1.0f;
         vkCmdSetViewport(l_CommandBuffer, 0, 1, &l_Viewport);
 
         VkRect2D l_Scissor{};
         l_Scissor.offset = { 0, 0 };
-        l_Scissor.extent = IsValidViewport() ? VkExtent2D{ static_cast<uint32_t>(m_Viewport.Size.x), static_cast<uint32_t>(m_Viewport.Size.y) } : m_Swapchain.GetExtent();
+        l_Scissor.extent = m_Swapchain.GetExtent();
         vkCmdSetScissor(l_CommandBuffer, 0, 1, &l_Scissor);
 
         vkCmdBindPipeline(l_CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline.GetPipeline());
@@ -972,7 +761,7 @@ namespace Trident
             vkCmdDrawIndexed(l_CommandBuffer, m_IndexCount, 1, 0, 0, 0);
         }
 
-        if (m_ImGuiLayer)
+        if (m_ImGuiLayer && IsValidViewport())
         {
             m_ImGuiLayer->Render(l_CommandBuffer);
         }
@@ -995,6 +784,38 @@ namespace Trident
             l_BarrierEnd.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
             l_BarrierEnd.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
             vkCmdPipelineBarrier(l_CommandBuffer, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &l_BarrierEnd);
+
+            l_RenderPassInfo.framebuffer = m_Pipeline.GetFramebuffers()[imageIndex];
+            l_RenderPassInfo.renderArea.offset = { 0, 0 };
+            l_RenderPassInfo.renderArea.extent = m_Swapchain.GetExtent();
+            vkCmdBeginRenderPass(l_CommandBuffer, &l_RenderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+            VkViewport l_UIViewport{};
+            l_UIViewport.x = 0.0f;
+            l_UIViewport.y = 0.0f;
+            l_UIViewport.width = static_cast<float>(m_Swapchain.GetExtent().width);
+            l_UIViewport.height = static_cast<float>(m_Swapchain.GetExtent().height);
+            l_UIViewport.minDepth = 0.0f;
+            l_UIViewport.maxDepth = 1.0f;
+            vkCmdSetViewport(l_CommandBuffer, 0, 1, &l_UIViewport);
+
+            VkRect2D l_UIScissor{};
+            l_UIScissor.offset = { 0, 0 };
+            l_UIScissor.extent = m_Swapchain.GetExtent();
+            vkCmdSetScissor(l_CommandBuffer, 0, 1, &l_UIScissor);
+
+            if (m_ImGuiLayer)
+            {
+                m_ImGuiLayer->Render(l_CommandBuffer);
+            }
+
+            vkCmdEndRenderPass(l_CommandBuffer);
+
+            l_BarrierEnd.image = m_Swapchain.GetImages()[imageIndex];
+            l_BarrierEnd.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+            l_BarrierEnd.dstAccessMask = 0;
+            l_BarrierEnd.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+            vkCmdPipelineBarrier(l_CommandBuffer, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0, nullptr, 0, nullptr, 1, &l_BarrierEnd);
         }
         else
         {
@@ -1087,15 +908,7 @@ namespace Trident
 
         l_UBO.View = m_Camera.GetViewMatrix();
 
-        float l_AspectRatio = 0.0f;
-        if (IsValidViewport())
-        {
-            l_AspectRatio = m_Viewport.Size.x / m_Viewport.Size.y;
-        }
-        else
-        {
-            l_AspectRatio = static_cast<float>(m_Swapchain.GetExtent().width) / static_cast<float>(m_Swapchain.GetExtent().height);
-        }
+        float l_AspectRatio = static_cast<float>(m_Swapchain.GetExtent().width) / static_cast<float>(m_Swapchain.GetExtent().height);
         l_UBO.Projection = glm::perspective(glm::radians(m_Camera.GetFOV()), l_AspectRatio, m_Camera.GetNearClip(), m_Camera.GetFarClip());
         l_UBO.Projection[1][1] *= -1.0f;
 

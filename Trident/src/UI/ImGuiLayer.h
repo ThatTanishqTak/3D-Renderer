@@ -19,7 +19,6 @@ namespace Trident
             void Dockspace();
             void EndFrame();
             void Render(VkCommandBuffer commandBuffer);
-            void SetupViewport();
 
         private:
             VkDescriptorPool m_DescriptorPool = VK_NULL_HANDLE;

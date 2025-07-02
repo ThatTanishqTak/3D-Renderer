@@ -1,7 +1,6 @@
 #include "UI/ImGuiLayer.h"
 
 #include "Core/Utilities.h"
-#include "Renderer/RenderCommand.h"
 
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
@@ -176,11 +175,6 @@ namespace Trident
         void ImGuiLayer::Render(VkCommandBuffer commandBuffer)
         {
             ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);
-        }
-
-        void ImGuiLayer::SetupViewport()
-        {
-
         }
     }
 }

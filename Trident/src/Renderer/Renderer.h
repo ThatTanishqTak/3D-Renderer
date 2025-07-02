@@ -57,23 +57,10 @@ namespace Trident
         uint32_t GetCurrentFrame() const { return m_Commands.CurrentFrame(); }
 
         void SetTransform(const Transform& props) { m_Transform = props; }
-        void SetViewport(const ViewportInfo& info)
-        {
-            if (m_Viewport.Size != info.Size)
-            {
-                m_Viewport = info;
-                CleanupOffscreenResources();
-                CreateOffscreenResources();
-            }
-            else
-            {
-                m_Viewport = info;
-            }
-        }
+        void SetViewport(const ViewportInfo& info) { m_Viewport = info; }
 
         Transform GetTransform() const { return m_Transform; }
         ViewportInfo GetViewport() const { return m_Viewport; }
-        VkDescriptorSet GetViewportTexture() const { return m_OffscreenTextureID; }
 
         Camera& GetCamera() { return m_Camera; }
         const Camera& GetCamera() const { return m_Camera; }
@@ -120,12 +107,8 @@ namespace Trident
         VkDeviceMemory m_OffscreenMemory = VK_NULL_HANDLE;
         VkImageView m_OffscreenImageView = VK_NULL_HANDLE;
         VkFramebuffer m_OffscreenFramebuffer = VK_NULL_HANDLE;
-        VkDescriptorSet m_OffscreenTextureID;
+        ImTextureID m_OffscreenTextureID;
         VkSampler m_OffscreenSampler = VK_NULL_HANDLE;
-
-        // Tracking image layout transitions
-        std::vector<bool> m_SwapchainImageInitialized;
-        bool m_OffscreenImageInitialized = false;
 
         Buffers m_Buffers;
 
@@ -142,8 +125,6 @@ namespace Trident
         void CreateDefaultTexture();
         void CreateDefaultSkybox();
         void CreateDescriptorSets();
-        void CreateOffscreenResources();
-        void CleanupOffscreenResources();
 
         void UpdateUniformBuffer(uint32_t currentImage);
 
