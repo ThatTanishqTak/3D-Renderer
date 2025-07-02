@@ -50,6 +50,9 @@ namespace Trident
 
         m_Camera = Camera(Application::GetWindow().GetNativeWindow());
 
+        m_Viewport.Position = { 0.0f, 0.0f };
+        m_Viewport.Size = { static_cast<float>(m_Swapchain.GetExtent().width), static_cast<float>(m_Swapchain.GetExtent().height) };
+
         VkFenceCreateInfo l_FenceInfo{ VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
         l_FenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
         if (vkCreateFence(Application::GetDevice(), &l_FenceInfo, nullptr, &m_ResourceFence) != VK_SUCCESS)
@@ -447,6 +450,9 @@ namespace Trident
 
         m_Commands.Recreate(m_Swapchain.GetImageCount());
 
+        m_Viewport.Position = { 0.0f, 0.0f };
+        m_Viewport.Size = { static_cast<float>(m_Swapchain.GetExtent().width), static_cast<float>(m_Swapchain.GetExtent().height) };
+
         TR_CORE_TRACE("Swapchain Recreated");
     }
 
@@ -777,7 +783,7 @@ namespace Trident
         l_BarrierEnd.subresourceRange.baseArrayLayer = 0;
         l_BarrierEnd.subresourceRange.layerCount = 1;
         l_BarrierEnd.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-        if (IsValidViewport())
+        if (IsValidViewport() && m_OffscreenImage != VK_NULL_HANDLE)
         {
             l_BarrierEnd.image = m_OffscreenImage;
             l_BarrierEnd.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;

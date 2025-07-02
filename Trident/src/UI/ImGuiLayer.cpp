@@ -154,7 +154,7 @@ namespace Trident
             ImGui_ImplVulkan_NewFrame();
             ImGui_ImplGlfw_NewFrame();
             ImGui::NewFrame();
-            Dockspace();
+            //Dockspace();
         }
 
         void ImGuiLayer::Dockspace()
