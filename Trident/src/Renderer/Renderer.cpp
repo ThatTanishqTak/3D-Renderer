@@ -444,6 +444,9 @@ namespace Trident
 
         m_Pipeline.CreateFramebuffers(m_Swapchain);
 
+        CleanupOffscreenResources();
+        CreateOffscreenResources();
+
         m_Commands.Recreate(m_Swapchain.GetImageCount());
 
         TR_CORE_TRACE("Swapchain Recreated");
@@ -865,6 +868,27 @@ namespace Trident
             l_RenderPassInfo.framebuffer = m_OffscreenFramebuffer;
             l_RenderPassInfo.renderArea.offset = { 0, 0 };
             l_RenderPassInfo.renderArea.extent = { static_cast<uint32_t>(m_Viewport.Size.x), static_cast<uint32_t>(m_Viewport.Size.y) };
+
+            if (!m_SwapchainImageInitialized[imageIndex])
+            {
+                VkImageMemoryBarrier l_InitBarrier{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+                l_InitBarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+                l_InitBarrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+                l_InitBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                l_InitBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                l_InitBarrier.image = m_Swapchain.GetImages()[imageIndex];
+                l_InitBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                l_InitBarrier.subresourceRange.baseMipLevel = 0;
+                l_InitBarrier.subresourceRange.levelCount = 1;
+                l_InitBarrier.subresourceRange.baseArrayLayer = 0;
+                l_InitBarrier.subresourceRange.layerCount = 1;
+                l_InitBarrier.srcAccessMask = 0;
+                l_InitBarrier.dstAccessMask = 0;
+                vkCmdPipelineBarrier(l_CommandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+                    0, 0, nullptr, 0, nullptr, 1, &l_InitBarrier);
+
+                m_SwapchainImageInitialized[imageIndex] = true;
+            }
 
             VkImageMemoryBarrier barrier{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
             barrier.oldLayout = m_OffscreenImageInitialized ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED;

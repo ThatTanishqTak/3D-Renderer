@@ -147,15 +147,6 @@ void ApplicationLayer::Run()
             }
         }
 
-        ImGui::Begin("Viewport");
-
-        ImVec2 l_Size = ImGui::GetContentRegionAvail();
-        ImVec2 l_Pos = ImGui::GetWindowPos();
-        Trident::RenderCommand::SetViewport({ { l_Pos.x, l_Pos.y }, { l_Size.x, l_Size.y } });
-        ImGui::Image((ImTextureID)Trident::RenderCommand::GetViewportTexture(), l_Size, ImVec2(0, 1), ImVec2(1, 0));
-        
-        ImGui::End();
-
         ImGui::End();
 
         m_ImGuiLayer->EndFrame();
