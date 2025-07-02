@@ -11,21 +11,15 @@ namespace Trident
         {
         public:
             ImGuiLayer() = default;
-            void Init(GLFWwindow* window,
-                VkInstance instance,
-                VkPhysicalDevice physicalDevice,
-                VkDevice device,
-                uint32_t queueFamily,
-                VkQueue queue,
-                VkRenderPass renderPass,
-                uint32_t imageCount,
-                VkCommandPool commandPool);
+            void Init(GLFWwindow* window, VkInstance instance, VkPhysicalDevice physicalDevice, VkDevice device, uint32_t queueFamily, VkQueue queue,
+                VkRenderPass renderPass, uint32_t imageCount, VkCommandPool commandPool);
             void Shutdown();
 
             void BeginFrame();
             void Dockspace();
             void EndFrame();
             void Render(VkCommandBuffer commandBuffer);
+            void SetupViewport();
 
         private:
             VkDescriptorPool m_DescriptorPool = VK_NULL_HANDLE;
