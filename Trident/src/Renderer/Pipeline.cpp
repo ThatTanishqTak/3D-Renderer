@@ -82,7 +82,7 @@ namespace Trident
         l_ColorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         l_ColorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
         l_ColorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        l_ColorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        l_ColorAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
         VkAttachmentReference l_colorAttachmentReference{};
         l_colorAttachmentReference.attachment = 0;

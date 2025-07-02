@@ -44,6 +44,11 @@ namespace Trident
         return Application::GetRenderer().GetViewport();
     }
 
+    VkDescriptorSet RenderCommand::GetViewportTexture()
+    {
+        return Application::GetRenderer().GetViewportTexture();
+    }
+
     uint32_t RenderCommand::GetCurrentFrame()
     {
         return Application::GetRenderer().GetCurrentFrame();

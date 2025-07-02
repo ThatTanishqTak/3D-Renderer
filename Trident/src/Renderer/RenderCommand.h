@@ -17,6 +17,7 @@ namespace Trident
 
         static Transform GetTransform();
         static ViewportInfo GetViewport();
+        static VkDescriptorSet GetViewportTexture();
         static uint32_t GetCurrentFrame();
     };
 }
