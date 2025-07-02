@@ -123,6 +123,10 @@ namespace Trident
         VkDescriptorSet m_OffscreenTextureID;
         VkSampler m_OffscreenSampler = VK_NULL_HANDLE;
 
+        // Tracking image layout transitions
+        std::vector<bool> m_SwapchainImageInitialized;
+        bool m_OffscreenImageInitialized = false;
+
         Buffers m_Buffers;
 
         Transform m_Transform{};

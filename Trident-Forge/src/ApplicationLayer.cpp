@@ -7,6 +7,7 @@
 #include "UI/FileDialog.h"
 #include "Loader/ModelLoader.h"
 #include "Loader/TextureLoader.h"
+#include "Renderer/RenderCommand.h"
 
 ApplicationLayer::ApplicationLayer()
 {
@@ -48,9 +49,9 @@ ApplicationLayer::~ApplicationLayer()
 
 void ApplicationLayer::Run()
 {
-    static std::string l_ModelPath;
-    static std::string l_TexturePath;
-    static std::string l_OnnxPath;
+    static std::string l_ModelPath{};
+    static std::string l_TexturePath{};
+    static std::string l_OnnxPath{};
     static bool l_OpenModelDialog = false;
     static bool l_OpenTextureDialog = false;
     static bool l_OpenOnnxDialog = false;
@@ -145,6 +146,15 @@ void ApplicationLayer::Run()
                 TR_INFO("Inference result: {}", l_Output[0]);
             }
         }
+
+        ImGui::Begin("Viewport");
+
+        ImVec2 l_Size = ImGui::GetContentRegionAvail();
+        ImVec2 l_Pos = ImGui::GetWindowPos();
+        Trident::RenderCommand::SetViewport({ { l_Pos.x, l_Pos.y }, { l_Size.x, l_Size.y } });
+        ImGui::Image((ImTextureID)Trident::RenderCommand::GetViewportTexture(), l_Size, ImVec2(0, 1), ImVec2(1, 0));
+        
+        ImGui::End();
 
         ImGui::End();
 

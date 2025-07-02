@@ -11,14 +11,14 @@
 
 namespace
 {
-    glm::mat4 ComposeTransform(const Trident::Transform& t)
+    glm::mat4 ComposeTransform(const Trident::Transform& transform)
     {
         glm::mat4 l_Mat{ 1.0f };
-        l_Mat = glm::translate(l_Mat, t.Position);
-        l_Mat = glm::rotate(l_Mat, glm::radians(t.Rotation.x), glm::vec3{ 1.0f, 0.0f, 0.0f });
-        l_Mat = glm::rotate(l_Mat, glm::radians(t.Rotation.y), glm::vec3{ 0.0f, 1.0f, 0.0f });
-        l_Mat = glm::rotate(l_Mat, glm::radians(t.Rotation.z), glm::vec3{ 0.0f, 0.0f, 1.0f });
-        l_Mat = glm::scale(l_Mat, t.Scale);
+        l_Mat = glm::translate(l_Mat, transform.Position);
+        l_Mat = glm::rotate(l_Mat, glm::radians(transform.Rotation.x), glm::vec3{ 1.0f, 0.0f, 0.0f });
+        l_Mat = glm::rotate(l_Mat, glm::radians(transform.Rotation.y), glm::vec3{ 0.0f, 1.0f, 0.0f });
+        l_Mat = glm::rotate(l_Mat, glm::radians(transform.Rotation.z), glm::vec3{ 0.0f, 0.0f, 1.0f });
+        l_Mat = glm::scale(l_Mat, transform.Scale);
 
         return l_Mat;
     }
@@ -40,6 +40,7 @@ namespace Trident
 
         m_Swapchain.Init();
         m_Pipeline.Init(m_Swapchain);
+        m_SwapchainImageInitialized.assign(m_Swapchain.GetImageCount(), false);
         m_Commands.Init(m_Swapchain.GetImageCount());
 
         m_Buffers.CreateUniformBuffers(m_Swapchain.GetImageCount(), m_UniformBuffers, m_UniformBuffersMemory);
@@ -418,6 +419,8 @@ namespace Trident
         m_Swapchain.Cleanup();
         m_Swapchain.Init();
 
+        m_SwapchainImageInitialized.assign(m_Swapchain.GetImageCount(), false);
+
         uint32_t l_ImageCount = m_Swapchain.GetImageCount();
         if (l_ImageCount != m_UniformBuffers.size())
         {
@@ -679,7 +682,11 @@ namespace Trident
     void Renderer::CreateOffscreenResources()
     {
         if (!IsValidViewport())
+        {
             return;
+        }
+
+        m_OffscreenImageInitialized = false;
 
         VkFormat l_Format = m_Swapchain.GetImageFormat();
 
@@ -860,7 +867,7 @@ namespace Trident
             l_RenderPassInfo.renderArea.extent = { static_cast<uint32_t>(m_Viewport.Size.x), static_cast<uint32_t>(m_Viewport.Size.y) };
 
             VkImageMemoryBarrier barrier{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
-            barrier.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            barrier.oldLayout = m_OffscreenImageInitialized ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED;
             barrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
             barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
             barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -870,9 +877,12 @@ namespace Trident
             barrier.subresourceRange.levelCount = 1;
             barrier.subresourceRange.baseArrayLayer = 0;
             barrier.subresourceRange.layerCount = 1;
-            barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            barrier.srcAccessMask = m_OffscreenImageInitialized ? VK_ACCESS_SHADER_READ_BIT : 0;
             barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-            vkCmdPipelineBarrier(l_CommandBuffer, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+            vkCmdPipelineBarrier(l_CommandBuffer, m_OffscreenImageInitialized ? VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT : VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 
+                VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+            
+            m_OffscreenImageInitialized = true;
         }
         else
         {
@@ -881,7 +891,7 @@ namespace Trident
             l_RenderPassInfo.renderArea.extent = m_Swapchain.GetExtent();
 
             VkImageMemoryBarrier barrier{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
-            barrier.oldLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+            barrier.oldLayout = m_SwapchainImageInitialized[imageIndex] ? VK_IMAGE_LAYOUT_PRESENT_SRC_KHR : VK_IMAGE_LAYOUT_UNDEFINED;
             barrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
             barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
             barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -894,6 +904,8 @@ namespace Trident
             barrier.srcAccessMask = 0;
             barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
             vkCmdPipelineBarrier(l_CommandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+
+            m_SwapchainImageInitialized[imageIndex] = true;
         }
 
         VkClearValue l_ClearColor = { 0.0f, 0.0f, 0.0f, 1.0f };
@@ -1051,7 +1063,15 @@ namespace Trident
 
         l_UBO.View = m_Camera.GetViewMatrix();
 
-        float l_AspectRatio = static_cast<float>(m_Swapchain.GetExtent().width) / static_cast<float>(m_Swapchain.GetExtent().height);
+        float l_AspectRatio = 0.0f;
+        if (IsValidViewport())
+        {
+            l_AspectRatio = m_Viewport.Size.x / m_Viewport.Size.y;
+        }
+        else
+        {
+            l_AspectRatio = static_cast<float>(m_Swapchain.GetExtent().width) / static_cast<float>(m_Swapchain.GetExtent().height);
+        }
         l_UBO.Projection = glm::perspective(glm::radians(m_Camera.GetFOV()), l_AspectRatio, m_Camera.GetNearClip(), m_Camera.GetFarClip());
         l_UBO.Projection[1][1] *= -1.0f;
 
