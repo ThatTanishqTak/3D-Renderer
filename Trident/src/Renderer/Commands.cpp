@@ -10,6 +10,8 @@ namespace Trident
         CreateCommandPool();
         CreateCommandBuffers(commandBufferCount);
         CreateSyncObjects(commandBufferCount);
+
+        m_OneTimePool.Init(m_CommandPool, commandBufferCount);
     }
 
     void Commands::Cleanup()
@@ -38,6 +40,8 @@ namespace Trident
 
             m_CommandBuffers.clear();
         }
+
+        m_OneTimePool.Cleanup();
 
         if (m_CommandPool != VK_NULL_HANDLE)
         {
@@ -81,21 +85,16 @@ namespace Trident
 
         vkFreeCommandBuffers(Application::GetDevice(), m_CommandPool, static_cast<uint32_t>(m_CommandBuffers.size()), m_CommandBuffers.data());
         m_CommandBuffers.clear();
+        m_OneTimePool.Cleanup();
 
         CreateCommandBuffers(commandBufferCount);
         CreateSyncObjects(commandBufferCount);
+        m_OneTimePool.Init(m_CommandPool, commandBufferCount);
     }
 
     VkCommandBuffer Commands::BeginSingleTimeCommands()
     {
-        VkCommandBufferAllocateInfo l_allocateInfo{};
-        l_allocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-        l_allocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-        l_allocateInfo.commandPool = m_CommandPool;
-        l_allocateInfo.commandBufferCount = 1;
-
-        VkCommandBuffer l_CommandBuffer;
-        vkAllocateCommandBuffers(Application::GetDevice(), &l_allocateInfo, &l_CommandBuffer);
+        VkCommandBuffer l_CommandBuffer = m_OneTimePool.Acquire();
 
         VkCommandBufferBeginInfo l_BeginInfo{};
         l_BeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -118,7 +117,7 @@ namespace Trident
         vkQueueSubmit(Application::GetGraphicsQueue(), 1, &l_SubmitInfo, VK_NULL_HANDLE);
         vkQueueWaitIdle(Application::GetGraphicsQueue());
 
-        vkFreeCommandBuffers(Application::GetDevice(), m_CommandPool, 1, &l_CommandBuffer);
+        m_OneTimePool.Release(l_CommandBuffer);
     }
 
     void Commands::CreateCommandPool()

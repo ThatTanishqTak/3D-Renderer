@@ -25,7 +25,7 @@ namespace Trident
         m_Allocations.clear();
     }
 
-    void Buffers::CreateVertexBuffer(const std::vector<Vertex>& vertices, VkCommandPool commandPool, VkBuffer& vertexBuffer, VkDeviceMemory& vertexBufferMemory)
+    void Buffers::CreateVertexBuffer(const std::vector<Vertex>& vertices, CommandBufferPool& pool, VkBuffer& vertexBuffer, VkDeviceMemory& vertexBufferMemory)
     {
         TR_CORE_TRACE("Creating Vertex Buffer");
 
@@ -34,11 +34,11 @@ namespace Trident
             TR_CORE_WARN("No vertices provided - skipping vertex buffer creation");
             vertexBuffer = VK_NULL_HANDLE;
             vertexBufferMemory = VK_NULL_HANDLE;
-            
+
             return;
         }
 
-        VkDeviceSize l_BufferSize = sizeof(vertices[0]) * vertices.size();
+        VkDeviceSize l_BufferSize = sizeof(Vertex) * vertices.size();
 
         VkBuffer l_StagingBuffer;
         VkDeviceMemory l_StagingBufferMemory;
@@ -52,7 +52,7 @@ namespace Trident
         CreateBuffer(l_BufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer, vertexBufferMemory);
         if (vertexBuffer != VK_NULL_HANDLE)
         {
-            CopyBuffer(l_StagingBuffer, vertexBuffer, l_BufferSize, commandPool);
+            CopyBuffer(l_StagingBuffer, vertexBuffer, l_BufferSize, pool);
         }
 
         vkDestroyBuffer(Application::GetDevice(), l_StagingBuffer, nullptr);
@@ -64,7 +64,7 @@ namespace Trident
         }
     }
 
-    void Buffers::CreateIndexBuffer(const std::vector<uint32_t>& indices, VkCommandPool commandPool, VkBuffer& indexBuffer, VkDeviceMemory& indexBufferMemory, uint32_t& indexCount)
+    void Buffers::CreateIndexBuffer(const std::vector<uint32_t>& indices, CommandBufferPool& pool, VkBuffer& indexBuffer, VkDeviceMemory& indexBufferMemory, uint32_t& indexCount)
     {
         TR_CORE_TRACE("Creating Index Buffer");
 
@@ -74,6 +74,7 @@ namespace Trident
             TR_CORE_WARN("No indices provided - skipping index buffer creation");
             indexBuffer = VK_NULL_HANDLE;
             indexBufferMemory = VK_NULL_HANDLE;
+
             return;
         }
 
@@ -91,7 +92,7 @@ namespace Trident
         CreateBuffer(l_BufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexBuffer, indexBufferMemory);
         if (indexBuffer != VK_NULL_HANDLE)
         {
-            CopyBuffer(l_StagingBuffer, indexBuffer, l_BufferSize, commandPool);
+            CopyBuffer(l_StagingBuffer, indexBuffer, l_BufferSize, pool);
         }
 
         vkDestroyBuffer(Application::GetDevice(), l_StagingBuffer, nullptr);
@@ -179,15 +180,9 @@ namespace Trident
         vkBindBufferMemory(Application::GetDevice(), buffer, bufferMemory, 0);
     }
 
-    void Buffers::CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size, VkCommandPool commandPool)
+    void Buffers::CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size, CommandBufferPool& pool)
     {
-        VkCommandBufferAllocateInfo l_AllocateInfo{ VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO };
-        l_AllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-        l_AllocateInfo.commandPool = commandPool;
-        l_AllocateInfo.commandBufferCount = 1;
-
-        VkCommandBuffer l_CommandBuffer;
-        vkAllocateCommandBuffers(Application::GetDevice(), &l_AllocateInfo, &l_CommandBuffer);
+        VkCommandBuffer l_CommandBuffer = pool.Acquire();
 
         VkCommandBufferBeginInfo l_BeginInfo{ VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
         l_BeginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
@@ -207,7 +202,7 @@ namespace Trident
         vkQueueSubmit(Application::GetGraphicsQueue(), 1, &l_SubmitInfo, VK_NULL_HANDLE);
         vkQueueWaitIdle(Application::GetGraphicsQueue());
 
-        vkFreeCommandBuffers(Application::GetDevice(), commandPool, 1, &l_CommandBuffer);
+        pool.Release(l_CommandBuffer);
     }
 
     void Buffers::DestroyBuffer(VkBuffer buffer, VkDeviceMemory memory)

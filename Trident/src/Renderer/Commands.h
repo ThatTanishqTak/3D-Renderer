@@ -3,6 +3,8 @@
 #include <vulkan/vulkan.h>
 #include <vector>
 
+#include "Renderer/CommandBufferPool.h"
+
 namespace Trident
 {
     class Commands
@@ -27,6 +29,9 @@ namespace Trident
         size_t& CurrentFrame() { return m_CurrentFrame; }
         size_t CurrentFrame() const { return m_CurrentFrame; }
 
+        CommandBufferPool& GetOneTimePool() { return m_OneTimePool; }
+        const CommandBufferPool& GetOneTimePool() const { return m_OneTimePool; }
+
         VkCommandBuffer BeginSingleTimeCommands();
         void EndSingleTimeCommands(VkCommandBuffer commandBuffer);
 
@@ -43,5 +48,6 @@ namespace Trident
         std::vector<VkFence> m_InFlightFences;
         std::vector<VkFence> m_ImagesInFlight;
         size_t m_CurrentFrame = 0;
+        CommandBufferPool m_OneTimePool;
     };
 }

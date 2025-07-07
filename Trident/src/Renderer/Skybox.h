@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Renderer/Buffers.h"
+#include "Renderer/CommandBufferPool.h"
 
 #include <vulkan/vulkan.h>
 #include <glm/glm.hpp>
@@ -12,7 +13,7 @@ namespace Trident
     class Skybox
     {
     public:
-        void Init(Buffers& buffers, VkCommandPool commandPool);
+        void Init(Buffers& buffers, CommandBufferPool& pool);
         void Cleanup(Buffers& buffers);
         void Record(VkCommandBuffer cmdBuffer, VkPipelineLayout layout, const VkDescriptorSet* descriptorSets, uint32_t imageIndex);
 

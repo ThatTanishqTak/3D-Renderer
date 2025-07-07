@@ -6,7 +6,7 @@
 
 namespace Trident
 {
-    void Skybox::Init(Buffers& buffers, VkCommandPool commandPool)
+    void Skybox::Init(Buffers& buffers, CommandBufferPool& pool)
     {
         std::vector<Vertex> vertices =
         {
@@ -32,8 +32,8 @@ namespace Trident
             4, 5, 1, 1, 0, 4
         };
 
-        buffers.CreateVertexBuffer(vertices, commandPool, m_VertexBuffer, m_VertexBufferMemory);
-        buffers.CreateIndexBuffer(indices, commandPool, m_IndexBuffer, m_IndexBufferMemory, m_IndexCount);
+        buffers.CreateVertexBuffer(vertices, pool, m_VertexBuffer, m_VertexBufferMemory);
+        buffers.CreateIndexBuffer(indices, pool, m_IndexBuffer, m_IndexBufferMemory, m_IndexCount);
     }
 
     void Skybox::Cleanup(Buffers& buffers)

@@ -21,6 +21,7 @@
 
 #include <vector>
 #include <array>
+#include <memory>
 #include <functional>
 
 namespace Trident
@@ -112,6 +113,11 @@ namespace Trident
         VkSampler m_OffscreenSampler = VK_NULL_HANDLE;
 
         Buffers m_Buffers;
+
+        size_t m_MaxVertexCount = 0;
+        size_t m_MaxIndexCount = 0;
+        std::unique_ptr<Vertex[]> m_StagingVertices;
+        std::unique_ptr<uint32_t[]> m_StagingIndices;
 
         Transform m_Transform{};
         ViewportInfo m_Viewport{};

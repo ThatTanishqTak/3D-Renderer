@@ -5,6 +5,7 @@
 #include "UI/ImGuiLayer.h"
 
 #include <stdexcept>
+#include <algorithm>
 
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -193,22 +194,41 @@ namespace Trident
             m_IndexCount = 0;
         }
 
-        std::vector<Vertex> l_AllVertices;
-        std::vector<uint32_t> l_AllIndices;
-        uint32_t l_Offset = 0;
-
+        size_t l_VertexCount = 0;
+        size_t l_IndexCount = 0;
         for (const auto& l_Mesh : meshes)
         {
-            l_AllVertices.insert(l_AllVertices.end(), l_Mesh.Vertices.begin(), l_Mesh.Vertices.end());
+            l_VertexCount += l_Mesh.Vertices.size();
+            l_IndexCount += l_Mesh.Indices.size();
+        }
+
+        if (l_VertexCount > m_MaxVertexCount)
+        {
+            m_MaxVertexCount = l_VertexCount;
+            m_StagingVertices.reset(new Vertex[m_MaxVertexCount]);
+        }
+        if (l_IndexCount > m_MaxIndexCount)
+        {
+            m_MaxIndexCount = l_IndexCount;
+            m_StagingIndices.reset(new uint32_t[m_MaxIndexCount]);
+        }
+
+        uint32_t l_Offset = 0;
+        size_t l_VertOffset = 0;
+        size_t l_IndexOffset = 0;
+        for (const auto& l_Mesh : meshes)
+        {
+            std::copy(l_Mesh.Vertices.begin(), l_Mesh.Vertices.end(), m_StagingVertices.get() + l_VertOffset);
             for (auto index : l_Mesh.Indices)
             {
-                l_AllIndices.push_back(index + l_Offset);
+                m_StagingIndices[l_IndexOffset++] = index + l_Offset;
             }
+            l_VertOffset += l_Mesh.Vertices.size();
             l_Offset += static_cast<uint32_t>(l_Mesh.Vertices.size());
         }
 
-        m_Buffers.CreateVertexBuffer(l_AllVertices, m_Commands.GetCommandPool(), m_VertexBuffer, m_VertexBufferMemory);
-        m_Buffers.CreateIndexBuffer(l_AllIndices, m_Commands.GetCommandPool(), m_IndexBuffer, m_IndexBufferMemory, m_IndexCount);
+        m_Buffers.CreateVertexBuffer(l_AllVertices, m_Commands.GetOneTimePool(), m_VertexBuffer, m_VertexBufferMemory);
+        m_Buffers.CreateIndexBuffer(l_AllIndices, m_Commands.GetOneTimePool(), m_IndexBuffer, m_IndexBufferMemory, m_IndexCount);
     }
 
     void Renderer::UploadTexture(const Loader::TextureData& texture)
@@ -628,7 +648,7 @@ namespace Trident
     {
         TR_CORE_TRACE("Creating Default Skybox");
 
-        m_Skybox.Init(m_Buffers, m_Commands.GetCommandPool());
+        m_Skybox.Init(m_Buffers, m_Commands.GetOneTimePool());
 
         TR_CORE_TRACE("Default Skybox Created");
     }
