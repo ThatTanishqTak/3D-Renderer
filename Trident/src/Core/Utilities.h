@@ -2,6 +2,8 @@
 
 #include <fstream>
 #include <filesystem>
+#include <cstdlib>
+#include <new>
 
 #define GLM_ENABLE_EXPERIMENTAL
 #include "glm/gtx/string_cast.hpp"
@@ -65,8 +67,26 @@ namespace Trident
 			static double s_LastTime;
 			static float s_DeltaTime;
 		};
+
+		//------------------------------------------------------------------------------------------------------------------------------------------------------//
+
+		class Allocation
+		{
+		public:
+			static void ResetFrame();
+			static void Increment();
+			static size_t GetFrameCount();
+			static void* Malloc(std::size_t size, const char* file, int line);
+		};
 	}
 }
+
+void* operator new(std::size_t size, const char* file, int line);
+void operator delete(void* ptr, const char* file, int line) noexcept;
+void* operator new(std::size_t size);
+void operator delete(void* ptr) noexcept;
+void* operator new[](std::size_t size);
+void operator delete[](void* ptr) noexcept;
 
 // Core log macros
 #define TR_CORE_TRACE(...) ::Trident::Utilities::Log::GetCoreLogger()->trace(__VA_ARGS__)
@@ -81,3 +101,6 @@ namespace Trident
 #define TR_WARN(...) ::Trident::Utilities::Log::GetClientLogger()->warn(__VA_ARGS__)
 #define TR_ERROR(...) ::Trident::Utilities::Log::GetClientLogger()->error(__VA_ARGS__)
 #define TR_CRITICAL(...) ::Trident::Utilities::Log::GetClientLogger()->critical(__VA_ARGS__)
+
+#define TR_MALLOC(size) ::Trident::Utilities::Allocation::Malloc(size, __FILE__, __LINE__)
+#define TR_NEW(TYPE, ...) new(__FILE__, __LINE__) TYPE(__VA_ARGS__)

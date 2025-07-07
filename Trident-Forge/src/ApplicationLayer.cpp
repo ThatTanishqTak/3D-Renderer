@@ -66,6 +66,7 @@ void ApplicationLayer::Run()
         
         ImGui::Begin("Stats");
         ImGui::Text("FPS: %.2f", Trident::Utilities::Time::GetFPS());
+        ImGui::Text("Allocations: %zu", Trident::Application::GetRenderer().GetLastFrameAllocationCount());
         ImGui::End();
 
         ImGui::Begin("Content");

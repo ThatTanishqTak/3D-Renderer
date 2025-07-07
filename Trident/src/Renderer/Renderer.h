@@ -55,6 +55,7 @@ namespace Trident
         void SetImGuiLayer(UI::ImGuiLayer* layer);
 
         uint32_t GetCurrentFrame() const { return m_Commands.CurrentFrame(); }
+        size_t GetLastFrameAllocationCount() const { return m_FrameAllocationCount; }
 
         void SetTransform(const Transform& props) { m_Transform = props; }
         void SetViewport(const ViewportInfo& info) { m_Viewport = info; }
@@ -118,6 +119,7 @@ namespace Trident
         Skybox m_Skybox{};
 
         UI::ImGuiLayer* m_ImGuiLayer = nullptr;
+        size_t m_FrameAllocationCount = 0;
 
     private:
         // Core setup

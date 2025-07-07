@@ -133,6 +133,7 @@ namespace Trident
 
     void Renderer::DrawFrame()
     {
+        Utilities::Allocation::ResetFrame();
         m_Camera.Update(Utilities::Time::GetDeltaTime());
 
         VkFence l_InFlightFence = m_Commands.GetInFlightFence(m_Commands.CurrentFrame());
@@ -167,6 +168,9 @@ namespace Trident
         PresentFrame(l_ImageIndex);
 
         m_Commands.CurrentFrame() = (m_Commands.CurrentFrame() + 1) % m_Commands.GetFrameCount();
+        m_FrameAllocationCount = Utilities::Allocation::GetFrameCount();
+        
+        TR_CORE_TRACE("Frame allocations: {}", m_FrameAllocationCount);
     }
 
     void Renderer::UploadMesh(const std::vector<Geometry::Mesh>& meshes)

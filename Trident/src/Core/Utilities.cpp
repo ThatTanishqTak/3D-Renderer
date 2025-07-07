@@ -97,5 +97,76 @@ namespace Trident
 			s_DeltaTime = static_cast<float>(current - s_LastTime);
 			s_LastTime = current;
 		}
+
+		//------------------------------------------------------------------------------------------------------------------------------------------------------//
+
+		static std::atomic_size_t s_FrameCount{ 0 };
+
+		void Allocation::ResetFrame()
+		{
+			s_FrameCount.store(0, std::memory_order_relaxed);
+		}
+
+		void Allocation::Increment()
+		{
+			s_FrameCount.fetch_add(1, std::memory_order_relaxed);
+		}
+
+		size_t Allocation::GetFrameCount()
+		{
+			return s_FrameCount.load(std::memory_order_relaxed);
+		}
+
+		void* Allocation::Malloc(std::size_t size, const char* /*file*/, int /*line*/)
+		{
+			Increment();
+			
+			return std::malloc(size);
+		}
 	}
+}
+
+void* operator new(std::size_t size, const char* /*file*/, int /*line*/)
+{
+	Trident::Utilities::Allocation::Increment();
+
+	return ::operator new(size);
+}
+
+void operator delete(void* ptr, const char* /*file*/, int /*line*/) noexcept
+{
+	::operator delete(ptr);
+}
+
+void* operator new(std::size_t size)
+{
+	Trident::Utilities::Allocation::Increment();
+
+	if (void* ptr = std::malloc(size))
+	{
+		return ptr;
+	}
+	
+	throw std::bad_alloc();
+}
+
+void operator delete(void* ptr) noexcept
+{
+	std::free(ptr);
+}
+
+void* operator new[](std::size_t size)
+{
+	Trident::Utilities::Allocation::Increment();
+	if (void* ptr = std::malloc(size))
+	{
+		return ptr;
+	}
+
+	throw std::bad_alloc();
+}
+
+void operator delete[](void* ptr) noexcept
+{
+	std::free(ptr);
 }
