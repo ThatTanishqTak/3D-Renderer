@@ -79,7 +79,7 @@ void ApplicationLayer::Run()
 
         if (l_OpenModelDialog)
         {
-            if (Trident::UI::FileDialog::Open("ModelDialog", l_ModelPath, ".obj"))
+            if (Trident::UI::FileDialog::Open("ModelDialog", l_ModelPath))
             {
                 auto l_Meshes = Trident::Loader::ModelLoader::Load(l_ModelPath);
                 Trident::Application::GetRenderer().UploadMesh(l_Meshes);

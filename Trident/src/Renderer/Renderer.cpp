@@ -1,7 +1,9 @@
 ﻿#include "Renderer/Renderer.h"
 
 #include "Application.h"
+
 #include "Geometry/Mesh.h"
+
 #include "UI/ImGuiLayer.h"
 
 #include <stdexcept>
@@ -37,6 +39,10 @@ namespace Trident
     void Renderer::Init()
     {
         TR_CORE_INFO("-------INITIALIZING RENDERER-------");
+
+        m_Registry = &Application::GetRegistry();
+        m_Entity = m_Registry->CreateEntity();
+        m_Registry->AddComponent<Transform>(m_Entity);
 
         m_Swapchain.Init();
         m_Pipeline.Init(m_Swapchain);
@@ -171,7 +177,7 @@ namespace Trident
         m_Commands.CurrentFrame() = (m_Commands.CurrentFrame() + 1) % m_Commands.GetFrameCount();
         m_FrameAllocationCount = Utilities::Allocation::GetFrameCount();
         
-        TR_CORE_TRACE("Frame allocations: {}", m_FrameAllocationCount);
+        //TR_CORE_TRACE("Frame allocations: {}", m_FrameAllocationCount);
     }
 
     void Renderer::UploadMesh(const std::vector<Geometry::Mesh>& meshes)
@@ -227,8 +233,8 @@ namespace Trident
             l_Offset += static_cast<uint32_t>(l_Mesh.Vertices.size());
         }
 
-        m_Buffers.CreateVertexBuffer(l_AllVertices, m_Commands.GetOneTimePool(), m_VertexBuffer, m_VertexBufferMemory);
-        m_Buffers.CreateIndexBuffer(l_AllIndices, m_Commands.GetOneTimePool(), m_IndexBuffer, m_IndexBufferMemory, m_IndexCount);
+        std::vector<Vertex> l_AllVertices(m_StagingVertices.get(), m_StagingVertices.get() + l_VertexCount);
+        std::vector<uint32_t> l_AllIndices(m_StagingIndices.get(), m_StagingIndices.get() + l_IndexCount);
     }
 
     void Renderer::UploadTexture(const Loader::TextureData& texture)
@@ -785,7 +791,7 @@ namespace Trident
             vkCmdBindIndexBuffer(l_CommandBuffer, m_IndexBuffer, 0, VK_INDEX_TYPE_UINT32);
             vkCmdBindDescriptorSets(l_CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline.GetPipelineLayout(), 0, 1, &m_DescriptorSets[imageIndex], 0, nullptr);
 
-            glm::mat4 l_Transform = ComposeTransform(m_Transform);
+            glm::mat4 l_Transform = ComposeTransform(m_Registry->GetComponent<Transform>(m_Entity));
             vkCmdPushConstants(l_CommandBuffer, m_Pipeline.GetPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &l_Transform);
 
             vkCmdDrawIndexed(l_CommandBuffer, m_IndexCount, 1, 0, 0, 0);
@@ -946,5 +952,29 @@ namespace Trident
         vkMapMemory(Application::GetDevice(), m_UniformBuffersMemory[currentImage], 0, sizeof(l_UBO), 0, &l_Data);
         memcpy(l_Data, &l_UBO, sizeof(l_UBO));
         vkUnmapMemory(Application::GetDevice(), m_UniformBuffersMemory[currentImage]);
+    }
+
+    void Renderer::SetTransform(const Transform& props)
+    {
+        if (m_Registry)
+        {
+            if (!m_Registry->HasComponent<Transform>(m_Entity))
+            {
+                m_Registry->AddComponent<Transform>(m_Entity, props);
+            }
+            else
+            {
+                m_Registry->GetComponent<Transform>(m_Entity) = props;
+            }
+        }
+    }
+
+    Transform Renderer::GetTransform() const
+    {
+        if (m_Registry && m_Registry->HasComponent<Transform>(m_Entity))
+        {
+            return m_Registry->GetComponent<Transform>(m_Entity);
+        }
+        return {};
     }
 }

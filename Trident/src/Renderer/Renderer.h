@@ -13,6 +13,7 @@
 #include "Geometry/Mesh.h"
 #include "Loader/TextureLoader.h"
 
+#include "ECS/Entity.h"
 #include "Camera/Camera.h"
 
 #include <vulkan/vulkan.h>
@@ -27,6 +28,7 @@
 namespace Trident
 {
     namespace UI { class ImGuiLayer; }
+    namespace ECS { class Registry; }
 
     struct Transform
     {
@@ -58,10 +60,10 @@ namespace Trident
         uint32_t GetCurrentFrame() const { return m_Commands.CurrentFrame(); }
         size_t GetLastFrameAllocationCount() const { return m_FrameAllocationCount; }
 
-        void SetTransform(const Transform& props) { m_Transform = props; }
+        void SetTransform(const Transform& props);
         void SetViewport(const ViewportInfo& info) { m_Viewport = info; }
 
-        Transform GetTransform() const { return m_Transform; }
+        Transform GetTransform() const;
         ViewportInfo GetViewport() const { return m_Viewport; }
 
         Camera& GetCamera() { return m_Camera; }
@@ -119,7 +121,8 @@ namespace Trident
         std::unique_ptr<Vertex[]> m_StagingVertices;
         std::unique_ptr<uint32_t[]> m_StagingIndices;
 
-        Transform m_Transform{};
+        ECS::Entity m_Entity = 0;
+        ECS::Registry* m_Registry = nullptr;
         ViewportInfo m_Viewport{};
         Camera m_Camera{};
         Skybox m_Skybox{};

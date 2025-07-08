@@ -6,6 +6,8 @@
 
 #include "Renderer/Renderer.h"
 
+#include "ECS/Registry.h"
+
 #include <vulkan/vulkan.h>
 #include <GLFW/glfw3.h>
 
@@ -47,6 +49,7 @@ namespace Trident
         static QueueFamilyIndices GetQueueFamilyIndices() { return Get().m_QueueFamilyIndices; }
         static Window& GetWindow() { return Get().m_Window; }
         static Renderer& GetRenderer() { return *Get().m_Renderer; }
+        static ECS::Registry& GetRegistry() { return Get().m_Registry; }
         bool IsDeviceSuitable(VkPhysicalDevice device);
 
     private:
@@ -61,6 +64,7 @@ namespace Trident
         QueueFamilyIndices m_QueueFamilyIndices;
 
         std::unique_ptr<Renderer> m_Renderer;
+        ECS::Registry m_Registry;
 
         static Application* s_Instance;
 

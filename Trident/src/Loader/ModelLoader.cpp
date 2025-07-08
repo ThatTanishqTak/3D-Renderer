@@ -173,23 +173,41 @@ namespace Trident
                                 uint32_t l_PosIndex = 0;
                                 uint32_t l_TexIndex = 0;
 
+                                auto ParseIndex = [](const std::string& p_Data) -> uint32_t
+                                    {
+                                        if (p_Data.empty())
+                                        {
+                                            return 0;
+                                        }
+
+                                        try
+                                        {
+                                            int l_Value = std::stoi(p_Data);
+                                            return l_Value > 0 ? static_cast<uint32_t>(l_Value) : 0;
+                                        }
+                                        catch (const std::exception&)
+                                        {
+                                            return 0;
+                                        }
+                                    };
+
                                 size_t l_First = l_VertexData.find('/');
                                 size_t l_Second = l_VertexData.find('/', l_First + 1);
 
                                 if (l_First == std::string::npos)
                                 {
-                                    l_PosIndex = std::stoul(l_VertexData);
+                                    l_PosIndex = ParseIndex(l_VertexData);
                                 }
                                 else
                                 {
-                                    l_PosIndex = std::stoul(l_VertexData.substr(0, l_First));
+                                    l_PosIndex = ParseIndex(l_VertexData.substr(0, l_First));
                                     if (l_Second != std::string::npos && l_Second > l_First + 1)
                                     {
-                                        l_TexIndex = std::stoul(l_VertexData.substr(l_First + 1, l_Second - l_First - 1));
+                                        l_TexIndex = ParseIndex(l_VertexData.substr(l_First + 1, l_Second - l_First - 1));
                                     }
-                                    else if (l_First + 1 < l_VertexData.size())
+                                    else if (l_Second == std::string::npos && l_First + 1 < l_VertexData.size())
                                     {
-                                        l_TexIndex = std::stoul(l_VertexData.substr(l_First + 1));
+                                        l_TexIndex = ParseIndex(l_VertexData.substr(l_First + 1));
                                     }
                                 }
 
