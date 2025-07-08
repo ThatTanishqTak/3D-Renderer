@@ -67,6 +67,8 @@ void ApplicationLayer::Run()
         ImGui::Begin("Stats");
         ImGui::Text("FPS: %.2f", Trident::Utilities::Time::GetFPS());
         ImGui::Text("Allocations: %zu", Trident::Application::GetRenderer().GetLastFrameAllocationCount());
+        ImGui::Text("Models: %zu", Trident::Application::GetRenderer().GetModelCount());
+        ImGui::Text("Triangles: %zu", Trident::Application::GetRenderer().GetTriangleCount());
         ImGui::End();
 
         ImGui::Begin("Content");
@@ -113,6 +115,30 @@ void ApplicationLayer::Run()
             if (!ImGui::IsPopupOpen("TextureDialog"))
             {
                 l_OpenTextureDialog = false;
+            }
+        }
+
+        static std::string l_ScenePath{};
+        static bool l_OpenSceneDialog = false;
+
+        ImGui::Text("Scene: %s", l_ScenePath.c_str());
+        if (ImGui::Button("Load Scene"))
+        {
+            l_OpenSceneDialog = true;
+            ImGui::OpenPopup("SceneDialog");
+        }
+
+        if (l_OpenSceneDialog)
+        {
+            if (Trident::UI::FileDialog::Open("SceneDialog", l_ScenePath, ".scene"))
+            {
+                m_Engine->LoadScene(l_ScenePath);
+                l_OpenSceneDialog = false;
+            }
+
+            if (!ImGui::IsPopupOpen("SceneDialog"))
+            {
+                l_OpenSceneDialog = false;
             }
         }
 

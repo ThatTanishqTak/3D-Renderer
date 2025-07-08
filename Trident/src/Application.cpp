@@ -2,6 +2,8 @@
 
 #include "Renderer/RenderCommand.h"
 
+#include "Loader/SceneLoader.h"
+
 #include <string>
 
 namespace Trident
@@ -32,6 +34,15 @@ namespace Trident
     void Application::RenderScene()
     {
         RenderCommand::DrawFrame();
+    }
+
+    void Application::LoadScene(const std::string& path)
+    {
+        auto l_Scene = Loader::SceneLoader::Load(path);
+        if (!l_Scene.Meshes.empty())
+        {
+            m_Renderer->UploadMesh(l_Scene.Meshes);
+        }
     }
 
     void Application::Shutdown()

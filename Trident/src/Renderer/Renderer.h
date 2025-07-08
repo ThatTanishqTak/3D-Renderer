@@ -59,6 +59,8 @@ namespace Trident
 
         uint32_t GetCurrentFrame() const { return m_Commands.CurrentFrame(); }
         size_t GetLastFrameAllocationCount() const { return m_FrameAllocationCount; }
+        size_t GetModelCount() const { return m_ModelCount; }
+        size_t GetTriangleCount() const { return m_TriangleCount; }
 
         void SetTransform(const Transform& props);
         void SetViewport(const ViewportInfo& info) { m_Viewport = info; }
@@ -129,6 +131,9 @@ namespace Trident
 
         UI::ImGuiLayer* m_ImGuiLayer = nullptr;
         size_t m_FrameAllocationCount = 0;
+
+        size_t m_ModelCount = 0;
+        size_t m_TriangleCount = 0;
 
     private:
         // Core setup

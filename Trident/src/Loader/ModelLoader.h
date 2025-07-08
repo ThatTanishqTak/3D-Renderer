@@ -12,6 +12,7 @@ namespace Trident
         class ModelLoader
         {
         public:
+            // Load an FBX model and return its meshes
             static std::vector<Geometry::Mesh> Load(const std::string& filePath);
         };
     }

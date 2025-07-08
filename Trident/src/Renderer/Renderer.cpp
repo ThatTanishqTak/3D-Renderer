@@ -235,6 +235,11 @@ namespace Trident
 
         std::vector<Vertex> l_AllVertices(m_StagingVertices.get(), m_StagingVertices.get() + l_VertexCount);
         std::vector<uint32_t> l_AllIndices(m_StagingIndices.get(), m_StagingIndices.get() + l_IndexCount);
+
+        m_ModelCount = meshes.size();
+        m_TriangleCount = l_IndexCount / 3;
+
+        TR_CORE_INFO("Scene info - Models: {} Triangles: {}", m_ModelCount, m_TriangleCount);
     }
 
     void Renderer::UploadTexture(const Loader::TextureData& texture)

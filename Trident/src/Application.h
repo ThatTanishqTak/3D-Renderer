@@ -35,6 +35,7 @@ namespace Trident
         void Init();
         void Update();
 
+        void LoadScene(const std::string& path);
         void RenderScene();
 
         void Shutdown();
