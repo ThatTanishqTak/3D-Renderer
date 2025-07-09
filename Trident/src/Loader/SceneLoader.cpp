@@ -25,7 +25,8 @@ namespace Trident
                 if (!l_Entry.is_regular_file())
                     continue;
 
-                if (l_Entry.path().extension() == ".fbx")
+                auto ext = l_Entry.path().extension();
+                if (ext == ".gltf" || ext == ".glb")
                 {
                     auto l_Meshes = ModelLoader::Load(l_Entry.path().string());
                     if (!l_Meshes.empty())
