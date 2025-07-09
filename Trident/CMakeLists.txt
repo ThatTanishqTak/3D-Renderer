@@ -1,5 +1,5 @@
 ﻿cmake_minimum_required(VERSION 3.20)
-project(Trident LANGUAGES CXX)
+project(Trident LANGUAGES CXX C)
 
 add_definitions(-DGLFW_INCLUDE_VULKAN)
 
@@ -53,10 +53,15 @@ target_include_directories(tinygltf INTERFACE
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/vendor/tinygltf>
 )
 
-add_library(openfbx INTERFACE)
-target_include_directories(openfbx INTERFACE
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/vendor/openfbx/src>
+add_library(openfbx STATIC
+  ${CMAKE_CURRENT_SOURCE_DIR}/vendor/OpenFBX/src/ofbx.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/vendor/OpenFBX/src/libdeflate.c
 )
+set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/vendor/OpenFBX/src/libdeflate.c PROPERTIES LANGUAGE C)
+target_include_directories(openfbx PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/vendor/OpenFBX/src>
+)
+target_compile_features(openfbx PUBLIC cxx_std_17)
 
 set(IMGUI_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/vendor/imgui")
 file(GLOB IMGUI_SOURCES
