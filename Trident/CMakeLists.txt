@@ -53,6 +53,11 @@ target_include_directories(tinygltf INTERFACE
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/vendor/tinygltf>
 )
 
+add_library(openfbx INTERFACE)
+target_include_directories(openfbx INTERFACE
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/vendor/openfbx/src>
+)
+
 set(IMGUI_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/vendor/imgui")
 file(GLOB IMGUI_SOURCES
   ${IMGUI_ROOT}/*.cpp
@@ -85,6 +90,7 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
   imgui
   stb
   tinygltf
+  openfbx
 )
 
 option(TRIDENT_ENABLE_VALIDATION "Enable Vulkan Validation Layers" ON)

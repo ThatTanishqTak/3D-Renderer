@@ -17,3 +17,6 @@
 [submodule "Trident/vendor/entt"]
 	path = Trident/vendor/entt
 	url = https://github.com/ThatTanishqTak/entt.git
+[submodule "Trident/vendor/OpenFBX"]
+	path = Trident/vendor/OpenFBX
+	url = https://github.com/ThatTanishqTak/OpenFBX.git

@@ -1,11 +1,12 @@
 #include "Loader/ModelLoader.h"
-
 #include "Core/Utilities.h"
 
 #include <filesystem>
 #include <fstream>
-#include <sstream>
-#include <algorithm>
+#include <vector>
+#include <libdeflate.c>
+
+#include "ofbx.h"
 
 namespace Trident
 {
@@ -13,112 +14,64 @@ namespace Trident
     {
         namespace
         {
-            static std::string ExtractSection(const std::string& text, std::string_view token)
-            {
-                size_t l_Start = text.find(token.data());
-                if (l_Start == std::string::npos)
-                {
-                    return {};
-                }
-
-                l_Start = text.find('{', l_Start);
-                if (l_Start == std::string::npos)
-                {
-                    return {};
-                }
-
-                size_t l_End = text.find('}', l_Start);
-                if (l_End == std::string::npos)
-                {
-                    return {};
-                }
-
-                return text.substr(l_Start + 1, l_End - l_Start - 1);
-            }
-
-            static std::vector<float> ParseFloats(std::string_view data)
-            {
-                std::vector<float> l_Result{};
-                std::stringstream l_Stream{ std::string(data) };
-                std::string l_Token{};
-                while (std::getline(l_Stream, l_Token, ','))
-                {
-                    if (!l_Token.empty())
-                    {
-                        l_Result.push_back(std::stof(l_Token));
-                    }
-                }
-
-                return l_Result;
-            }
-
-            static std::vector<int> ParseInts(std::string_view data)
-            {
-                std::vector<int> l_Result{};
-                std::stringstream l_Stream{ std::string(data) };
-                std::string l_Token{};
-                while (std::getline(l_Stream, l_Token, ','))
-                {
-                    if (!l_Token.empty())
-                    {
-                        l_Result.push_back(std::stoi(l_Token));
-                    }
-                }
-
-                return l_Result;
-            }
-
             static bool LoadFBX(const std::filesystem::path& path, Geometry::Mesh& mesh)
             {
-                std::ifstream l_File(path, std::ios::binary);
+                std::ifstream l_File(path, std::ios::binary | std::ios::ate);
                 if (!l_File.is_open())
                 {
                     TR_CORE_ERROR("Failed to open FBX file: {}", path.string());
-
                     return false;
                 }
 
-                std::string l_Content((std::istreambuf_iterator<char>(l_File)), {});
-                std::string l_Verts = ExtractSection(l_Content, "Vertices:");
-                std::string l_Indices = ExtractSection(l_Content, "PolygonVertexIndex:");
-                if (l_Verts.empty() || l_Indices.empty())
+                const size_t l_Size = static_cast<size_t>(l_File.tellg());
+                l_File.seekg(0);
+                std::vector<ofbx::u8> l_Data(l_Size);
+                l_File.read(reinterpret_cast<char*>(l_Data.data()), static_cast<std::streamsize>(l_Size));
+
+                ofbx::IScene* l_Scene = ofbx::load(l_Data.data(), l_Size, static_cast<u16>(ofbx::LoadFlags::NONE));
+                if (!l_Scene)
                 {
+                    TR_CORE_ERROR("Failed to parse FBX: {}", ofbx::getError());
                     return false;
                 }
 
-                auto l_Pos = ParseFloats(l_Verts);
-                auto l_Ind = ParseInts(l_Indices);
+                if (l_Scene->getGeometryCount() == 0)
+                {
+                    l_Scene->destroy();
+                    return false;
+                }
 
+                const ofbx::Geometry* l_Geometry = l_Scene->getGeometry(0);
+                const ofbx::GeometryData& l_DataGeom = l_Geometry->getGeometryData();
+
+                auto l_Pos = l_DataGeom.getPositions();
                 mesh.Vertices.clear();
-                mesh.Indices.clear();
-
-                for (size_t i = 0; i + 2 < l_Pos.size(); i += 3)
+                mesh.Vertices.reserve(static_cast<size_t>(l_Pos.count));
+                for (int i = 0; i < l_Pos.count; ++i)
                 {
+                    ofbx::Vec3 l_V = l_Pos.get(i);
                     Vertex l_Vertex{};
-                    l_Vertex.Position = { l_Pos[i], l_Pos[i + 1], l_Pos[i + 2] };
+                    l_Vertex.Position = { l_V.x, l_V.y, l_V.z };
                     l_Vertex.Color = { 1.0f, 1.0f, 1.0f };
-                    
                     mesh.Vertices.push_back(l_Vertex);
                 }
 
-                std::vector<uint32_t> l_Polygon{};
-                for (int l_Value : l_Ind)
+                mesh.Indices.clear();
+                for (int p = 0; p < l_DataGeom.getPartitionCount(); ++p)
                 {
-                    bool l_End = l_Value < 0;
-                    uint32_t l_Index = static_cast<uint32_t>(l_End ? ~l_Value : l_Value);
-                    l_Polygon.push_back(l_Index);
-                    if (l_End)
+                    auto l_Part = l_DataGeom.getPartition(p);
+                    std::vector<int> l_Tri(static_cast<size_t>(l_Part.max_polygon_triangles * 3));
+                    for (int i = 0; i < l_Part.polygon_count; ++i)
                     {
-                        for (size_t i = 1; i + 1 < l_Polygon.size(); ++i)
+                        int l_Count = ofbx::triangulate(l_DataGeom, l_Part.polygons[i], l_Tri.data());
+                        for (int t = 0; t < l_Count; ++t)
                         {
-                            mesh.Indices.push_back(l_Polygon[0]);
-                            mesh.Indices.push_back(l_Polygon[i]);
-                            mesh.Indices.push_back(l_Polygon[i + 1]);
+                            mesh.Indices.push_back(static_cast<uint32_t>(l_Tri[t]));
                         }
-                        l_Polygon.clear();
                     }
                 }
 
+                l_Scene->destroy();
                 return !mesh.Vertices.empty();
             }
         }
@@ -131,7 +84,6 @@ namespace Trident
             if (l_Path.extension() != ".fbx")
             {
                 TR_CORE_CRITICAL("Unsupported model format: {}", filePath);
-                
                 return l_Meshes;
             }
 
