@@ -1,7 +1,9 @@
 #include "Loader/ModelLoader.h"
 #include "Core/Utilities.h"
 
+#define TINYGLTF_IMPLEMENTATION
 #include <tiny_gltf.h>
+
 #include <filesystem>
 
 namespace fs = std::filesystem;
