@@ -83,8 +83,8 @@ void ApplicationLayer::Run()
         {
             if (Trident::UI::FileDialog::Open("ModelDialog", l_ModelPath, ".fbx"))
             {
-                auto l_Meshes = Trident::Loader::ModelLoader::Load(l_ModelPath);
-                Trident::Application::GetRenderer().UploadMesh(l_Meshes);
+                auto a_ModelData = Trident::Loader::ModelLoader::Load(l_ModelPath);
+                Trident::Application::GetRenderer().UploadMesh(a_ModelData.Meshes, a_ModelData.Materials);
                 
                 l_OpenModelDialog = false;
             }

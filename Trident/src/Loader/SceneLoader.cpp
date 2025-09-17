@@ -3,6 +3,7 @@
 #include "Core/Utilities.h"
 
 #include <filesystem>
+#include <utility>
 
 namespace fs = std::filesystem;
 
@@ -20,18 +21,31 @@ namespace Trident
                 return l_Scene;
             }
 
-            for (const auto& l_Entry : fs::directory_iterator(l_Path))
+            for (const auto& a_Entry : fs::directory_iterator(l_Path))
             {
-                if (!l_Entry.is_regular_file())
+                if (!a_Entry.is_regular_file())
                     continue;
 
-                auto ext = l_Entry.path().extension();
-                if (ext == ".gltf" || ext == ".glb")
+                auto a_Ext = a_Entry.path().extension();
+                if (a_Ext == ".gltf" || a_Ext == ".glb")
                 {
-                    auto l_Meshes = ModelLoader::Load(l_Entry.path().string());
-                    if (!l_Meshes.empty())
+                    auto a_ModelData = ModelLoader::Load(a_Entry.path().string());
+                    if (!a_ModelData.Meshes.empty())
                     {
-                        l_Scene.Meshes.insert(l_Scene.Meshes.end(), l_Meshes.begin(), l_Meshes.end());
+                        const size_t l_MaterialOffset = l_Scene.Materials.size();
+                        for (auto& l_Mesh : a_ModelData.Meshes)
+                        {
+                            if (l_Mesh.MaterialIndex >= 0)
+                            {
+                                l_Mesh.MaterialIndex += static_cast<int>(l_MaterialOffset);
+                            }
+                            l_Scene.Meshes.push_back(std::move(l_Mesh));
+                        }
+
+                        l_Scene.Materials.insert(
+                            l_Scene.Materials.end(),
+                            a_ModelData.Materials.begin(),
+                            a_ModelData.Materials.end());
                         ++l_Scene.ModelCount;
                     }
                 }

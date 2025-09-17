@@ -180,10 +180,13 @@ namespace Trident
         //TR_CORE_TRACE("Frame allocations: {}", m_FrameAllocationCount);
     }
 
-    void Renderer::UploadMesh(const std::vector<Geometry::Mesh>& meshes)
+    void Renderer::UploadMesh(const std::vector<Geometry::Mesh>& meshes, const std::vector<Geometry::Material>& materials)
     {
         // Ensure no GPU operations are using the old buffers
         vkWaitForFences(Application::GetDevice(), 1, &m_ResourceFence, VK_TRUE, UINT64_MAX);
+
+        // Cache the material table so that future shading passes can evaluate PBR parameters
+        m_Materials = materials;
 
         if (m_VertexBuffer != VK_NULL_HANDLE)
         {
@@ -239,7 +242,7 @@ namespace Trident
         m_ModelCount = meshes.size();
         m_TriangleCount = l_IndexCount / 3;
 
-        TR_CORE_INFO("Scene info - Models: {} Triangles: {}", m_ModelCount, m_TriangleCount);
+        TR_CORE_INFO("Scene info - Models: {} Triangles: {} Materials: {}", m_ModelCount, m_TriangleCount, m_Materials.size());
     }
 
     void Renderer::UploadTexture(const Loader::TextureData& texture)

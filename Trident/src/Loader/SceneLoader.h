@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Geometry/Mesh.h"
+#include "Geometry/Material.h"
 
 #include <string>
 #include <vector>
@@ -12,6 +13,7 @@ namespace Trident
         struct SceneData
         {
             std::vector<Geometry::Mesh> Meshes;
+            std::vector<Geometry::Material> Materials;
             size_t ModelCount = 0;
             size_t TriangleCount = 0;
         };

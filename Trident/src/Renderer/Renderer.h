@@ -11,6 +11,7 @@
 #include "Renderer/Skybox.h"
 
 #include "Geometry/Mesh.h"
+#include "Geometry/Material.h"
 #include "Loader/TextureLoader.h"
 
 #include "ECS/Entity.h"
@@ -53,7 +54,7 @@ namespace Trident
         void DrawFrame();
 
         void RecreateSwapchain();
-        void UploadMesh(const std::vector<Geometry::Mesh>& meshes);
+        void UploadMesh(const std::vector<Geometry::Mesh>& meshes, const std::vector<Geometry::Material>& materials);
         void UploadTexture(const Loader::TextureData& texture);
         void SetImGuiLayer(UI::ImGuiLayer* layer);
 
@@ -122,6 +123,7 @@ namespace Trident
         size_t m_MaxIndexCount = 0;
         std::unique_ptr<Vertex[]> m_StagingVertices;
         std::unique_ptr<uint32_t[]> m_StagingIndices;
+        std::vector<Geometry::Material> m_Materials; // CPU copy of the material table used during shading
 
         ECS::Entity m_Entity = 0;
         ECS::Registry* m_Registry = nullptr;

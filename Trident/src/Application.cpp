@@ -41,7 +41,7 @@ namespace Trident
         auto l_Scene = Loader::SceneLoader::Load(path);
         if (!l_Scene.Meshes.empty())
         {
-            m_Renderer->UploadMesh(l_Scene.Meshes);
+            m_Renderer->UploadMesh(l_Scene.Meshes, l_Scene.Materials);
         }
     }
 
