@@ -521,6 +521,7 @@ namespace Trident
         uint32_t l_ImageCount = m_Swapchain.GetImageCount();
         if (l_ImageCount != m_GlobalUniformBuffers.size())
         {
+            // We have a different swapchain image count, so destroy and rebuild any per-frame resources.
             for (size_t i = 0; i < m_GlobalUniformBuffers.size(); ++i)
             {
                 m_Buffers.DestroyBuffer(m_GlobalUniformBuffers[i], m_GlobalUniformBuffersMemory[i]);
@@ -533,8 +534,16 @@ namespace Trident
 
             if (!m_DescriptorSets.empty())
             {
+                // Free descriptor sets from the old pool so we can rebuild them cleanly.
                 vkFreeDescriptorSets(Application::GetDevice(), m_DescriptorPool, static_cast<uint32_t>(m_DescriptorSets.size()), m_DescriptorSets.data());
                 m_DescriptorSets.clear();
+            }
+
+            if (m_DescriptorPool != VK_NULL_HANDLE)
+            {
+                // Tear down the descriptor pool so that we can rebuild it with the new descriptor counts.
+                vkDestroyDescriptorPool(Application::GetDevice(), m_DescriptorPool, nullptr);
+                m_DescriptorPool = VK_NULL_HANDLE;
             }
 
             m_GlobalUniformBuffers.clear();
@@ -546,7 +555,11 @@ namespace Trident
             VkDeviceSize l_MaterialSize = sizeof(MaterialUniformBuffer);
             m_Buffers.CreateUniformBuffers(l_ImageCount, l_GlobalSize, m_GlobalUniformBuffers, m_GlobalUniformBuffersMemory);
             m_Buffers.CreateUniformBuffers(l_ImageCount, l_MaterialSize, m_MaterialUniformBuffers, m_MaterialUniformBuffersMemory);
+            // Recreate the descriptor pool before allocating descriptor sets so the pool matches the new swapchain image count.
+            CreateDescriptorPool();
             CreateDescriptorSets();
+            TR_CORE_TRACE("Descriptor resources recreated (SwapchainImages = {}, GlobalUBOs = {}, MaterialUBOs = {}, CombinedSamplers = {}, DescriptorSets = {})",
+                l_ImageCount, m_GlobalUniformBuffers.size(), m_MaterialUniformBuffers.size(), l_ImageCount, m_DescriptorSets.size());
         }
     }
 
