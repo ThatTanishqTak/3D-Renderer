@@ -13,6 +13,7 @@ namespace Trident
 
         void Update(float deltaTime);
         glm::mat4 GetViewMatrix() const;
+        glm::vec3 GetPosition() const { return m_Position; }
 
         float GetFOV() const { return m_FOV; }
         float GetNearClip() const { return m_NearClip; }

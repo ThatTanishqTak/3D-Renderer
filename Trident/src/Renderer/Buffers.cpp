@@ -104,18 +104,25 @@ namespace Trident
         }
     }
 
-    void Buffers::CreateUniformBuffers(uint32_t imageCount, std::vector<VkBuffer>& uniformBuffers, std::vector<VkDeviceMemory>& uniformBuffersMemory)
+    void Buffers::CreateUniformBuffers(uint32_t imageCount, VkDeviceSize bufferSize, std::vector<VkBuffer>& uniformBuffers, std::vector<VkDeviceMemory>& uniformBuffersMemory)
     {
         TR_CORE_TRACE("Creating Uniform Buffers");
 
-        VkDeviceSize l_BufferSize = sizeof(UniformBufferObject);
+        if (bufferSize == 0)
+        {
+            TR_CORE_WARN("Requested uniform buffer of size 0; skipping allocation");
+            uniformBuffers.clear();
+            uniformBuffersMemory.clear();
+
+            return;
+        }
 
         uniformBuffers.resize(imageCount);
         uniformBuffersMemory.resize(imageCount);
 
         for (uint32_t i = 0; i < imageCount; ++i)
         {
-            CreateBuffer(l_BufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            CreateBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                 uniformBuffers[i], uniformBuffersMemory[i]);
             m_Allocations.push_back({ uniformBuffers[i], uniformBuffersMemory[i] });
         }

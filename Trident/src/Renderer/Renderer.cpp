@@ -48,7 +48,12 @@ namespace Trident
         m_Pipeline.Init(m_Swapchain);
         m_Commands.Init(m_Swapchain.GetImageCount());
 
-        m_Buffers.CreateUniformBuffers(m_Swapchain.GetImageCount(), m_UniformBuffers, m_UniformBuffersMemory);
+        VkDeviceSize l_GlobalSize = sizeof(GlobalUniformBuffer);
+        VkDeviceSize l_MaterialSize = sizeof(MaterialUniformBuffer);
+
+        // Allocate per-frame uniform buffers for camera/light and material state.
+        m_Buffers.CreateUniformBuffers(m_Swapchain.GetImageCount(), l_GlobalSize, m_GlobalUniformBuffers, m_GlobalUniformBuffersMemory);
+        m_Buffers.CreateUniformBuffers(m_Swapchain.GetImageCount(), l_MaterialSize, m_MaterialUniformBuffers, m_MaterialUniformBuffersMemory);
 
         CreateDescriptorPool();
         CreateDefaultTexture();
@@ -88,8 +93,10 @@ namespace Trident
         m_Swapchain.Cleanup();
         m_Skybox.Cleanup(m_Buffers);
         m_Buffers.Cleanup();
-        m_UniformBuffers.clear();
-        m_UniformBuffersMemory.clear();
+        m_GlobalUniformBuffers.clear();
+        m_GlobalUniformBuffersMemory.clear();
+        m_MaterialUniformBuffers.clear();
+        m_MaterialUniformBuffersMemory.clear();
 
         if (m_TextureSampler != VK_NULL_HANDLE)
         {
@@ -142,6 +149,12 @@ namespace Trident
     {
         Utilities::Allocation::ResetFrame();
         m_Camera.Update(Utilities::Time::GetDeltaTime());
+
+        // Allow developers to tweak GLSL and get instant feedback without restarting the app.
+        if (m_Pipeline.ReloadIfNeeded(m_Swapchain))
+        {
+            TR_CORE_INFO("Graphics pipeline reloaded after shader edit");
+        }
 
         VkFence l_InFlightFence = m_Commands.GetInFlightFence(m_Commands.CurrentFrame());
         vkWaitForFences(Application::GetDevice(), 1, &l_InFlightFence, VK_TRUE, UINT64_MAX);
@@ -423,7 +436,7 @@ namespace Trident
 
             VkWriteDescriptorSet l_ImageWrite{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
             l_ImageWrite.dstSet = m_DescriptorSets[i];
-            l_ImageWrite.dstBinding = 1;
+            l_ImageWrite.dstBinding = 2;
             l_ImageWrite.dstArrayElement = 0;
             l_ImageWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
             l_ImageWrite.descriptorCount = 1;
@@ -464,11 +477,16 @@ namespace Trident
         m_Swapchain.Init();
 
         uint32_t l_ImageCount = m_Swapchain.GetImageCount();
-        if (l_ImageCount != m_UniformBuffers.size())
+        if (l_ImageCount != m_GlobalUniformBuffers.size())
         {
-            for (size_t i = 0; i < m_UniformBuffers.size(); ++i)
+            for (size_t i = 0; i < m_GlobalUniformBuffers.size(); ++i)
             {
-                m_Buffers.DestroyBuffer(m_UniformBuffers[i], m_UniformBuffersMemory[i]);
+                m_Buffers.DestroyBuffer(m_GlobalUniformBuffers[i], m_GlobalUniformBuffersMemory[i]);
+            }
+
+            for (size_t i = 0; i < m_MaterialUniformBuffers.size(); ++i)
+            {
+                m_Buffers.DestroyBuffer(m_MaterialUniformBuffers[i], m_MaterialUniformBuffersMemory[i]);
             }
 
             if (!m_DescriptorSets.empty())
@@ -477,22 +495,17 @@ namespace Trident
                 m_DescriptorSets.clear();
             }
 
-            m_UniformBuffers.clear();
-            m_UniformBuffersMemory.clear();
+            m_GlobalUniformBuffers.clear();
+            m_GlobalUniformBuffersMemory.clear();
+            m_MaterialUniformBuffers.clear();
+            m_MaterialUniformBuffersMemory.clear();
 
-            m_Buffers.CreateUniformBuffers(l_ImageCount, m_UniformBuffers, m_UniformBuffersMemory);
+            VkDeviceSize l_GlobalSize = sizeof(GlobalUniformBuffer);
+            VkDeviceSize l_MaterialSize = sizeof(MaterialUniformBuffer);
+            m_Buffers.CreateUniformBuffers(l_ImageCount, l_GlobalSize, m_GlobalUniformBuffers, m_GlobalUniformBuffersMemory);
+            m_Buffers.CreateUniformBuffers(l_ImageCount, l_MaterialSize, m_MaterialUniformBuffers, m_MaterialUniformBuffersMemory);
             CreateDescriptorSets();
         }
-
-        m_Pipeline.CreateFramebuffers(m_Swapchain);
-
-        m_Commands.Recreate(m_Swapchain.GetImageCount());
-
-        m_Viewport.Position = { 0.0f, 0.0f };
-        m_Viewport.Size = { static_cast<float>(m_Swapchain.GetExtent().width), static_cast<float>(m_Swapchain.GetExtent().height) };
-
-        TR_CORE_TRACE("Swapchain Recreated");
-    }
 
     //------------------------------------------------------------------------------------------------------------------------------------------------------//
 
@@ -500,15 +513,17 @@ namespace Trident
     {
         TR_CORE_TRACE("Creating Descriptor Pool");
 
-        VkDescriptorPoolSize l_PoolSizes[2]{};
+        VkDescriptorPoolSize l_PoolSizes[3]{};
         l_PoolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         l_PoolSizes[0].descriptorCount = m_Swapchain.GetImageCount();
-        l_PoolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        l_PoolSizes[1].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         l_PoolSizes[1].descriptorCount = m_Swapchain.GetImageCount();
+        l_PoolSizes[2].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        l_PoolSizes[2].descriptorCount = m_Swapchain.GetImageCount();
 
         VkDescriptorPoolCreateInfo l_PoolInfo{};
         l_PoolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-        l_PoolInfo.poolSizeCount = 2;
+        l_PoolInfo.poolSizeCount = 3;
         l_PoolInfo.pPoolSizes = l_PoolSizes;
         l_PoolInfo.maxSets = m_Swapchain.GetImageCount();
 
@@ -689,36 +704,47 @@ namespace Trident
 
         for (size_t i = 0; i < l_ImageCount; ++i)
         {
-            VkDescriptorBufferInfo l_BufferInfo{};
-            l_BufferInfo.buffer = m_UniformBuffers[i];
-            l_BufferInfo.offset = 0;
-            l_BufferInfo.range = sizeof(UniformBufferObject);
+            VkDescriptorBufferInfo l_GlobalBufferInfo{};
+            l_GlobalBufferInfo.buffer = m_GlobalUniformBuffers[i];
+            l_GlobalBufferInfo.offset = 0;
+            l_GlobalBufferInfo.range = sizeof(GlobalUniformBuffer);
+
+            VkDescriptorBufferInfo l_MaterialBufferInfo{};
+            l_MaterialBufferInfo.buffer = m_MaterialUniformBuffers[i];
+            l_MaterialBufferInfo.offset = 0;
+            l_MaterialBufferInfo.range = sizeof(MaterialUniformBuffer);
 
             VkDescriptorImageInfo l_ImageInfo{};
             l_ImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
             l_ImageInfo.imageView = m_TextureImageView;
             l_ImageInfo.sampler = m_TextureSampler;
 
-            VkWriteDescriptorSet l_DescriptorWrite{};
-            l_DescriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            l_DescriptorWrite.dstSet = m_DescriptorSets[i];
-            l_DescriptorWrite.dstBinding = 0;
-            l_DescriptorWrite.dstArrayElement = 0;
-            l_DescriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-            l_DescriptorWrite.descriptorCount = 1;
-            l_DescriptorWrite.pBufferInfo = &l_BufferInfo;
+            VkWriteDescriptorSet l_GlobalWrite{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
+            l_GlobalWrite.dstSet = m_DescriptorSets[i];
+            l_GlobalWrite.dstBinding = 0;
+            l_GlobalWrite.dstArrayElement = 0;
+            l_GlobalWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            l_GlobalWrite.descriptorCount = 1;
+            l_GlobalWrite.pBufferInfo = &l_GlobalBufferInfo;
 
-            VkWriteDescriptorSet l_ImageWrite{};
-            l_ImageWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            VkWriteDescriptorSet l_MaterialWrite{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
+            l_MaterialWrite.dstSet = m_DescriptorSets[i];
+            l_MaterialWrite.dstBinding = 1;
+            l_MaterialWrite.dstArrayElement = 0;
+            l_MaterialWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            l_MaterialWrite.descriptorCount = 1;
+            l_MaterialWrite.pBufferInfo = &l_MaterialBufferInfo;
+
+            VkWriteDescriptorSet l_ImageWrite{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
             l_ImageWrite.dstSet = m_DescriptorSets[i];
-            l_ImageWrite.dstBinding = 1;
+            l_ImageWrite.dstBinding = 2;
             l_ImageWrite.dstArrayElement = 0;
             l_ImageWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
             l_ImageWrite.descriptorCount = 1;
             l_ImageWrite.pImageInfo = &l_ImageInfo;
 
-            VkWriteDescriptorSet l_Writes[] = { l_DescriptorWrite, l_ImageWrite };
-            vkUpdateDescriptorSets(Application::GetDevice(), 2, l_Writes, 0, nullptr);
+            VkWriteDescriptorSet l_Writes[] = { l_GlobalWrite, l_MaterialWrite, l_ImageWrite };
+            vkUpdateDescriptorSets(Application::GetDevice(), 3, l_Writes, 0, nullptr);
         }
 
         TR_CORE_TRACE("Descriptor Sets Allocated ({})", l_ImageCount);
@@ -948,18 +974,42 @@ namespace Trident
 
     void Renderer::UpdateUniformBuffer(uint32_t currentImage)
     {
-        UniformBufferObject l_UBO{};
-
-        l_UBO.View = m_Camera.GetViewMatrix();
+        GlobalUniformBuffer l_Global{};
+        l_Global.View = m_Camera.GetViewMatrix();
 
         float l_AspectRatio = static_cast<float>(m_Swapchain.GetExtent().width) / static_cast<float>(m_Swapchain.GetExtent().height);
-        l_UBO.Projection = glm::perspective(glm::radians(m_Camera.GetFOV()), l_AspectRatio, m_Camera.GetNearClip(), m_Camera.GetFarClip());
-        l_UBO.Projection[1][1] *= -1.0f;
+        l_Global.Projection = glm::perspective(glm::radians(m_Camera.GetFOV()), l_AspectRatio, m_Camera.GetNearClip(), m_Camera.GetFarClip());
+        l_Global.Projection[1][1] *= -1.0f; // Flip Y for Vulkan's clip space
+
+        glm::vec3 l_CameraPosition = m_Camera.GetPosition();
+        l_Global.CameraPosition = glm::vec4(l_CameraPosition, 1.0f);
+
+        glm::vec3 l_LightDirection = glm::normalize(m_MainLight.Direction);
+        l_Global.LightDirection = glm::vec4(l_LightDirection, 0.0f);
+        l_Global.LightColorIntensity = glm::vec4(m_MainLight.Color, m_MainLight.Intensity);
+        l_Global.AmbientColorIntensity = glm::vec4(m_AmbientColor, m_AmbientIntensity);
+
+        MaterialUniformBuffer l_Material{};
+        if (!m_Materials.empty())
+        {
+            const Geometry::Material& l_FirstMaterial = m_Materials.front();
+            l_Material.BaseColorFactor = l_FirstMaterial.BaseColorFactor;
+            l_Material.MaterialFactors = glm::vec4(l_FirstMaterial.MetallicFactor, l_FirstMaterial.RoughnessFactor, 1.0f, 0.0f);
+        }
+        else
+        {
+            l_Material.BaseColorFactor = glm::vec4(1.0f);
+            l_Material.MaterialFactors = glm::vec4(1.0f, 1.0f, 1.0f, 0.0f);
+        }
 
         void* l_Data = nullptr;
-        vkMapMemory(Application::GetDevice(), m_UniformBuffersMemory[currentImage], 0, sizeof(l_UBO), 0, &l_Data);
-        memcpy(l_Data, &l_UBO, sizeof(l_UBO));
-        vkUnmapMemory(Application::GetDevice(), m_UniformBuffersMemory[currentImage]);
+        vkMapMemory(Application::GetDevice(), m_GlobalUniformBuffersMemory[currentImage], 0, sizeof(l_Global), 0, &l_Data);
+        memcpy(l_Data, &l_Global, sizeof(l_Global));
+        vkUnmapMemory(Application::GetDevice(), m_GlobalUniformBuffersMemory[currentImage]);
+
+        vkMapMemory(Application::GetDevice(), m_MaterialUniformBuffersMemory[currentImage], 0, sizeof(l_Material), 0, &l_Data);
+        memcpy(l_Data, &l_Material, sizeof(l_Material));
+        vkUnmapMemory(Application::GetDevice(), m_MaterialUniformBuffersMemory[currentImage]);
     }
 
     void Renderer::SetTransform(const Transform& props)

@@ -44,6 +44,15 @@ namespace Trident
         glm::vec2 Size{ 0.0f };
     };
 
+    struct DirectionalLight
+    {
+        glm::vec3 Direction{ -0.5f, -1.0f, -0.3f }; // Default sun direction
+        float Intensity{ 5.0f };                     // Scalar intensity multiplier
+        glm::vec3 Color{ 1.0f, 0.98f, 0.92f };       // Slightly warm white light
+        float Padding{ 0.0f };                       // Padding to keep std140 alignment stable
+    };
+
+
     class Renderer
     {
     public:
@@ -102,8 +111,10 @@ namespace Trident
         // Descriptor sets & uniform buffers
         VkDescriptorPool m_DescriptorPool = VK_NULL_HANDLE;
         std::vector<VkDescriptorSet> m_DescriptorSets;
-        std::vector<VkBuffer> m_UniformBuffers;
-        std::vector<VkDeviceMemory> m_UniformBuffersMemory;
+        std::vector<VkBuffer> m_GlobalUniformBuffers;
+        std::vector<VkDeviceMemory> m_GlobalUniformBuffersMemory;
+        std::vector<VkBuffer> m_MaterialUniformBuffers;
+        std::vector<VkDeviceMemory> m_MaterialUniformBuffersMemory;
         VkImage m_TextureImage = VK_NULL_HANDLE;
         VkDeviceMemory m_TextureImageMemory = VK_NULL_HANDLE;
         VkImageView m_TextureImageView = VK_NULL_HANDLE;
@@ -136,6 +147,10 @@ namespace Trident
 
         size_t m_ModelCount = 0;
         size_t m_TriangleCount = 0;
+
+        DirectionalLight m_MainLight{};      // Simple directional light driving direct illumination
+        glm::vec3 m_AmbientColor{ 0.03f };  // Ambient tint simulating image-based lighting
+        float m_AmbientIntensity = 1.0f;     // Scalar multiplier for ambient contribution
 
     private:
         // Core setup

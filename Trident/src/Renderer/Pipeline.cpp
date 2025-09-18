@@ -8,10 +8,16 @@
 
 #include <glm/glm.hpp>
 
+#include <array>
+#include <cstdlib>
+#include <sstream>
+#include <system_error>
+
 namespace Trident
 {
     void Pipeline::Init(Swapchain& swapchain)
     {
+        InitializeShaderStages();
         CreateRenderPass(swapchain);
         CreateDescriptorSetLayout();
         CreateGraphicsPipeline(swapchain);
@@ -21,20 +27,7 @@ namespace Trident
     void Pipeline::Cleanup()
     {
         CleanupFramebuffers();
-
-        if (m_GraphicsPipeline != VK_NULL_HANDLE)
-        {
-            vkDestroyPipeline(Application::GetDevice(), m_GraphicsPipeline, nullptr);
-
-            m_GraphicsPipeline = VK_NULL_HANDLE;
-        }
-
-        if (m_PipelineLayout != VK_NULL_HANDLE)
-        {
-            vkDestroyPipelineLayout(Application::GetDevice(), m_PipelineLayout, nullptr);
-
-            m_PipelineLayout = VK_NULL_HANDLE;
-        }
+        DestroyGraphicsPipeline();
 
         if (m_RenderPass != VK_NULL_HANDLE)
         {
@@ -49,6 +42,8 @@ namespace Trident
 
             m_DescriptorSetLayout = VK_NULL_HANDLE;
         }
+
+        m_ShaderStages.clear();
     }
 
     void Pipeline::RecreateFramebuffers(Swapchain& swapchain)
@@ -68,6 +63,201 @@ namespace Trident
         }
 
         m_SwapchainFramebuffers.clear();
+    }
+
+    void Pipeline::DestroyGraphicsPipeline()
+    {
+        if (m_GraphicsPipeline != VK_NULL_HANDLE)
+        {
+            vkDestroyPipeline(Application::GetDevice(), m_GraphicsPipeline, nullptr);
+            m_GraphicsPipeline = VK_NULL_HANDLE;
+        }
+
+        if (m_PipelineLayout != VK_NULL_HANDLE)
+        {
+            vkDestroyPipelineLayout(Application::GetDevice(), m_PipelineLayout, nullptr);
+            m_PipelineLayout = VK_NULL_HANDLE;
+        }
+    }
+
+    void Pipeline::InitializeShaderStages()
+    {
+        m_ShaderStages.clear();
+
+        std::filesystem::path l_ShaderRoot = std::filesystem::path("Assets") / "Shaders";
+
+        ShaderStage l_Vertex{};
+        l_Vertex.Stage = VK_SHADER_STAGE_VERTEX_BIT;
+        l_Vertex.SourcePath = (l_ShaderRoot / "Default.vert").generic_string();
+        l_Vertex.SpirvPath = l_Vertex.SourcePath + ".spv";
+        m_ShaderStages.push_back(l_Vertex);
+
+        ShaderStage l_Fragment{};
+        l_Fragment.Stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+        l_Fragment.SourcePath = (l_ShaderRoot / "Default.frag").generic_string();
+        l_Fragment.SpirvPath = l_Fragment.SourcePath + ".spv";
+        m_ShaderStages.push_back(l_Fragment);
+
+        // Cache initial timestamps so the first frame hot-reload check does not trigger unnecessarily.
+        std::error_code l_Error{};
+        for (auto& l_Shader : m_ShaderStages)
+        {
+            if (std::filesystem::exists(l_Shader.SourcePath, l_Error))
+            {
+                l_Shader.SourceTimestamp = std::filesystem::last_write_time(l_Shader.SourcePath, l_Error);
+            }
+            if (std::filesystem::exists(l_Shader.SpirvPath, l_Error))
+            {
+                l_Shader.SpirvTimestamp = std::filesystem::last_write_time(l_Shader.SpirvPath, l_Error);
+            }
+        }
+    }
+
+    bool Pipeline::EnsureShaderBinaries()
+    {
+        bool l_AllCompiled = true;
+        std::error_code l_Error{};
+
+        for (auto& l_Shader : m_ShaderStages)
+        {
+            if (!std::filesystem::exists(l_Shader.SourcePath, l_Error))
+            {
+                TR_CORE_CRITICAL("Missing shader source: {}", l_Shader.SourcePath);
+                l_AllCompiled = false;
+                continue;
+            }
+
+            bool l_ShouldCompile = false;
+
+            if (!std::filesystem::exists(l_Shader.SpirvPath, l_Error))
+            {
+                l_ShouldCompile = true;
+            }
+            else
+            {
+                auto l_SourceTime = std::filesystem::last_write_time(l_Shader.SourcePath, l_Error);
+                auto l_SpirvTime = std::filesystem::last_write_time(l_Shader.SpirvPath, l_Error);
+                if (l_SpirvTime < l_SourceTime)
+                {
+                    l_ShouldCompile = true;
+                }
+            }
+
+            if (l_ShouldCompile)
+            {
+                if (!CompileShaderStage(l_Shader))
+                {
+                    l_AllCompiled = false;
+                }
+            }
+        }
+
+        return l_AllCompiled;
+    }
+
+    bool Pipeline::CompileShaderStage(ShaderStage& shaderStage)
+    {
+        std::vector<std::string> l_Commands;
+
+        auto l_BuildCommand = [&shaderStage](const std::string& compiler)
+            {
+                return std::string("\"") + compiler + "\" -V \"" + shaderStage.SourcePath + "\" -o \"" + shaderStage.SpirvPath + "\"";
+            };
+
+        if (std::string l_Compiler = LocateShaderCompiler(); !l_Compiler.empty())
+        {
+            l_Commands.push_back(l_BuildCommand(l_Compiler));
+        }
+        else
+        {
+            // Fall back to common compiler names so developers can rely on PATH resolution.
+            std::array<const char*, 4> l_DefaultCompilers{ "glslc", "glslc.exe", "glslangValidator", "glslangValidator.exe" };
+            for (const char* l_Name : l_DefaultCompilers)
+            {
+                l_Commands.push_back(l_BuildCommand(l_Name));
+            }
+        }
+
+        for (const std::string& l_Command : l_Commands)
+        {
+            int l_Result = std::system(l_Command.c_str());
+            if (l_Result == 0)
+            {
+                std::error_code l_Error{};
+                shaderStage.SourceTimestamp = std::filesystem::last_write_time(shaderStage.SourcePath, l_Error);
+                shaderStage.SpirvTimestamp = std::filesystem::last_write_time(shaderStage.SpirvPath, l_Error);
+                TR_CORE_INFO("Compiled shader {}", shaderStage.SourcePath);
+
+                return true;
+            }
+
+            TR_CORE_WARN("Shader compile command failed (code {}): {}", l_Result, l_Command);
+        }
+
+        TR_CORE_CRITICAL("Failed to compile shader {}", shaderStage.SourcePath);
+
+        return false;
+    }
+
+    std::string Pipeline::LocateShaderCompiler() const
+    {
+        if (const char* l_Custom = std::getenv("TRIDENT_GLSL_COMPILER"))
+        {
+            std::filesystem::path l_CustomPath = l_Custom;
+            if (std::filesystem::exists(l_CustomPath))
+            {
+                return l_CustomPath.generic_string();
+            }
+        }
+
+        std::vector<std::filesystem::path> l_Candidates;
+
+        auto l_PushCompiler = [&l_Candidates](const std::filesystem::path& directory)
+            {
+                if (directory.empty())
+                {
+                    return;
+                }
+
+                std::array<const char*, 4> l_Names{ "glslc", "glslc.exe", "glslangValidator", "glslangValidator.exe" };
+                for (const char* l_Name : l_Names)
+                {
+                    l_Candidates.emplace_back(directory / l_Name);
+                }
+            };
+
+        if (const char* l_VulkanSdk = std::getenv("VULKAN_SDK"))
+        {
+            std::filesystem::path l_Root = l_VulkanSdk;
+            l_PushCompiler(l_Root / "Bin");
+            l_PushCompiler(l_Root / "bin");
+        }
+
+        if (const char* l_PathEnv = std::getenv("PATH"))
+        {
+            std::string l_PathString = l_PathEnv;
+#ifdef _WIN32
+            char l_Delimiter = ';';
+#else
+            char l_Delimiter = ':';
+#endif
+            std::stringstream l_Stream(l_PathString);
+            std::string l_Item;
+            while (std::getline(l_Stream, l_Item, l_Delimiter))
+            {
+                l_PushCompiler(l_Item);
+            }
+        }
+
+        for (const auto& l_Path : l_Candidates)
+        {
+            if (std::filesystem::exists(l_Path))
+            {
+                return l_Path.generic_string();
+            }
+        }
+
+        return {};
     }
 
     void Pipeline::CreateRenderPass(Swapchain& swapchain)
@@ -121,24 +311,31 @@ namespace Trident
     {
         TR_CORE_TRACE("Creating Descriptor Set Layout");
 
-        VkDescriptorSetLayoutBinding l_UboLayoutBinding{};
-        l_UboLayoutBinding.binding = 0;
-        l_UboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        l_UboLayoutBinding.descriptorCount = 1;
-        l_UboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-        l_UboLayoutBinding.pImmutableSamplers = nullptr;
+        VkDescriptorSetLayoutBinding l_GlobalLayoutBinding{};
+        l_GlobalLayoutBinding.binding = 0;
+        l_GlobalLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        l_GlobalLayoutBinding.descriptorCount = 1;
+        l_GlobalLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+        l_GlobalLayoutBinding.pImmutableSamplers = nullptr;
+
+        VkDescriptorSetLayoutBinding l_MaterialLayoutBinding{};
+        l_MaterialLayoutBinding.binding = 1;
+        l_MaterialLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        l_MaterialLayoutBinding.descriptorCount = 1;
+        l_MaterialLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+        l_MaterialLayoutBinding.pImmutableSamplers = nullptr;
 
         VkDescriptorSetLayoutBinding l_SamplerLayoutBinding{};
-        l_SamplerLayoutBinding.binding = 1;
+        l_SamplerLayoutBinding.binding = 2;
         l_SamplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         l_SamplerLayoutBinding.descriptorCount = 1;
         l_SamplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
         l_SamplerLayoutBinding.pImmutableSamplers = nullptr;
 
-        VkDescriptorSetLayoutBinding l_Bindings[] = { l_UboLayoutBinding, l_SamplerLayoutBinding };
+        VkDescriptorSetLayoutBinding l_Bindings[] = { l_GlobalLayoutBinding, l_MaterialLayoutBinding, l_SamplerLayoutBinding };
 
         VkDescriptorSetLayoutCreateInfo l_LayoutInfo{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
-        l_LayoutInfo.bindingCount = 2;
+        l_LayoutInfo.bindingCount = 3;
         l_LayoutInfo.pBindings = l_Bindings;
 
         if (vkCreateDescriptorSetLayout(Application::GetDevice(), &l_LayoutInfo, nullptr, &m_DescriptorSetLayout) != VK_SUCCESS)
@@ -153,26 +350,53 @@ namespace Trident
     {
         TR_CORE_TRACE("Creating Graphics Pipeline");
 
-        auto a_VertexCode = Utilities::FileManagement::ReadFile("Assets/Shaders/Default.vert.spv");
-        auto a_FragmentCode = Utilities::FileManagement::ReadFile("Assets/Shaders/Default.frag.spv");
+        DestroyGraphicsPipeline();
 
-        VkShaderModule l_VertexModule = VK_NULL_HANDLE;
-        VkShaderModule l_FragmentModule = VK_NULL_HANDLE;
+        if (!EnsureShaderBinaries())
+        {
+            TR_CORE_WARN("Shader compilation reported issues; attempting to reuse existing SPIR-V artifacts");
+        }
 
-        l_VertexModule = CreateShaderModule(a_VertexCode);
-        l_FragmentModule = CreateShaderModule(a_FragmentCode);
+        std::vector<VkPipelineShaderStageCreateInfo> l_ShaderStages;
+        std::vector<VkShaderModule> l_ShaderModules;
+        l_ShaderStages.reserve(m_ShaderStages.size());
+        l_ShaderModules.reserve(m_ShaderStages.size());
 
-        VkPipelineShaderStageCreateInfo l_VertexStage{ VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO };
-        l_VertexStage.stage = VK_SHADER_STAGE_VERTEX_BIT;
-        l_VertexStage.module = l_VertexModule;
-        l_VertexStage.pName = "main";
+        for (auto& l_Shader : m_ShaderStages)
+        {
+            auto a_Code = Utilities::FileManagement::ReadBinaryFile(l_Shader.SpirvPath);
+            if (a_Code.empty())
+            {
+                TR_CORE_CRITICAL("Failed to read shader binary: {}", l_Shader.SpirvPath);
+                continue;
+            }
 
-        VkPipelineShaderStageCreateInfo l_FragmentStage{ VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO };
-        l_FragmentStage.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-        l_FragmentStage.module = l_FragmentModule;
-        l_FragmentStage.pName = "main";
+            VkShaderModule l_Module = CreateShaderModule(a_Code);
+            if (l_Module == VK_NULL_HANDLE)
+            {
+                continue;
+            }
 
-        VkPipelineShaderStageCreateInfo l_ShaderStages[] = { l_VertexStage, l_FragmentStage };
+            VkPipelineShaderStageCreateInfo l_ShaderStage{ VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO };
+            l_ShaderStage.stage = l_Shader.Stage;
+            l_ShaderStage.module = l_Module;
+            l_ShaderStage.pName = "main";
+
+            l_ShaderStages.push_back(l_ShaderStage);
+            l_ShaderModules.push_back(l_Module);
+        }
+
+        if (l_ShaderStages.size() != m_ShaderStages.size())
+        {
+            for (VkShaderModule it_Module : l_ShaderModules)
+            {
+                vkDestroyShaderModule(Application::GetDevice(), it_Module, nullptr);
+            }
+
+            TR_CORE_CRITICAL("Aborting pipeline creation because a shader stage failed to load");
+
+            return;
+        }
 
         auto a_BindingDescription = Vertex::GetBindingDescription();
         auto a_AttributeDescriptions = Vertex::GetAttributeDescriptions();
@@ -250,8 +474,8 @@ namespace Trident
         }
 
         VkGraphicsPipelineCreateInfo l_PipelineInfo{ VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO };
-        l_PipelineInfo.stageCount = 2;
-        l_PipelineInfo.pStages = l_ShaderStages;
+        l_PipelineInfo.stageCount = static_cast<uint32_t>(l_ShaderStages.size());
+        l_PipelineInfo.pStages = l_ShaderStages.data();
         l_PipelineInfo.pVertexInputState = &l_VertexInputInfo;
         l_PipelineInfo.pInputAssemblyState = &l_InputAssembly;
         l_PipelineInfo.pViewportState = &l_ViewportState;
@@ -271,8 +495,23 @@ namespace Trident
             TR_CORE_CRITICAL("Failed to create graphics pipeline");
         }
 
-        vkDestroyShaderModule(Application::GetDevice(), l_FragmentModule, nullptr);
-        vkDestroyShaderModule(Application::GetDevice(), l_VertexModule, nullptr);
+        for (VkShaderModule it_Module : l_ShaderModules)
+        {
+            vkDestroyShaderModule(Application::GetDevice(), it_Module, nullptr);
+        }
+
+        std::error_code l_Error{};
+        for (auto& l_Shader : m_ShaderStages)
+        {
+            if (std::filesystem::exists(l_Shader.SourcePath, l_Error))
+            {
+                l_Shader.SourceTimestamp = std::filesystem::last_write_time(l_Shader.SourcePath, l_Error);
+            }
+            if (std::filesystem::exists(l_Shader.SpirvPath, l_Error))
+            {
+                l_Shader.SpirvTimestamp = std::filesystem::last_write_time(l_Shader.SpirvPath, l_Error);
+            }
+        }
 
         TR_CORE_TRACE("Graphics Pipeline Created");
     }
@@ -302,6 +541,36 @@ namespace Trident
         }
 
         TR_CORE_TRACE("Framebuffers Created ({} Total)", m_SwapchainFramebuffers.size());
+    }
+
+    bool Pipeline::ReloadIfNeeded(Swapchain& swapchain)
+    {
+        std::error_code l_Error{};
+        bool l_ShouldReload = false;
+
+        for (auto& l_Shader : m_ShaderStages)
+        {
+            if (!std::filesystem::exists(l_Shader.SourcePath, l_Error))
+            {
+                continue;
+            }
+
+            auto l_WriteTime = std::filesystem::last_write_time(l_Shader.SourcePath, l_Error);
+            if (l_Shader.SourceTimestamp != l_WriteTime)
+            {
+                l_ShouldReload = true;
+            }
+        }
+
+        if (!l_ShouldReload)
+        {
+            return false;
+        }
+
+        vkDeviceWaitIdle(Application::GetDevice());
+        CreateGraphicsPipeline(swapchain);
+
+        return true;
     }
 
     //------------------------------------------------------------------------------------------------------------------------------------------------------//
