@@ -9,6 +9,7 @@
 #include "Loader/ModelLoader.h"
 #include "Loader/TextureLoader.h"
 #include "Renderer/RenderCommand.h"
+#include "Renderer/Renderer.h"
 
 ApplicationLayer::ApplicationLayer()
 {
@@ -70,6 +71,35 @@ void ApplicationLayer::Run()
         ImGui::Text("Allocations: %zu", Trident::Application::GetRenderer().GetLastFrameAllocationCount());
         ImGui::Text("Models: %zu", Trident::Application::GetRenderer().GetModelCount());
         ImGui::Text("Triangles: %zu", Trident::Application::GetRenderer().GetTriangleCount());
+        
+        // Surface GPU/CPU timing information gathered inside the renderer so tools users can monitor stability.
+        const Trident::Renderer::FrameTimingStats& l_PerfStats = Trident::Application::GetRenderer().GetFrameTimingStats();
+        const size_t l_PerfCount = Trident::Application::GetRenderer().GetFrameTimingHistoryCount();
+        if (l_PerfCount > 0)
+        {
+            ImGui::Separator();
+            ImGui::Text("Frame Avg: %.3f ms", l_PerfStats.AverageMilliseconds);
+            ImGui::Text("Frame Min: %.3f ms", l_PerfStats.MinimumMilliseconds);
+            ImGui::Text("Frame Max: %.3f ms", l_PerfStats.MaximumMilliseconds);
+            ImGui::Text("Average FPS: %.2f", l_PerfStats.AverageFPS);
+        }
+        else
+        {
+            ImGui::Separator();
+            ImGui::TextUnformatted("Collecting frame metrics...");
+        }
+
+        bool l_PerformanceCapture = Trident::Application::GetRenderer().IsPerformanceCaptureEnabled();
+        if (ImGui::Checkbox("Capture Performance", &l_PerformanceCapture))
+        {
+            Trident::Application::GetRenderer().SetPerformanceCaptureEnabled(l_PerformanceCapture);
+        }
+
+        if (Trident::Application::GetRenderer().IsPerformanceCaptureEnabled())
+        {
+            ImGui::Text("Captured Samples: %zu", Trident::Application::GetRenderer().GetPerformanceCaptureSampleCount());
+        }
+
         ImGui::End();
 
         ImGui::Begin("Content");

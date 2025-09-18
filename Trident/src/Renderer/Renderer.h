@@ -25,6 +25,7 @@
 #include <array>
 #include <memory>
 #include <functional>
+#include <chrono>
 
 namespace Trident
 {
@@ -56,6 +57,24 @@ namespace Trident
     class Renderer
     {
     public:
+        // Stores a single frame timing measurement captured from the render loop.
+        struct FrameTimingSample
+        {
+            double FrameMilliseconds = 0.0;
+            double FramesPerSecond = 0.0;
+            VkExtent2D Extent{ 0, 0 };
+            std::chrono::system_clock::time_point CaptureTime{};
+        };
+
+        // Aggregated statistics calculated from the ring buffer for quick heads-up display consumption.
+        struct FrameTimingStats
+        {
+            double AverageMilliseconds = 0.0;
+            double MinimumMilliseconds = 0.0;
+            double MaximumMilliseconds = 0.0;
+            double AverageFPS = 0.0;
+        };
+
         ~Renderer();
 
         void Init();
@@ -71,6 +90,12 @@ namespace Trident
         size_t GetLastFrameAllocationCount() const { return m_FrameAllocationCount; }
         size_t GetModelCount() const { return m_ModelCount; }
         size_t GetTriangleCount() const { return m_TriangleCount; }
+        const FrameTimingStats& GetFrameTimingStats() const { return m_PerformanceStats; }
+        size_t GetFrameTimingHistoryCount() const { return m_PerformanceSampleCount; }
+        const std::vector<FrameTimingSample>& GetFrameTimingHistory() const { return m_PerformanceHistory; }
+        size_t GetPerformanceCaptureSampleCount() const { return m_PerformanceCaptureBuffer.size(); }
+        bool IsPerformanceCaptureEnabled() const { return m_PerformanceCaptureEnabled; }
+        void SetPerformanceCaptureEnabled(bool enabled);
 
         void SetTransform(const Transform& props);
         void SetViewport(const ViewportInfo& info) { m_Viewport = info; }
@@ -152,6 +177,16 @@ namespace Trident
         glm::vec3 m_AmbientColor{ 0.03f };  // Ambient tint simulating image-based lighting
         float m_AmbientIntensity = 1.0f;     // Scalar multiplier for ambient contribution
 
+        // Performance metrics
+        static constexpr size_t s_PerformanceHistorySize = 240;
+        std::vector<FrameTimingSample> m_PerformanceHistory;
+        size_t m_PerformanceHistoryNextIndex = 0;
+        size_t m_PerformanceSampleCount = 0;
+        FrameTimingStats m_PerformanceStats{};
+        bool m_PerformanceCaptureEnabled = false;
+        std::vector<FrameTimingSample> m_PerformanceCaptureBuffer;
+        std::chrono::system_clock::time_point m_PerformanceCaptureStartTime{};
+
     private:
         // Core setup
         void CreateDescriptorPool();
@@ -168,5 +203,8 @@ namespace Trident
 
         bool IsValidViewport() const { return m_Viewport.Size.x > 0 && m_Viewport.Size.y > 0; }
         void ProcessReloadEvents();
+        void AccumulateFrameTiming(double frameMilliseconds, double framesPerSecond, VkExtent2D extent, std::chrono::system_clock::time_point captureTimestamp);
+        void UpdateFrameTimingStats();
+        void ExportPerformanceCapture();
     };
 }

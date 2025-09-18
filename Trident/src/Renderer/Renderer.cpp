@@ -11,6 +11,14 @@
 #include <stdexcept>
 #include <algorithm>
 #include <string>
+#include <chrono>
+#include <fstream>
+#include <sstream>
+#include <iomanip>
+#include <filesystem>
+#include <limits>
+#include <ctime>
+#include <system_error>
 
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -26,6 +34,17 @@ namespace
         l_Mat = glm::scale(l_Mat, transform.Scale);
 
         return l_Mat;
+    }
+
+    std::tm ToLocalTime(std::time_t a_Time)
+    {
+        std::tm l_LocalTime{};
+#ifdef _WIN32
+        localtime_s(&l_LocalTime, &a_Time);
+#else
+        localtime_r(&a_Time, &l_LocalTime);
+#endif
+        return l_LocalTime;
     }
 }
 
@@ -50,6 +69,13 @@ namespace Trident
         m_Swapchain.Init();
         m_Pipeline.Init(m_Swapchain);
         m_Commands.Init(m_Swapchain.GetImageCount());
+
+        // Pre-size the performance history buffer so we can efficiently track frame timings.
+        m_PerformanceHistory.clear();
+        m_PerformanceHistory.resize(s_PerformanceHistorySize);
+        m_PerformanceHistoryNextIndex = 0;
+        m_PerformanceSampleCount = 0;
+        m_PerformanceStats = {};
 
         VkDeviceSize l_GlobalSize = sizeof(GlobalUniformBuffer);
         VkDeviceSize l_MaterialSize = sizeof(MaterialUniformBuffer);
@@ -150,6 +176,10 @@ namespace Trident
 
     void Renderer::DrawFrame()
     {
+        const auto l_FrameStartTime = std::chrono::steady_clock::now();
+        const auto l_FrameWallClock = std::chrono::system_clock::now();
+        VkExtent2D l_FrameExtent{ 0, 0 };
+
         Utilities::Allocation::ResetFrame();
         ProcessReloadEvents();
         m_Camera.Update(Utilities::Time::GetDeltaTime());
@@ -182,6 +212,9 @@ namespace Trident
             return;
         }
 
+        // Capture the extent actually used when recording commands so our metrics reflect the final render target dimensions.
+        l_FrameExtent = m_Swapchain.GetExtent();
+
         if (!SubmitFrame(l_ImageIndex, l_InFlightFence))
         {
             TR_CORE_CRITICAL("Failed to submit frame");
@@ -195,6 +228,11 @@ namespace Trident
         m_FrameAllocationCount = Utilities::Allocation::GetFrameCount();
         
         //TR_CORE_TRACE("Frame allocations: {}", m_FrameAllocationCount);
+
+        const auto l_FrameEndTime = std::chrono::steady_clock::now();
+        const double l_FrameMilliseconds = std::chrono::duration<double, std::milli>(l_FrameEndTime - l_FrameStartTime).count();
+        const double l_FrameFPS = l_FrameMilliseconds > 0.0 ? 1000.0 / l_FrameMilliseconds : 0.0;
+        AccumulateFrameTiming(l_FrameMilliseconds, l_FrameFPS, l_FrameExtent, l_FrameWallClock);
     }
 
     void Renderer::UploadMesh(const std::vector<Geometry::Mesh>& meshes, const std::vector<Geometry::Material>& materials)
@@ -1121,5 +1159,135 @@ namespace Trident
             return m_Registry->GetComponent<Transform>(m_Entity);
         }
         return {};
+    }
+
+    void Renderer::SetPerformanceCaptureEnabled(bool enabled)
+    {
+        if (enabled == m_PerformanceCaptureEnabled)
+        {
+            return;
+        }
+
+        m_PerformanceCaptureEnabled = enabled;
+        if (m_PerformanceCaptureEnabled)
+        {
+            // Reset capture buffer so the exported data only contains the new capture session.
+            m_PerformanceCaptureBuffer.clear();
+            m_PerformanceCaptureBuffer.reserve(s_PerformanceHistorySize);
+            m_PerformanceCaptureStartTime = std::chrono::system_clock::now();
+            TR_CORE_INFO("Performance capture enabled");
+        }
+        else
+        {
+            ExportPerformanceCapture();
+            m_PerformanceCaptureBuffer.clear();
+            TR_CORE_INFO("Performance capture disabled");
+        }
+    }
+
+    void Renderer::AccumulateFrameTiming(double frameMilliseconds, double framesPerSecond, VkExtent2D extent, std::chrono::system_clock::time_point captureTimestamp)
+    {
+        FrameTimingSample l_Sample{};
+        l_Sample.FrameMilliseconds = frameMilliseconds;
+        l_Sample.FramesPerSecond = framesPerSecond;
+        l_Sample.Extent = extent;
+        l_Sample.CaptureTime = captureTimestamp;
+
+        // Store the latest sample inside the fixed-size ring buffer.
+        m_PerformanceHistory[m_PerformanceHistoryNextIndex] = l_Sample;
+        m_PerformanceHistoryNextIndex = (m_PerformanceHistoryNextIndex + 1) % m_PerformanceHistory.size();
+        if (m_PerformanceSampleCount < m_PerformanceHistory.size())
+        {
+            ++m_PerformanceSampleCount;
+        }
+
+        UpdateFrameTimingStats();
+
+        if (m_PerformanceCaptureEnabled)
+        {
+            m_PerformanceCaptureBuffer.push_back(l_Sample);
+        }
+    }
+
+    void Renderer::UpdateFrameTimingStats()
+    {
+        if (m_PerformanceSampleCount == 0)
+        {
+            m_PerformanceStats = {};
+            return;
+        }
+
+        double l_MinMilliseconds = std::numeric_limits<double>::max();
+        double l_MaxMilliseconds = 0.0;
+        double l_TotalMilliseconds = 0.0;
+        double l_TotalFPS = 0.0;
+
+        const size_t l_BufferSize = m_PerformanceHistory.size();
+        const size_t l_ValidCount = m_PerformanceSampleCount;
+        const size_t l_FirstIndex = (m_PerformanceHistoryNextIndex + l_BufferSize - l_ValidCount) % l_BufferSize;
+        for (size_t l_Offset = 0; l_Offset < l_ValidCount; ++l_Offset)
+        {
+            const size_t l_Index = (l_FirstIndex + l_Offset) % l_BufferSize;
+            const FrameTimingSample& it_Sample = m_PerformanceHistory[l_Index];
+
+            l_MinMilliseconds = std::min(l_MinMilliseconds, it_Sample.FrameMilliseconds);
+            l_MaxMilliseconds = std::max(l_MaxMilliseconds, it_Sample.FrameMilliseconds);
+            l_TotalMilliseconds += it_Sample.FrameMilliseconds;
+            l_TotalFPS += it_Sample.FramesPerSecond;
+        }
+
+        const double l_Count = static_cast<double>(l_ValidCount);
+        m_PerformanceStats.MinimumMilliseconds = l_MinMilliseconds;
+        m_PerformanceStats.MaximumMilliseconds = l_MaxMilliseconds;
+        m_PerformanceStats.AverageMilliseconds = l_TotalMilliseconds / l_Count;
+        m_PerformanceStats.AverageFPS = l_TotalFPS / l_Count;
+    }
+
+    void Renderer::ExportPerformanceCapture()
+    {
+        if (m_PerformanceCaptureBuffer.empty())
+        {
+            TR_CORE_WARN("Performance capture requested without any collected samples");
+            return;
+        }
+
+        std::filesystem::path l_OutputDirectory{ "PerformanceCaptures" };
+        std::error_code l_CreateError{};
+        std::filesystem::create_directories(l_OutputDirectory, l_CreateError);
+        if (l_CreateError)
+        {
+            TR_CORE_ERROR("Failed to create performance capture directory: {}", l_CreateError.message().c_str());
+            return;
+        }
+
+        const std::time_t l_StartTime = std::chrono::system_clock::to_time_t(m_PerformanceCaptureStartTime);
+        const std::tm l_StartLocal = ToLocalTime(l_StartTime);
+        std::ostringstream l_FileNameStream;
+        l_FileNameStream << "capture_" << std::put_time(&l_StartLocal, "%Y%m%d_%H%M%S") << ".csv";
+        const std::filesystem::path l_FilePath = l_OutputDirectory / l_FileNameStream.str();
+
+        std::ofstream l_File(l_FilePath, std::ios::trunc);
+        if (!l_File.is_open())
+        {
+            TR_CORE_ERROR("Failed to open performance capture file: {}", l_FilePath.string().c_str());
+            return;
+        }
+
+        // Write CSV header to simplify downstream analysis in spreadsheets.
+        l_File << "Timestamp,Frame (ms),FPS,Extent Width,Extent Height\n";
+        for (const FrameTimingSample& it_Sample : m_PerformanceCaptureBuffer)
+        {
+            const std::time_t l_SampleTime = std::chrono::system_clock::to_time_t(it_Sample.CaptureTime);
+            const std::tm l_SampleLocal = ToLocalTime(l_SampleTime);
+            l_File << std::put_time(&l_SampleLocal, "%Y-%m-%d %H:%M:%S") << ','
+                << it_Sample.FrameMilliseconds << ','
+                << it_Sample.FramesPerSecond << ','
+                << it_Sample.Extent.width << ','
+                << it_Sample.Extent.height << '\n';
+        }
+
+        l_File.close();
+
+        TR_CORE_INFO("Performance capture exported to {}", l_FilePath.string().c_str());
     }
 }
