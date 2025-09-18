@@ -64,12 +64,16 @@ else()
   message(WARNING "glslangValidator not found; relying on runtime shader compilation.")
 endif()
 
-# ---- Assets: Fonts copied next to the built executable ----
-set(FONTS_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/Assets/Fonts)
+# ---- Assets: Copy the runtime asset tree next to the built executable ----
+# We stage the entire Assets directory so that shader sources, their SPIR-V outputs
+# and any other runtime data remain in sync with the repository layout.  This keeps
+# Pipeline::InitializeShaderStages happy because the GLSL files are now guaranteed
+# to sit beside the compiled binaries in the output tree.
+set(ASSETS_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/Assets)
 
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
-            "${FONTS_SRC_DIR}"
-            "$<TARGET_FILE_DIR:${PROJECT_NAME}>/Assets/Fonts"
-    COMMENT "Copying fonts to runtime output..."
+            "${ASSETS_SRC_DIR}"
+            "$<TARGET_FILE_DIR:${PROJECT_NAME}>/Assets"
+    COMMENT "Copying assets (including shaders and fonts) to runtime output..."
 )
