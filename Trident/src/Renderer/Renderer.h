@@ -167,5 +167,6 @@ namespace Trident
         void PresentFrame(uint32_t imageIndex);
 
         bool IsValidViewport() const { return m_Viewport.Size.x > 0 && m_Viewport.Size.y > 0; }
+        void ProcessReloadEvents();
     };
 }

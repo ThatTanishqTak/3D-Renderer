@@ -17,7 +17,7 @@ namespace Trident
         void RecreateFramebuffers(Swapchain& swapchain);
         void CleanupFramebuffers();
         void CreateFramebuffers(Swapchain& swapchain);
-        bool ReloadIfNeeded(Swapchain& swapchain);
+        bool ReloadIfNeeded(Swapchain& swapchain, bool waitForDevice = true);
 
         VkRenderPass GetRenderPass() const { return m_RenderPass; }
         VkPipeline GetPipeline() const { return m_GraphicsPipeline; }

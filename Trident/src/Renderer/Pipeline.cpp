@@ -543,7 +543,7 @@ namespace Trident
         TR_CORE_TRACE("Framebuffers Created ({} Total)", m_SwapchainFramebuffers.size());
     }
 
-    bool Pipeline::ReloadIfNeeded(Swapchain& swapchain)
+    bool Pipeline::ReloadIfNeeded(Swapchain& swapchain, bool waitForDevice)
     {
         std::error_code l_Error{};
         bool l_ShouldReload = false;
@@ -567,8 +567,18 @@ namespace Trident
             return false;
         }
 
-        vkDeviceWaitIdle(Application::GetDevice());
+        if (waitForDevice)
+        {
+            vkDeviceWaitIdle(Application::GetDevice());
+        }
+
         CreateGraphicsPipeline(swapchain);
+
+        if (m_GraphicsPipeline == VK_NULL_HANDLE)
+        {
+            TR_CORE_ERROR("Graphics pipeline handle is null after reload attempt");
+            return false;
+        }
 
         return true;
     }

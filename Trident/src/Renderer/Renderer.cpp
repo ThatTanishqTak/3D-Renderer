@@ -3,11 +3,14 @@
 #include "Application.h"
 
 #include "Geometry/Mesh.h"
-
 #include "UI/ImGuiLayer.h"
+#include "Core/Utilities.h"
+#include "Loader/ModelLoader.h"
+#include "Loader/TextureLoader.h"
 
 #include <stdexcept>
 #include <algorithm>
+#include <string>
 
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -148,6 +151,7 @@ namespace Trident
     void Renderer::DrawFrame()
     {
         Utilities::Allocation::ResetFrame();
+        ProcessReloadEvents();
         m_Camera.Update(Utilities::Time::GetDeltaTime());
 
         // Allow developers to tweak GLSL and get instant feedback without restarting the app.
@@ -506,6 +510,7 @@ namespace Trident
             m_Buffers.CreateUniformBuffers(l_ImageCount, l_MaterialSize, m_MaterialUniformBuffers, m_MaterialUniformBuffersMemory);
             CreateDescriptorSets();
         }
+    }
 
     //------------------------------------------------------------------------------------------------------------------------------------------------------//
 
@@ -969,6 +974,88 @@ namespace Trident
         else if (l_PresentResult != VK_SUCCESS)
         {
             TR_CORE_CRITICAL("Failed to present swap chain image!");
+        }
+    }
+
+    void Renderer::ProcessReloadEvents()
+    {
+        auto& a_Watcher = Utilities::FileWatcher::Get();
+        bool l_DeviceIdle = false;
+
+        while (auto a_Event = a_Watcher.PopPendingEvent())
+        {
+            if (!l_DeviceIdle)
+            {
+                // Block the graphics queue once before processing the first reload to ensure resources are idle.
+                vkDeviceWaitIdle(Application::GetDevice());
+                l_DeviceIdle = true;
+            }
+
+            bool l_Success = false;
+            std::string l_Message{};
+
+            switch (a_Event->Type)
+            {
+            case Utilities::FileWatcher::WatchType::Shader:
+            {
+                // Shader reload leverages the existing hot-reload path but skips the internal wait because we already idled above.
+                bool l_Reloaded = m_Pipeline.ReloadIfNeeded(m_Swapchain, false);
+                if (l_Reloaded && m_Pipeline.GetPipeline() != VK_NULL_HANDLE)
+                {
+                    l_Success = true;
+                    l_Message = "Graphics pipeline rebuilt";
+                }
+                else
+                {
+                    l_Message = "Shader reload failed - check compiler output";
+                }
+                break;
+            }
+            case Utilities::FileWatcher::WatchType::Model:
+            {
+                auto a_ModelData = Loader::ModelLoader::Load(a_Event->Path);
+                if (!a_ModelData.Meshes.empty())
+                {
+                    UploadMesh(a_ModelData.Meshes, a_ModelData.Materials);
+                    l_Success = true;
+                    l_Message = "Model assets reuploaded";
+                }
+                else
+                {
+                    l_Message = "Model loader returned no meshes";
+                }
+                break;
+            }
+            case Utilities::FileWatcher::WatchType::Texture:
+            {
+                auto a_Texture = Loader::TextureLoader::Load(a_Event->Path);
+                if (!a_Texture.Pixels.empty())
+                {
+                    UploadTexture(a_Texture);
+                    l_Success = true;
+                    l_Message = "Texture refreshed";
+                }
+                else
+                {
+                    l_Message = "Texture loader returned empty pixel data";
+                }
+                break;
+            }
+            default:
+                l_Message = "Unhandled reload type";
+                break;
+            }
+
+            if (l_Success)
+            {
+                a_Watcher.MarkEventSuccess(a_Event->Id, l_Message);
+                TR_CORE_INFO("Hot reload succeeded for {}", a_Event->Path.c_str());
+            }
+            else
+            {
+                a_Watcher.MarkEventFailure(a_Event->Id, l_Message);
+                TR_CORE_ERROR("Hot reload failed for {}: {}", a_Event->Path.c_str(), l_Message.c_str());
+            }
         }
     }
 

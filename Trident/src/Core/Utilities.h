@@ -4,6 +4,9 @@
 #include <filesystem>
 #include <cstdlib>
 #include <new>
+#include <deque>
+#include <optional>
+#include <unordered_set>
 
 #define GLM_ENABLE_EXPERIMENTAL
 #include "glm/gtx/string_cast.hpp"
@@ -50,6 +53,82 @@ namespace Trident
 			static std::string GetExtension(const std::string& filePath);
 			static std::string JoinPath(const std::string& base, const std::string& addition);
 		};
+
+		//------------------------------------------------------------------------------------------------------------------------------------------------------//
+
+        // Service responsible for polling selected directories and turning file edits into reload tasks.
+        class FileWatcher
+        {
+        public:
+            enum class WatchType
+            {
+                Unknown,
+                Shader,
+                Model,
+                Texture
+            };
+
+            enum class ReloadStatus
+            {
+                Detected,
+                Queued,
+                Success,
+                Failed
+            };
+
+            struct ReloadEvent
+            {
+                uint64_t Id = 0;                                             // Unique identifier used by the UI and renderer.
+                WatchType Type = WatchType::Unknown;                          // Which subsystem should handle the reload.
+                std::string Path;                                            // File that triggered the reload.
+                std::filesystem::file_time_type Timestamp{};                 // Timestamp captured when the change was detected.
+                ReloadStatus Status = ReloadStatus::Detected;                 // Current processing state.
+                std::string Message;                                         // Optional diagnostic message populated after processing.
+            };
+
+        public:
+            static FileWatcher& Get();
+
+            void RegisterDefaultDirectories();
+            void RegisterWatch(const std::filesystem::path& directory, WatchType type, const std::vector<std::string>& extensions);
+
+            void Poll();
+
+            const std::vector<ReloadEvent>& GetEvents() const { return m_Events; }
+
+            std::optional<ReloadEvent> PopPendingEvent();
+            void QueueEvent(uint64_t eventId);
+            void MarkEventSuccess(uint64_t eventId, const std::string& message);
+            void MarkEventFailure(uint64_t eventId, const std::string& message);
+
+            void EnableAutoReload(bool enabled) { m_AutoReload = enabled; }
+            bool IsAutoReloadEnabled() const { return m_AutoReload; }
+
+        private:
+            struct WatchDirectory
+            {
+                std::filesystem::path Directory;                                             // Root directory being observed.
+                WatchType Type = WatchType::Unknown;                                         // Type of reload triggered by this directory.
+                std::vector<std::string> Extensions;                                         // Lower-case extensions allowed in this watch.
+                std::unordered_map<std::string, std::filesystem::file_time_type> KnownFiles;  // Cached timestamps per file.
+                bool ReportedMissing = false;                                                // Prevent spamming the log when folders are absent.
+            };
+
+            FileWatcher() = default;
+
+            void ScanDirectory(WatchDirectory& watch);
+            bool ShouldTrackFile(const WatchDirectory& watch, const std::filesystem::path& path) const;
+            ReloadEvent& CreateEvent(const std::string& path, WatchType type, std::filesystem::file_time_type timestamp);
+            void TransitionEvent(uint64_t eventId, ReloadStatus status, const std::string& message = {});
+
+        private:
+            std::vector<WatchDirectory> m_Watches;
+            std::vector<ReloadEvent> m_Events;
+            std::unordered_map<uint64_t, size_t> m_EventLookup;
+            std::deque<uint64_t> m_PendingQueue;
+            uint64_t m_NextEventId = 1;
+            bool m_AutoReload = true;
+        };
 
 		//------------------------------------------------------------------------------------------------------------------------------------------------------//
 

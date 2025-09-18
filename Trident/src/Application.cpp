@@ -19,6 +19,9 @@ namespace Trident
     {
         Utilities::Time::Init();
 
+        // Configure default watch directories before Vulkan is initialised so we capture edits early.
+        Utilities::FileWatcher::Get().RegisterDefaultDirectories();
+
         InitVulkan();
 
         m_Renderer = std::make_unique<Renderer>();
@@ -29,6 +32,9 @@ namespace Trident
     {
         Utilities::Time::Update();
         m_Window.PollEvents();
+
+        // Poll the file watcher after window events so any edits get reflected in the next frame.
+        Utilities::FileWatcher::Get().Poll();
     }
 
     void Application::RenderScene()
@@ -283,7 +289,7 @@ namespace Trident
         auto a_QueueFamily = m_QueueFamilyIndices;
         if (!a_QueueFamily.IsComplete())
         {
-            TR_CORE_CRITICAL("Queue it_Family indices not set");
+            TR_CORE_CRITICAL("Queue family indices not set");
             
             return;
         }

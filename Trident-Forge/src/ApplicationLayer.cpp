@@ -3,6 +3,7 @@
 #include <imgui.h>
 
 #include <string>
+#include <vector>
 
 #include "UI/FileDialog.h"
 #include "Loader/ModelLoader.h"
@@ -172,6 +173,95 @@ void ApplicationLayer::Run()
             {
                 TR_INFO("Inference result: {}", l_Output[0]);
             }
+        }
+
+        ImGui::End();
+
+        // Provide visibility into the background hot-reload system so developers can diagnose issues quickly.
+        ImGui::Begin("Live Reload");
+        Trident::Utilities::FileWatcher& l_Watcher = Trident::Utilities::FileWatcher::Get();
+        bool l_AutoReload = l_Watcher.IsAutoReloadEnabled();
+        if (ImGui::Checkbox("Automatic Reload", &l_AutoReload))
+        {
+            l_Watcher.EnableAutoReload(l_AutoReload);
+        }
+
+        ImGui::Separator();
+
+        const auto a_StatusToString = [](Trident::Utilities::FileWatcher::ReloadStatus a_Status) -> const char*
+            {
+                switch (a_Status)
+                {
+                case Trident::Utilities::FileWatcher::ReloadStatus::Detected: return "Detected";
+                case Trident::Utilities::FileWatcher::ReloadStatus::Queued: return "Queued";
+                case Trident::Utilities::FileWatcher::ReloadStatus::Success: return "Success";
+                case Trident::Utilities::FileWatcher::ReloadStatus::Failed: return "Failed";
+                default: return "Unknown";
+                }
+            };
+
+        const auto a_TypeToString = [](Trident::Utilities::FileWatcher::WatchType a_Type) -> const char*
+            {
+                switch (a_Type)
+                {
+                case Trident::Utilities::FileWatcher::WatchType::Shader: return "Shader";
+                case Trident::Utilities::FileWatcher::WatchType::Model: return "Model";
+                case Trident::Utilities::FileWatcher::WatchType::Texture: return "Texture";
+                default: return "Unknown";
+                }
+            };
+
+        const std::vector<Trident::Utilities::FileWatcher::ReloadEvent>& l_Events = l_Watcher.GetEvents();
+        if (ImGui::BeginTable("ReloadEvents", 5, ImGuiTableFlags_SizingStretchSame | ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersOuter))
+        {
+            ImGui::TableSetupColumn("Type");
+            ImGui::TableSetupColumn("Status");
+            ImGui::TableSetupColumn("File");
+            ImGui::TableSetupColumn("Details");
+            ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+            ImGui::TableHeadersRow();
+
+            for (const Trident::Utilities::FileWatcher::ReloadEvent& it_Event : l_Events)
+            {
+                ImGui::TableNextRow();
+
+                ImGui::TableSetColumnIndex(0);
+                ImGui::TextUnformatted(a_TypeToString(it_Event.Type));
+
+                ImGui::TableSetColumnIndex(1);
+                ImGui::TextUnformatted(a_StatusToString(it_Event.Status));
+
+                ImGui::TableSetColumnIndex(2);
+                ImGui::TextWrapped("%s", it_Event.Path.c_str());
+
+                ImGui::TableSetColumnIndex(3);
+                if (it_Event.Message.empty())
+                {
+                    ImGui::TextUnformatted("Awaiting result...");
+                }
+                else
+                {
+                    ImGui::TextWrapped("%s", it_Event.Message.c_str());
+                }
+
+                ImGui::TableSetColumnIndex(4);
+                bool l_Disabled = it_Event.Status == Trident::Utilities::FileWatcher::ReloadStatus::Queued;
+                ImGui::BeginDisabled(l_Disabled);
+                ImGui::PushID(static_cast<int>(it_Event.Id));
+                const char* l_Label = it_Event.Status == Trident::Utilities::FileWatcher::ReloadStatus::Failed ? "Retry" : "Queue";
+                if (ImGui::Button(l_Label))
+                {
+                    l_Watcher.QueueEvent(it_Event.Id);
+                }
+                ImGui::PopID();
+                ImGui::EndDisabled();
+            }
+
+            ImGui::EndTable();
+        }
+        else
+        {
+            ImGui::TextUnformatted("No reload events captured yet.");
         }
 
         ImGui::End();

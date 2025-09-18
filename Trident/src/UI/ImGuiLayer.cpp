@@ -147,6 +147,8 @@ namespace Trident
                 m_DescriptorPool = VK_NULL_HANDLE;
             }
             m_Device = VK_NULL_HANDLE;
+
+            TR_CORE_TRACE("ImGui Shutdown Complete");
         }
 
         void ImGuiLayer::BeginFrame()
