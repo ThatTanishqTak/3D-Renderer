@@ -566,6 +566,8 @@ namespace Trident
 
         VkDescriptorPoolCreateInfo l_PoolInfo{};
         l_PoolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        // We free and recreate descriptor sets whenever the swapchain is resized, so enable free-descriptor support.
+        l_PoolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
         l_PoolInfo.poolSizeCount = 3;
         l_PoolInfo.pPoolSizes = l_PoolSizes;
         l_PoolInfo.maxSets = m_Swapchain.GetImageCount();
