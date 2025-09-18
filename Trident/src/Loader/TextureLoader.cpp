@@ -3,7 +3,6 @@
 #include "Core/Utilities.h"
 
 #include <stb_image.h>
-#include <filesystem>
 
 namespace Trident
 {
@@ -12,10 +11,12 @@ namespace Trident
         TextureData TextureLoader::Load(const std::string& filePath)
         {
             TextureData l_Texture{};
-            std::filesystem::path l_Path = Utilities::FileManagement::NormalizePath(filePath);
+            std::string l_PathUtf8 = Utilities::FileManagement::NormalizePath(filePath);
 
             stbi_set_flip_vertically_on_load(true);
-            stbi_uc* l_Pixels = stbi_load(l_Path.u8string().c_str(), &l_Texture.Width, &l_Texture.Height, &l_Texture.Channels, STBI_rgb_alpha);
+            // When compiling with MSVC in C++20 mode, stbi_load requires a const char* instead of const char8_t*,
+            // so we keep the normalized UTF-8 path in a std::string to ensure compatibility.
+            stbi_uc* l_Pixels = stbi_load(l_PathUtf8.c_str(), &l_Texture.Width, &l_Texture.Height, &l_Texture.Channels, STBI_rgb_alpha);
             if (!l_Pixels)
             {
                 TR_CORE_CRITICAL("Failed to load texture: {} ({})", filePath, stbi_failure_reason());
