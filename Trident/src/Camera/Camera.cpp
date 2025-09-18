@@ -3,6 +3,8 @@
 #include "Core/Utilities.h"
 #include <glm/gtc/matrix_transform.hpp>
 
+#include <algorithm>
+
 namespace Trident
 {
     Camera::Camera(GLFWwindow* window) : m_Window(window)
@@ -116,5 +118,45 @@ namespace Trident
     glm::mat4 Camera::GetViewMatrix() const
     {
         return glm::lookAt(m_Position, m_Position + m_Front, m_Up);
+    }
+
+    void Camera::SetPosition(const glm::vec3& a_Position)
+    {
+        // Allow editor tooling to translate the camera without depending on input events.
+        m_Position = a_Position;
+    }
+
+    void Camera::SetYaw(float a_Yaw)
+    {
+        // Update the horizontal angle so editor tweaks immediately affect the view direction.
+        m_Yaw = a_Yaw;
+        UpdateVectors();
+    }
+
+    void Camera::SetPitch(float a_Pitch)
+    {
+        // Clamp vertical rotation to avoid flipping the camera upside down while editing.
+        m_Pitch = std::clamp(a_Pitch, -89.0f, 89.0f);
+        UpdateVectors();
+    }
+
+    void Camera::SetFOV(float a_FOVDegrees)
+    {
+        // Keep the field of view within a comfortable perspective range for editors.
+        m_FOV = std::clamp(a_FOVDegrees, 1.0f, 120.0f);
+    }
+
+    void Camera::SetNearClip(float a_NearClip)
+    {
+        // Prevent an invalid projection by ensuring the near plane stays in front of the camera.
+        float l_ClampedNear = std::clamp(a_NearClip, 0.001f, m_FarClip - 0.001f);
+        m_NearClip = l_ClampedNear;
+    }
+
+    void Camera::SetFarClip(float a_FarClip)
+    {
+        // Keep the far plane sorted after the near plane while allowing deep draw distances.
+        float l_MinFar = m_NearClip + 0.001f;
+        m_FarClip = std::max(a_FarClip, l_MinFar);
     }
 }

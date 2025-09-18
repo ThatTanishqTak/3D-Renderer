@@ -106,6 +106,10 @@ namespace Trident
         Camera& GetCamera() { return m_Camera; }
         const Camera& GetCamera() const { return m_Camera; }
 
+        // Access to the CPU-side material cache so editor widgets can tweak shading values.
+        std::vector<Geometry::Material>& GetMaterials() { return m_Materials; }
+        const std::vector<Geometry::Material>& GetMaterials() const { return m_Materials; }
+
         VkRenderPass GetRenderPass() const { return m_Pipeline.GetRenderPass(); }
         uint32_t GetImageCount() const { return m_Swapchain.GetImageCount(); }
 

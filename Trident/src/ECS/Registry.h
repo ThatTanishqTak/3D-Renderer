@@ -5,6 +5,8 @@
 #include <unordered_map>
 #include <typeindex>
 #include <memory>
+#include <vector>
+#include <algorithm>
 
 namespace Trident
 {
@@ -53,7 +55,10 @@ namespace Trident
         public:
             Entity CreateEntity()
             {
-                return m_NextEntity++;
+                Entity l_Entity = m_NextEntity++;
+                m_ActiveEntities.push_back(l_Entity);
+
+                return l_Entity;
             }
 
             void DestroyEntity(Entity entity)
@@ -61,6 +66,12 @@ namespace Trident
                 for (auto& [type, storage] : m_Storages)
                 {
                     storage->Remove(entity);
+                }
+
+                auto l_It = std::remove(m_ActiveEntities.begin(), m_ActiveEntities.end(), entity);
+                if (l_It != m_ActiveEntities.end())
+                {
+                    m_ActiveEntities.erase(l_It, m_ActiveEntities.end());
                 }
             }
 
@@ -93,6 +104,12 @@ namespace Trident
                 }
             }
 
+            const std::vector<Entity>& GetEntities() const
+            {
+                // Provide read-only access for editor tooling to enumerate active entities.
+                return m_ActiveEntities;
+            }
+
         private:
             template<typename T>
             ComponentStorage<T>* GetStorage()
@@ -122,6 +139,9 @@ namespace Trident
         private:
             std::unordered_map<std::type_index, std::unique_ptr<IComponentStorage>> m_Storages;
             Entity m_NextEntity = 0;
+
+            // Tracks every live entity so debug UIs can iterate without poking into storage internals.
+            std::vector<Entity> m_ActiveEntities;
         };
     }
 }

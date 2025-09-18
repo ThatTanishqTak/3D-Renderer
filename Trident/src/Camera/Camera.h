@@ -13,11 +13,26 @@ namespace Trident
 
         void Update(float deltaTime);
         glm::mat4 GetViewMatrix() const;
-        glm::vec3 GetPosition() const { return m_Position; }
 
+        // Camera transform accessors used by tooling panels.
+        glm::vec3 GetPosition() const { return m_Position; }
+        void SetPosition(const glm::vec3& a_Position);
+
+        float GetYaw() const { return m_Yaw; }
+        void SetYaw(float a_Yaw);
+
+        float GetPitch() const { return m_Pitch; }
+        void SetPitch(float a_Pitch);
+
+        // Projection parameter accessors for editor tweaking.
         float GetFOV() const { return m_FOV; }
+        void SetFOV(float a_FOVDegrees);
+
         float GetNearClip() const { return m_NearClip; }
+        void SetNearClip(float a_NearClip);
+
         float GetFarClip() const { return m_FarClip; }
+        void SetFarClip(float a_FarClip);
 
     private:
         void UpdateVectors();

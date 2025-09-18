@@ -4,6 +4,9 @@
 
 #include <string>
 #include <vector>
+#include <limits>
+
+#include <glm/gtc/type_ptr.hpp>
 
 #include "UI/FileDialog.h"
 #include "Loader/ModelLoader.h"
@@ -100,6 +103,96 @@ void ApplicationLayer::Run()
             ImGui::Text("Captured Samples: %zu", Trident::Application::GetRenderer().GetPerformanceCaptureSampleCount());
         }
 
+        ImGui::End();
+
+        // Camera control panel allows artists to align shots without diving into engine code.
+        if (ImGui::Begin("Camera"))
+        {
+            Trident::Camera& l_Camera = Trident::Application::GetRenderer().GetCamera();
+
+            glm::vec3 l_CameraPosition = l_Camera.GetPosition();
+            if (ImGui::DragFloat3("Position", glm::value_ptr(l_CameraPosition), 0.1f))
+            {
+                l_Camera.SetPosition(l_CameraPosition);
+            }
+
+            float l_YawDegrees = l_Camera.GetYaw();
+            if (ImGui::DragFloat("Yaw", &l_YawDegrees, 0.1f, -360.0f, 360.0f))
+            {
+                l_Camera.SetYaw(l_YawDegrees);
+            }
+
+            float l_PitchDegrees = l_Camera.GetPitch();
+            if (ImGui::DragFloat("Pitch", &l_PitchDegrees, 0.1f, -89.0f, 89.0f))
+            {
+                l_Camera.SetPitch(l_PitchDegrees);
+            }
+
+            float l_FieldOfView = l_Camera.GetFOV();
+            if (ImGui::SliderFloat("Field of View", &l_FieldOfView, 1.0f, 120.0f))
+            {
+                l_Camera.SetFOV(l_FieldOfView);
+            }
+
+            float l_FarClipValue = l_Camera.GetFarClip();
+            float l_NearClipValue = l_Camera.GetNearClip();
+            if (ImGui::DragFloat("Near Clip", &l_NearClipValue, 0.01f, 0.001f, l_FarClipValue - 0.01f))
+            {
+                l_Camera.SetNearClip(l_NearClipValue);
+                l_FarClipValue = l_Camera.GetFarClip();
+            }
+
+            float l_MinFarClip = l_Camera.GetNearClip() + 0.01f;
+            if (ImGui::DragFloat("Far Clip", &l_FarClipValue, 1.0f, l_MinFarClip, 20000.0f))
+            {
+                l_Camera.SetFarClip(l_FarClipValue);
+            }
+        }
+        ImGui::End();
+
+        // Material panel exposes glTF shading terms for lightweight look-dev.
+        if (ImGui::Begin("Materials"))
+        {
+            std::vector<Trident::Geometry::Material>& l_Materials = Trident::Application::GetRenderer().GetMaterials();
+            if (l_Materials.empty())
+            {
+                ImGui::TextUnformatted("No materials loaded.");
+            }
+            else
+            {
+                for (size_t it_Index = 0; it_Index < l_Materials.size(); ++it_Index)
+                {
+                    Trident::Geometry::Material& l_Material = l_Materials[it_Index];
+                    ImGui::PushID(static_cast<int>(it_Index));
+
+                    ImGui::Text("Material %zu", it_Index);
+                    glm::vec4 l_BaseColor = l_Material.BaseColorFactor;
+                    if (ImGui::ColorEdit4("Albedo", glm::value_ptr(l_BaseColor)))
+                    {
+                        l_Material.BaseColorFactor = l_BaseColor;
+                    }
+
+                    float l_Roughness = l_Material.RoughnessFactor;
+                    if (ImGui::SliderFloat("Roughness", &l_Roughness, 0.0f, 1.0f))
+                    {
+                        l_Material.RoughnessFactor = l_Roughness;
+                    }
+
+                    float l_Metallic = l_Material.MetallicFactor;
+                    if (ImGui::SliderFloat("Metallic", &l_Metallic, 0.0f, 1.0f))
+                    {
+                        l_Material.MetallicFactor = l_Metallic;
+                    }
+
+                    ImGui::PopID();
+
+                    if (it_Index + 1 < l_Materials.size())
+                    {
+                        ImGui::Separator();
+                    }
+                }
+            }
+        }
         ImGui::End();
 
         ImGui::Begin("Content");
@@ -205,6 +298,85 @@ void ApplicationLayer::Run()
             }
         }
 
+        ImGui::End();
+
+        // Scene inspector offers basic ECS debugging hooks for the currently loaded scene.
+        if (ImGui::Begin("Scene Inspector"))
+        {
+            Trident::ECS::Registry& l_Registry = Trident::Application::GetRegistry();
+            const std::vector<Trident::ECS::Entity>& l_Entities = l_Registry.GetEntities();
+
+            static Trident::ECS::Entity s_SelectedEntity = std::numeric_limits<Trident::ECS::Entity>::max();
+
+            if (l_Entities.empty())
+            {
+                ImGui::TextUnformatted("No entities in the active scene.");
+            }
+            else
+            {
+                ImGui::Text("Entities (%zu)", l_Entities.size());
+                if (ImGui::BeginListBox("##EntityList"))
+                {
+                    for (Trident::ECS::Entity it_Entity : l_Entities)
+                    {
+                        bool l_IsSelected = it_Entity == s_SelectedEntity;
+                        std::string l_Label = "Entity " + std::to_string(static_cast<unsigned int>(it_Entity));
+                        if (ImGui::Selectable(l_Label.c_str(), l_IsSelected))
+                        {
+                            s_SelectedEntity = it_Entity;
+                        }
+
+                        if (l_IsSelected)
+                        {
+                            ImGui::SetItemDefaultFocus();
+                        }
+                    }
+                    ImGui::EndListBox();
+                }
+
+                if (s_SelectedEntity != std::numeric_limits<Trident::ECS::Entity>::max())
+                {
+                    ImGui::Separator();
+                    ImGui::Text("Selected Entity: %u", static_cast<unsigned int>(s_SelectedEntity));
+
+                    if (l_Registry.HasComponent<Trident::Transform>(s_SelectedEntity))
+                    {
+                        Trident::Transform& l_Transform = l_Registry.GetComponent<Trident::Transform>(s_SelectedEntity);
+                        bool l_TransformChanged = false;
+
+                        glm::vec3 l_Position = l_Transform.Position;
+                        if (ImGui::DragFloat3("Position", glm::value_ptr(l_Position), 0.1f))
+                        {
+                            l_Transform.Position = l_Position;
+                            l_TransformChanged = true;
+                        }
+
+                        glm::vec3 l_Rotation = l_Transform.Rotation;
+                        if (ImGui::DragFloat3("Rotation", glm::value_ptr(l_Rotation), 0.1f))
+                        {
+                            l_Transform.Rotation = l_Rotation;
+                            l_TransformChanged = true;
+                        }
+
+                        glm::vec3 l_Scale = l_Transform.Scale;
+                        if (ImGui::DragFloat3("Scale", glm::value_ptr(l_Scale), 0.01f, 0.01f, 100.0f))
+                        {
+                            l_Transform.Scale = l_Scale;
+                            l_TransformChanged = true;
+                        }
+
+                        if (l_TransformChanged)
+                        {
+                            Trident::Application::GetRenderer().SetTransform(l_Transform);
+                        }
+                    }
+                    else
+                    {
+                        ImGui::TextUnformatted("Transform component not present.");
+                    }
+                }
+            }
+        }
         ImGui::End();
 
         // Provide visibility into the background hot-reload system so developers can diagnose issues quickly.
