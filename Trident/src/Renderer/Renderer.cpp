@@ -518,7 +518,17 @@ namespace Trident
         m_Swapchain.Cleanup();
         m_Swapchain.Init();
 
+        // Rebuild the swapchain-backed framebuffers so that they point at the freshly created images.
+        m_Pipeline.RecreateFramebuffers(m_Swapchain);
+
         uint32_t l_ImageCount = m_Swapchain.GetImageCount();
+        if (m_Commands.GetFrameCount() != l_ImageCount)
+        {
+            // Command buffers and synchronization objects are per swapchain image, so rebuild them if the count changed.
+            TR_CORE_TRACE("Resizing command resources (Old = {}, New = {})", m_Commands.GetFrameCount(), l_ImageCount);
+            m_Commands.Recreate(l_ImageCount);
+        }
+
         if (l_ImageCount != m_GlobalUniformBuffers.size())
         {
             // We have a different swapchain image count, so destroy and rebuild any per-frame resources.
