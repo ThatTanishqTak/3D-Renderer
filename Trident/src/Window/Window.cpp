@@ -33,6 +33,8 @@ namespace Trident
         if (!m_Window)
         {
             TR_CORE_ERROR("Failed to create GLFW window");
+
+            return;
         }
 
         TR_CORE_TRACE("GLFW Window Created");

@@ -67,7 +67,7 @@ namespace Trident
         TR_CORE_INFO("-------INITIALIZING VULKAN-------");
 
         CreateInstance();
-#ifndef NDEBUG
+#ifdef _DEBUG
         SetupDebugMessenger();
 #endif
         CreateSurface();
@@ -101,7 +101,7 @@ namespace Trident
             m_Device = VK_NULL_HANDLE;
         }
 
-#ifndef NDEBUG
+#ifdef _DEBUG
         if (m_DebugMessenger != VK_NULL_HANDLE)
         {
             auto a_Function = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(m_Instance, "vkDestroyDebugUtilsMessengerEXT");

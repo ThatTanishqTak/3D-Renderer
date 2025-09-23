@@ -563,11 +563,14 @@ namespace Trident
 
             VkDeviceSize l_GlobalSize = sizeof(GlobalUniformBuffer);
             VkDeviceSize l_MaterialSize = sizeof(MaterialUniformBuffer);
+            
             m_Buffers.CreateUniformBuffers(l_ImageCount, l_GlobalSize, m_GlobalUniformBuffers, m_GlobalUniformBuffersMemory);
             m_Buffers.CreateUniformBuffers(l_ImageCount, l_MaterialSize, m_MaterialUniformBuffers, m_MaterialUniformBuffersMemory);
+            
             // Recreate the descriptor pool before allocating descriptor sets so the pool matches the new swapchain image count.
             CreateDescriptorPool();
             CreateDescriptorSets();
+            
             TR_CORE_TRACE("Descriptor resources recreated (SwapchainImages = {}, GlobalUBOs = {}, MaterialUBOs = {}, CombinedSamplers = {}, DescriptorSets = {})",
                 l_ImageCount, m_GlobalUniformBuffers.size(), m_MaterialUniformBuffers.size(), l_ImageCount, m_DescriptorSets.size());
         }
@@ -1183,6 +1186,7 @@ namespace Trident
         {
             return m_Registry->GetComponent<Transform>(m_Entity);
         }
+
         return {};
     }
 
@@ -1200,12 +1204,14 @@ namespace Trident
             m_PerformanceCaptureBuffer.clear();
             m_PerformanceCaptureBuffer.reserve(s_PerformanceHistorySize);
             m_PerformanceCaptureStartTime = std::chrono::system_clock::now();
+
             TR_CORE_INFO("Performance capture enabled");
         }
         else
         {
             ExportPerformanceCapture();
             m_PerformanceCaptureBuffer.clear();
+
             TR_CORE_INFO("Performance capture disabled");
         }
     }
@@ -1239,6 +1245,7 @@ namespace Trident
         if (m_PerformanceSampleCount == 0)
         {
             m_PerformanceStats = {};
+
             return;
         }
 
@@ -1273,6 +1280,7 @@ namespace Trident
         if (m_PerformanceCaptureBuffer.empty())
         {
             TR_CORE_WARN("Performance capture requested without any collected samples");
+
             return;
         }
 
@@ -1282,6 +1290,7 @@ namespace Trident
         if (l_CreateError)
         {
             TR_CORE_ERROR("Failed to create performance capture directory: {}", l_CreateError.message().c_str());
+
             return;
         }
 
@@ -1295,6 +1304,7 @@ namespace Trident
         if (!l_File.is_open())
         {
             TR_CORE_ERROR("Failed to open performance capture file: {}", l_FilePath.string().c_str());
+
             return;
         }
 
@@ -1304,11 +1314,8 @@ namespace Trident
         {
             const std::time_t l_SampleTime = std::chrono::system_clock::to_time_t(it_Sample.CaptureTime);
             const std::tm l_SampleLocal = ToLocalTime(l_SampleTime);
-            l_File << std::put_time(&l_SampleLocal, "%Y-%m-%d %H:%M:%S") << ','
-                << it_Sample.FrameMilliseconds << ','
-                << it_Sample.FramesPerSecond << ','
-                << it_Sample.Extent.width << ','
-                << it_Sample.Extent.height << '\n';
+            l_File << std::put_time(&l_SampleLocal, "%Y-%m-%d %H:%M:%S") << ',' << it_Sample.FrameMilliseconds << ','
+                << it_Sample.FramesPerSecond << ',' << it_Sample.Extent.width << ',' << it_Sample.Extent.height << '\n';
         }
 
         l_File.close();
