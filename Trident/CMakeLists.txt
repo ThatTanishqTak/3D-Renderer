@@ -66,6 +66,16 @@ target_include_directories(imgui PUBLIC
 )
 target_link_libraries(imgui PUBLIC glfw3 Vulkan::Vulkan)
 
+set(IMGUIZMO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/vendor/imguizmo")
+set(IMGUIZMO_SOURCES
+  ${IMGUIZMO_ROOT}/ImGuizmo.cpp
+)
+add_library(imguizmo STATIC ${IMGUIZMO_SOURCES})
+target_include_directories(imguizmo PUBLIC
+  $<BUILD_INTERFACE:${IMGUIZMO_ROOT}>
+)
+target_link_libraries(imguizmo PUBLIC imgui)
+
 file(GLOB_RECURSE TRIDENT_SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/*.h
@@ -83,6 +93,7 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
   glm
   spdlog
   imgui
+  imguizmo
   stb
   tinygltf
 )

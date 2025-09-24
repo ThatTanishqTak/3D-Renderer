@@ -1,18 +1,71 @@
 ﻿#include "ApplicationLayer.h"
 
 #include <imgui.h>
+#include <ImGuizmo.h>
 
 #include <string>
 #include <vector>
 #include <limits>
 
 #include <glm/gtc/type_ptr.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/quaternion.hpp>
+#include <glm/gtx/euler_angles.hpp>
+#include <glm/gtx/matrix_decompose.hpp>
 
 #include "UI/FileDialog.h"
 #include "Loader/ModelLoader.h"
 #include "Loader/TextureLoader.h"
 #include "Renderer/RenderCommand.h"
 #include "Renderer/Renderer.h"
+
+namespace
+{
+    // Compose a transform matrix from the ECS component for ImGuizmo consumption.
+    glm::mat4 ComposeTransform(const Trident::Transform& a_Transform)
+    {
+        glm::mat4 l_ModelMatrix{ 1.0f };
+        l_ModelMatrix = glm::translate(l_ModelMatrix, a_Transform.Position);
+        l_ModelMatrix = glm::rotate(l_ModelMatrix, glm::radians(a_Transform.Rotation.x), glm::vec3{ 1.0f, 0.0f, 0.0f });
+        l_ModelMatrix = glm::rotate(l_ModelMatrix, glm::radians(a_Transform.Rotation.y), glm::vec3{ 0.0f, 1.0f, 0.0f });
+        l_ModelMatrix = glm::rotate(l_ModelMatrix, glm::radians(a_Transform.Rotation.z), glm::vec3{ 0.0f, 0.0f, 1.0f });
+        l_ModelMatrix = glm::scale(l_ModelMatrix, a_Transform.Scale);
+
+        return l_ModelMatrix;
+    }
+
+    // Convert an ImGuizmo-manipulated matrix back to the engine's transform component.
+    Trident::Transform DecomposeTransform(const glm::mat4& a_ModelMatrix, const Trident::Transform& a_Default)
+    {
+        glm::vec3 l_Scale{};
+        glm::quat l_Rotation{};
+        glm::vec3 l_Translation{};
+        glm::vec3 l_Skew{};
+        glm::vec4 l_Perspective{};
+
+        if (!glm::decompose(a_ModelMatrix, l_Scale, l_Rotation, l_Translation, l_Skew, l_Perspective))
+        {
+            // Preserve the previous values if decomposition fails, avoiding sudden jumps.
+            return a_Default;
+        }
+
+        Trident::Transform l_Result = a_Default;
+        l_Result.Position = l_Translation;
+        l_Result.Scale = l_Scale;
+        l_Result.Rotation = glm::degrees(glm::eulerAngles(glm::normalize(l_Rotation)));
+        return l_Result;
+    }
+
+    // Editor-wide gizmo state stored at TU scope so every panel references the same configuration.
+    ImGuizmo::OPERATION s_GizmoOperation = ImGuizmo::TRANSLATE;
+    ImGuizmo::MODE s_GizmoMode = ImGuizmo::LOCAL;
+
+    // Dedicated sentinel used when no entity is highlighted inside the inspector.
+    constexpr Trident::ECS::Entity s_InvalidEntity = std::numeric_limits<Trident::ECS::Entity>::max();
+
+    // Persistently tracked selection so the gizmo can render even when the inspector panel is closed.
+    Trident::ECS::Entity s_SelectedEntity = s_InvalidEntity;
+}
 
 ApplicationLayer::ApplicationLayer()
 {
@@ -306,11 +359,10 @@ void ApplicationLayer::Run()
             Trident::ECS::Registry& l_Registry = Trident::Application::GetRegistry();
             const std::vector<Trident::ECS::Entity>& l_Entities = l_Registry.GetEntities();
 
-            static Trident::ECS::Entity s_SelectedEntity = std::numeric_limits<Trident::ECS::Entity>::max();
-
             if (l_Entities.empty())
             {
                 ImGui::TextUnformatted("No entities in the active scene.");
+                s_SelectedEntity = s_InvalidEntity;
             }
             else
             {
@@ -334,7 +386,7 @@ void ApplicationLayer::Run()
                     ImGui::EndListBox();
                 }
 
-                if (s_SelectedEntity != std::numeric_limits<Trident::ECS::Entity>::max())
+                if (s_SelectedEntity != s_InvalidEntity)
                 {
                     ImGui::Separator();
                     ImGui::Text("Selected Entity: %u", static_cast<unsigned int>(s_SelectedEntity));
@@ -369,6 +421,34 @@ void ApplicationLayer::Run()
                         {
                             Trident::Application::GetRenderer().SetTransform(l_Transform);
                         }
+
+                        ImGui::Separator();
+                        ImGui::TextUnformatted("Gizmo Operation");
+                        if (ImGui::RadioButton("Translate", s_GizmoOperation == ImGuizmo::TRANSLATE))
+                        {
+                            s_GizmoOperation = ImGuizmo::TRANSLATE;
+                        }
+                        ImGui::SameLine();
+                        if (ImGui::RadioButton("Rotate", s_GizmoOperation == ImGuizmo::ROTATE))
+                        {
+                            s_GizmoOperation = ImGuizmo::ROTATE;
+                        }
+                        ImGui::SameLine();
+                        if (ImGui::RadioButton("Scale", s_GizmoOperation == ImGuizmo::SCALE))
+                        {
+                            s_GizmoOperation = ImGuizmo::SCALE;
+                        }
+
+                        ImGui::TextUnformatted("Gizmo Space");
+                        if (ImGui::RadioButton("Local", s_GizmoMode == ImGuizmo::LOCAL))
+                        {
+                            s_GizmoMode = ImGuizmo::LOCAL;
+                        }
+                        ImGui::SameLine();
+                        if (ImGui::RadioButton("World", s_GizmoMode == ImGuizmo::WORLD))
+                        {
+                            s_GizmoMode = ImGuizmo::WORLD;
+                        }
                     }
                     else
                     {
@@ -378,6 +458,9 @@ void ApplicationLayer::Run()
             }
         }
         ImGui::End();
+
+        // Render the gizmo on top of the viewport once all inspector edits are applied.
+        DrawTransformGizmo(s_SelectedEntity);
 
         // Provide visibility into the background hot-reload system so developers can diagnose issues quickly.
         ImGui::Begin("Live Reload");
@@ -390,9 +473,9 @@ void ApplicationLayer::Run()
 
         ImGui::Separator();
 
-        const auto a_StatusToString = [](Trident::Utilities::FileWatcher::ReloadStatus a_Status) -> const char*
+        const auto a_StatusToString = [](Trident::Utilities::FileWatcher::ReloadStatus status) -> const char*
             {
-                switch (a_Status)
+                switch (status)
                 {
                 case Trident::Utilities::FileWatcher::ReloadStatus::Detected: return "Detected";
                 case Trident::Utilities::FileWatcher::ReloadStatus::Queued: return "Queued";
@@ -402,9 +485,9 @@ void ApplicationLayer::Run()
                 }
             };
 
-        const auto a_TypeToString = [](Trident::Utilities::FileWatcher::WatchType a_Type) -> const char*
+        const auto a_TypeToString = [](Trident::Utilities::FileWatcher::WatchType type) -> const char*
             {
-                switch (a_Type)
+                switch (type)
                 {
                 case Trident::Utilities::FileWatcher::WatchType::Shader: return "Shader";
                 case Trident::Utilities::FileWatcher::WatchType::Model: return "Model";
@@ -471,5 +554,60 @@ void ApplicationLayer::Run()
         m_ImGuiLayer->EndFrame();
 
         m_Engine->RenderScene();
+    }
+
+    void ApplicationLayer::DrawTransformGizmo(Trident::ECS::Entity selectedEntity)
+    {
+        // Even when no entity is bound we start a frame so ImGuizmo can clear any persistent state.
+        ImGuizmo::BeginFrame();
+
+        if (a_SelectedEntity == s_InvalidEntity)
+        {
+            return;
+        }
+
+        Trident::ECS::Registry& l_Registry = Trident::Application::GetRegistry();
+        if (!l_Registry.HasComponent<Trident::Transform>(a_SelectedEntity))
+        {
+            return;
+        }
+
+        // Fetch the camera matrices used by the renderer so the gizmo aligns with the actual scene view.
+        Trident::Camera& l_Camera = Trident::Application::GetRenderer().GetCamera();
+        glm::mat4 l_ViewMatrix = l_Camera.GetViewMatrix();
+
+        const ImGuiViewport* l_MainViewport = ImGui::GetMainViewport();
+        ImVec2 l_RectPosition = l_MainViewport->Pos;
+        ImVec2 l_RectSize = l_MainViewport->Size;
+
+        const Trident::ViewportInfo l_ViewportInfo = Trident::Application::GetRenderer().GetViewport();
+        if (l_ViewportInfo.Size.x > 0.0f && l_ViewportInfo.Size.y > 0.0f)
+        {
+            // Offset the gizmo rectangle by the viewport position to support docked scene windows in the future.
+            l_RectPosition.x += l_ViewportInfo.Position.x;
+            l_RectPosition.y += l_ViewportInfo.Position.y;
+            l_RectSize = ImVec2{ l_ViewportInfo.Size.x, l_ViewportInfo.Size.y };
+        }
+
+        const float l_AspectRatio = l_RectSize.y > 0.0f ? l_RectSize.x / l_RectSize.y : 1.0f;
+        glm::mat4 l_ProjectionMatrix = glm::perspective(glm::radians(l_Camera.GetFOV()), l_AspectRatio, l_Camera.GetNearClip(), l_Camera.GetFarClip());
+        l_ProjectionMatrix[1][1] *= -1.0f;
+
+        Trident::Transform& l_Transform = l_Registry.GetComponent<Trident::Transform>(a_SelectedEntity);
+        glm::mat4 l_ModelMatrix = ComposeTransform(l_Transform);
+
+        ImGuizmo::SetOrthographic(false);
+        ImGuizmo::SetDrawlist();
+        ImGuizmo::SetRect(l_RectPosition.x, l_RectPosition.y, l_RectSize.x, l_RectSize.y);
+
+        if (ImGuizmo::Manipulate(glm::value_ptr(l_ViewMatrix), glm::value_ptr(l_ProjectionMatrix), s_GizmoOperation, s_GizmoMode, glm::value_ptr(l_ModelMatrix)))
+        {
+            // Sync the manipulated matrix back into the ECS so gameplay systems stay authoritative.
+            Trident::Transform l_UpdatedTransform = DecomposeTransform(l_ModelMatrix, l_Transform);
+            l_Transform = l_UpdatedTransform;
+            Trident::Application::GetRenderer().SetTransform(l_Transform);
+        }
+
+        // Potential enhancement: expose snapping increments for translation/rotation/scale so artists can toggle grid alignment.
     }
 }

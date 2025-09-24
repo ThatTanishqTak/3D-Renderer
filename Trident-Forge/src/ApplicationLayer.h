@@ -22,6 +22,9 @@ public:
     void Run();
 
 private:
+    void DrawTransformGizmo(Trident::ECS::Entity selectedEntity);
+
+private:
     std::unique_ptr<Trident::Window> m_Window; // OS window wrapper
     std::unique_ptr<Trident::Application> m_Engine; // Core engine instance
     std::unique_ptr<Trident::UI::ImGuiLayer> m_ImGuiLayer; // ImGui interface layer
