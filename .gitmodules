@@ -17,3 +17,6 @@
 [submodule "Trident/vendor/entt"]
 	path = Trident/vendor/entt
 	url = https://github.com/ThatTanishqTak/entt.git
+[submodule "Trident/vendor/ImGuizmo"]
+	path = Trident/vendor/ImGuizmo
+	url = https://github.com/ThatTanishqTak/ImGuizmo.git
