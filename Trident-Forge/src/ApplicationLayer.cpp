@@ -473,9 +473,9 @@ void ApplicationLayer::Run()
 
         ImGui::Separator();
 
-        const auto a_StatusToString = [](Trident::Utilities::FileWatcher::ReloadStatus status) -> const char*
+        const auto a_StatusToString = [](Trident::Utilities::FileWatcher::ReloadStatus a_Status) -> const char*
             {
-                switch (status)
+                switch (a_Status)
                 {
                 case Trident::Utilities::FileWatcher::ReloadStatus::Detected: return "Detected";
                 case Trident::Utilities::FileWatcher::ReloadStatus::Queued: return "Queued";
@@ -485,9 +485,9 @@ void ApplicationLayer::Run()
                 }
             };
 
-        const auto a_TypeToString = [](Trident::Utilities::FileWatcher::WatchType type) -> const char*
+        const auto a_TypeToString = [](Trident::Utilities::FileWatcher::WatchType a_Type) -> const char*
             {
-                switch (type)
+                switch (a_Type)
                 {
                 case Trident::Utilities::FileWatcher::WatchType::Shader: return "Shader";
                 case Trident::Utilities::FileWatcher::WatchType::Model: return "Model";
@@ -555,59 +555,59 @@ void ApplicationLayer::Run()
 
         m_Engine->RenderScene();
     }
+}
 
-    void ApplicationLayer::DrawTransformGizmo(Trident::ECS::Entity selectedEntity)
+void ApplicationLayer::DrawTransformGizmo(Trident::ECS::Entity a_SelectedEntity)
+{
+    // Even when no entity is bound we start a frame so ImGuizmo can clear any persistent state.
+    ImGuizmo::BeginFrame();
+
+    if (a_SelectedEntity == s_InvalidEntity)
     {
-        // Even when no entity is bound we start a frame so ImGuizmo can clear any persistent state.
-        ImGuizmo::BeginFrame();
-
-        if (a_SelectedEntity == s_InvalidEntity)
-        {
-            return;
-        }
-
-        Trident::ECS::Registry& l_Registry = Trident::Application::GetRegistry();
-        if (!l_Registry.HasComponent<Trident::Transform>(a_SelectedEntity))
-        {
-            return;
-        }
-
-        // Fetch the camera matrices used by the renderer so the gizmo aligns with the actual scene view.
-        Trident::Camera& l_Camera = Trident::Application::GetRenderer().GetCamera();
-        glm::mat4 l_ViewMatrix = l_Camera.GetViewMatrix();
-
-        const ImGuiViewport* l_MainViewport = ImGui::GetMainViewport();
-        ImVec2 l_RectPosition = l_MainViewport->Pos;
-        ImVec2 l_RectSize = l_MainViewport->Size;
-
-        const Trident::ViewportInfo l_ViewportInfo = Trident::Application::GetRenderer().GetViewport();
-        if (l_ViewportInfo.Size.x > 0.0f && l_ViewportInfo.Size.y > 0.0f)
-        {
-            // Offset the gizmo rectangle by the viewport position to support docked scene windows in the future.
-            l_RectPosition.x += l_ViewportInfo.Position.x;
-            l_RectPosition.y += l_ViewportInfo.Position.y;
-            l_RectSize = ImVec2{ l_ViewportInfo.Size.x, l_ViewportInfo.Size.y };
-        }
-
-        const float l_AspectRatio = l_RectSize.y > 0.0f ? l_RectSize.x / l_RectSize.y : 1.0f;
-        glm::mat4 l_ProjectionMatrix = glm::perspective(glm::radians(l_Camera.GetFOV()), l_AspectRatio, l_Camera.GetNearClip(), l_Camera.GetFarClip());
-        l_ProjectionMatrix[1][1] *= -1.0f;
-
-        Trident::Transform& l_Transform = l_Registry.GetComponent<Trident::Transform>(a_SelectedEntity);
-        glm::mat4 l_ModelMatrix = ComposeTransform(l_Transform);
-
-        ImGuizmo::SetOrthographic(false);
-        ImGuizmo::SetDrawlist();
-        ImGuizmo::SetRect(l_RectPosition.x, l_RectPosition.y, l_RectSize.x, l_RectSize.y);
-
-        if (ImGuizmo::Manipulate(glm::value_ptr(l_ViewMatrix), glm::value_ptr(l_ProjectionMatrix), s_GizmoOperation, s_GizmoMode, glm::value_ptr(l_ModelMatrix)))
-        {
-            // Sync the manipulated matrix back into the ECS so gameplay systems stay authoritative.
-            Trident::Transform l_UpdatedTransform = DecomposeTransform(l_ModelMatrix, l_Transform);
-            l_Transform = l_UpdatedTransform;
-            Trident::Application::GetRenderer().SetTransform(l_Transform);
-        }
-
-        // Potential enhancement: expose snapping increments for translation/rotation/scale so artists can toggle grid alignment.
+        return;
     }
+
+    Trident::ECS::Registry& l_Registry = Trident::Application::GetRegistry();
+    if (!l_Registry.HasComponent<Trident::Transform>(a_SelectedEntity))
+    {
+        return;
+    }
+
+    // Fetch the camera matrices used by the renderer so the gizmo aligns with the actual scene view.
+    Trident::Camera& l_Camera = Trident::Application::GetRenderer().GetCamera();
+    glm::mat4 l_ViewMatrix = l_Camera.GetViewMatrix();
+
+    const ImGuiViewport* l_MainViewport = ImGui::GetMainViewport();
+    ImVec2 l_RectPosition = l_MainViewport->Pos;
+    ImVec2 l_RectSize = l_MainViewport->Size;
+
+    const Trident::ViewportInfo l_ViewportInfo = Trident::Application::GetRenderer().GetViewport();
+    if (l_ViewportInfo.Size.x > 0.0f && l_ViewportInfo.Size.y > 0.0f)
+    {
+        // Offset the gizmo rectangle by the viewport position to support docked scene windows in the future.
+        l_RectPosition.x += l_ViewportInfo.Position.x;
+        l_RectPosition.y += l_ViewportInfo.Position.y;
+        l_RectSize = ImVec2{ l_ViewportInfo.Size.x, l_ViewportInfo.Size.y };
+    }
+
+    const float l_AspectRatio = l_RectSize.y > 0.0f ? l_RectSize.x / l_RectSize.y : 1.0f;
+    glm::mat4 l_ProjectionMatrix = glm::perspective(glm::radians(l_Camera.GetFOV()), l_AspectRatio, l_Camera.GetNearClip(), l_Camera.GetFarClip());
+    l_ProjectionMatrix[1][1] *= -1.0f;
+
+    Trident::Transform& l_Transform = l_Registry.GetComponent<Trident::Transform>(a_SelectedEntity);
+    glm::mat4 l_ModelMatrix = ComposeTransform(l_Transform);
+
+    ImGuizmo::SetOrthographic(false);
+    ImGuizmo::SetDrawlist();
+    ImGuizmo::SetRect(l_RectPosition.x, l_RectPosition.y, l_RectSize.x, l_RectSize.y);
+
+    if (ImGuizmo::Manipulate(glm::value_ptr(l_ViewMatrix), glm::value_ptr(l_ProjectionMatrix), s_GizmoOperation, s_GizmoMode, glm::value_ptr(l_ModelMatrix)))
+    {
+        // Sync the manipulated matrix back into the ECS so gameplay systems stay authoritative.
+        Trident::Transform l_UpdatedTransform = DecomposeTransform(l_ModelMatrix, l_Transform);
+        l_Transform = l_UpdatedTransform;
+        Trident::Application::GetRenderer().SetTransform(l_Transform);
+    }
+
+    // Potential enhancement: expose snapping increments for translation/rotation/scale so artists can toggle grid alignment.
 }
