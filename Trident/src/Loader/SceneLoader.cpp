@@ -26,7 +26,9 @@ namespace Trident
             for (const auto& a_Entry : fs::directory_iterator(l_Path))
             {
                 if (!a_Entry.is_regular_file())
+                {
                     continue;
+                }
 
                 std::string l_Extension = a_Entry.path().extension().string();
                 std::transform(l_Extension.begin(), l_Extension.end(), l_Extension.begin(), [](unsigned char a_Char)

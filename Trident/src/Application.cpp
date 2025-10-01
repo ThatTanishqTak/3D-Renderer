@@ -138,11 +138,11 @@ namespace Trident
         l_AppInfo.apiVersion = VK_API_VERSION_1_2;
 
         std::vector<const char*> l_Layers;
-#ifndef NDEBUG
+#ifdef _DEBUG
         l_Layers.push_back("VK_LAYER_KHRONOS_validation");
 #endif
 
-#ifndef NDEBUG
+#ifdef _DEBUG
         if (!CheckValidationLayerSupport())
         {
             TR_CORE_CRITICAL("Validation layers requested, but not available!");
@@ -153,7 +153,7 @@ namespace Trident
         VkInstanceCreateInfo l_CreateInfo{};
         auto l_Extensions = GetRequiredExtensions();
 
-#ifndef NDEBUG
+#ifdef _DEBUG
         l_Extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 #endif
 
@@ -172,7 +172,7 @@ namespace Trident
         TR_CORE_TRACE("Vulkan Instance Created");
     }
 
-#ifndef NDEBUG
+#ifdef _DEBUG
     static VKAPI_ATTR VkBool32 VKAPI_CALL DebugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT severity, VkDebugUtilsMessageTypeFlagsEXT type,
         const VkDebugUtilsMessengerCallbackDataEXT* data, void*)
     {
