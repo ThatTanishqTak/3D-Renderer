@@ -22,20 +22,20 @@
 namespace
 {
     // Compose a transform matrix from the ECS component for ImGuizmo consumption.
-    glm::mat4 ComposeTransform(const Trident::Transform& a_Transform)
+    glm::mat4 ComposeTransform(const Trident::Transform& transform)
     {
         glm::mat4 l_ModelMatrix{ 1.0f };
-        l_ModelMatrix = glm::translate(l_ModelMatrix, a_Transform.Position);
-        l_ModelMatrix = glm::rotate(l_ModelMatrix, glm::radians(a_Transform.Rotation.x), glm::vec3{ 1.0f, 0.0f, 0.0f });
-        l_ModelMatrix = glm::rotate(l_ModelMatrix, glm::radians(a_Transform.Rotation.y), glm::vec3{ 0.0f, 1.0f, 0.0f });
-        l_ModelMatrix = glm::rotate(l_ModelMatrix, glm::radians(a_Transform.Rotation.z), glm::vec3{ 0.0f, 0.0f, 1.0f });
-        l_ModelMatrix = glm::scale(l_ModelMatrix, a_Transform.Scale);
+        l_ModelMatrix = glm::translate(l_ModelMatrix, transform.Position);
+        l_ModelMatrix = glm::rotate(l_ModelMatrix, glm::radians(transform.Rotation.x), glm::vec3{ 1.0f, 0.0f, 0.0f });
+        l_ModelMatrix = glm::rotate(l_ModelMatrix, glm::radians(transform.Rotation.y), glm::vec3{ 0.0f, 1.0f, 0.0f });
+        l_ModelMatrix = glm::rotate(l_ModelMatrix, glm::radians(transform.Rotation.z), glm::vec3{ 0.0f, 0.0f, 1.0f });
+        l_ModelMatrix = glm::scale(l_ModelMatrix, transform.Scale);
 
         return l_ModelMatrix;
     }
 
     // Convert an ImGuizmo-manipulated matrix back to the engine's transform component.
-    Trident::Transform DecomposeTransform(const glm::mat4& a_ModelMatrix, const Trident::Transform& a_Default)
+    Trident::Transform DecomposeTransform(const glm::mat4& modelMatrix, const Trident::Transform& defaultTransform)
     {
         glm::vec3 l_Scale{};
         glm::quat l_Rotation{};
@@ -43,16 +43,17 @@ namespace
         glm::vec3 l_Skew{};
         glm::vec4 l_Perspective{};
 
-        if (!glm::decompose(a_ModelMatrix, l_Scale, l_Rotation, l_Translation, l_Skew, l_Perspective))
+        if (!glm::decompose(modelMatrix, l_Scale, l_Rotation, l_Translation, l_Skew, l_Perspective))
         {
             // Preserve the previous values if decomposition fails, avoiding sudden jumps.
-            return a_Default;
+            return defaultTransform;
         }
 
-        Trident::Transform l_Result = a_Default;
+        Trident::Transform l_Result = defaultTransform;
         l_Result.Position = l_Translation;
         l_Result.Scale = l_Scale;
         l_Result.Rotation = glm::degrees(glm::eulerAngles(glm::normalize(l_Rotation)));
+
         return l_Result;
     }
 

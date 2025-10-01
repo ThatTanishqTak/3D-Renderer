@@ -53,6 +53,21 @@ target_include_directories(tinygltf INTERFACE
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/vendor/tinygltf>
 )
 
+include(FetchContent)
+
+set(ASSIMP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(ASSIMP_BUILD_ASSIMP_TOOLS OFF CACHE BOOL "" FORCE)
+set(ASSIMP_BUILD_ALL_EXPORTERS_BY_DEFAULT OFF CACHE BOOL "" FORCE)
+set(ASSIMP_BUILD_ALL_IMPORTERS_BY_DEFAULT OFF CACHE BOOL "" FORCE)
+set(ASSIMP_BUILD_FBX_IMPORTER ON CACHE BOOL "" FORCE)
+set(ASSIMP_NO_EXPORT ON CACHE BOOL "" FORCE)
+set(ASSIMP_INSTALL OFF CACHE BOOL "" FORCE)
+
+FetchContent_Declare(assimp
+  URL https://github.com/assimp/assimp/archive/refs/tags/v5.3.1.zip
+)
+FetchContent_MakeAvailable(assimp)
+
 set(IMGUI_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/vendor/imgui")
 file(GLOB IMGUI_SOURCES
   ${IMGUI_ROOT}/*.cpp
@@ -96,6 +111,7 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
   imguizmo
   stb
   tinygltf
+  assimp::assimp
 )
 
 option(TRIDENT_ENABLE_VALIDATION "Enable Vulkan Validation Layers" ON)

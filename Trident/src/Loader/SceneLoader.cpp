@@ -4,6 +4,8 @@
 
 #include <filesystem>
 #include <utility>
+#include <algorithm>
+#include <cctype>
 
 namespace fs = std::filesystem;
 
@@ -26,8 +28,13 @@ namespace Trident
                 if (!a_Entry.is_regular_file())
                     continue;
 
-                auto a_Ext = a_Entry.path().extension();
-                if (a_Ext == ".gltf" || a_Ext == ".glb")
+                std::string l_Extension = a_Entry.path().extension().string();
+                std::transform(l_Extension.begin(), l_Extension.end(), l_Extension.begin(), [](unsigned char a_Char)
+                    {
+                        return static_cast<char>(std::tolower(a_Char));
+                    });
+
+                if (l_Extension == ".gltf" || l_Extension == ".glb" || l_Extension == ".fbx")
                 {
                     auto a_ModelData = ModelLoader::Load(a_Entry.path().string());
                     if (!a_ModelData.Meshes.empty())

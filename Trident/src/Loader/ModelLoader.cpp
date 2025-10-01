@@ -11,8 +11,6 @@
 #include <cstdint>
 #include <glm/gtx/norm.hpp>
 
-namespace fs = std::filesystem;
-
 namespace Trident
 {
     namespace Loader
@@ -24,161 +22,161 @@ namespace Trident
             const glm::vec3 s_DefaultBitangent{ 0.0f, 0.0f, 0.0f };
 
             // Prepare a pointer/stride pair that can be used to iterate over accessor data safely
-            static bool PrepareAccessorRead(const tinygltf::Model& a_Model, const tinygltf::Accessor& a_Accessor, size_t a_ComponentCount,
-                size_t a_ComponentSize, const unsigned char*& a_DataPtr, size_t& a_Stride)
+            static bool PrepareAccessorRead(const tinygltf::Model& model, const tinygltf::Accessor& accessor, size_t componentCount,
+                size_t componentSize, const unsigned char*& dataPointer, size_t& stride)
             {
-                if (a_Accessor.count == 0 || a_Accessor.bufferView < 0)
+                if (accessor.count == 0 || accessor.bufferView < 0)
                 {
                     return false;
                 }
 
-                if (a_Accessor.sparse.count > 0)
+                if (accessor.sparse.count > 0)
                 {
-                    TR_CORE_WARN("Sparse accessor detected ({} elements) - sparse data is not yet supported", a_Accessor.sparse.count);
+                    TR_CORE_WARN("Sparse accessor detected ({} elements) - sparse data is not yet supported", accessor.sparse.count);
                 }
 
-                const tinygltf::BufferView& l_View = a_Model.bufferViews[a_Accessor.bufferView];
-                const tinygltf::Buffer& l_Buffer = a_Model.buffers[l_View.buffer];
+                const tinygltf::BufferView& l_View = model.bufferViews[accessor.bufferView];
+                const tinygltf::Buffer& l_Buffer = model.buffers[l_View.buffer];
 
-                a_DataPtr = l_Buffer.data.data() + l_View.byteOffset + a_Accessor.byteOffset;
-                a_Stride = l_View.byteStride != 0 ? static_cast<size_t>(l_View.byteStride) : a_ComponentCount * a_ComponentSize;
+                dataPointer = l_Buffer.data.data() + l_View.byteOffset + accessor.byteOffset;
+                stride = l_View.byteStride != 0 ? static_cast<size_t>(l_View.byteStride) : componentCount * componentSize;
 
                 return true;
             }
 
-            static void LoadPositions(const tinygltf::Model& a_Model, const tinygltf::Accessor& a_Accessor, std::vector<glm::vec3>& a_Out)
+            static void LoadPositions(const tinygltf::Model& model, const tinygltf::Accessor& accessor, std::vector<glm::vec3>& out)
             {
-                a_Out.clear();
-                if (a_Accessor.componentType != TINYGLTF_COMPONENT_TYPE_FLOAT)
+                out.clear();
+                if (accessor.componentType != TINYGLTF_COMPONENT_TYPE_FLOAT)
                 {
-                    TR_CORE_WARN("Unsupported component type {} for POSITION attribute", a_Accessor.componentType);
+                    TR_CORE_WARN("Unsupported component type {} for POSITION attribute", accessor.componentType);
                     return;
                 }
 
                 const unsigned char* a_Data = nullptr;
                 size_t l_Stride = 0;
-                if (!PrepareAccessorRead(a_Model, a_Accessor, 3, sizeof(float), a_Data, l_Stride))
+                if (!PrepareAccessorRead(model, accessor, 3, sizeof(float), a_Data, l_Stride))
                 {
                     return;
                 }
 
-                a_Out.resize(a_Accessor.count);
-                for (size_t it_Index = 0; it_Index < a_Out.size(); ++it_Index)
+                out.resize(accessor.count);
+                for (size_t it_Index = 0; it_Index < out.size(); ++it_Index)
                 {
                     const float* l_Source = reinterpret_cast<const float*>(a_Data + it_Index * l_Stride);
-                    a_Out[it_Index] = glm::vec3(l_Source[0], l_Source[1], l_Source[2]);
+                    out[it_Index] = glm::vec3(l_Source[0], l_Source[1], l_Source[2]);
                 }
             }
 
-            static void LoadNormals(const tinygltf::Model& a_Model, const tinygltf::Accessor& a_Accessor, std::vector<glm::vec3>& a_Out)
+            static void LoadNormals(const tinygltf::Model& model, const tinygltf::Accessor& accessor, std::vector<glm::vec3>& out)
             {
-                a_Out.clear();
-                if (a_Accessor.componentType != TINYGLTF_COMPONENT_TYPE_FLOAT)
+                out.clear();
+                if (accessor.componentType != TINYGLTF_COMPONENT_TYPE_FLOAT)
                 {
-                    TR_CORE_WARN("Unsupported component type {} for NORMAL attribute", a_Accessor.componentType);
+                    TR_CORE_WARN("Unsupported component type {} for NORMAL attribute", accessor.componentType);
                     return;
                 }
 
                 const unsigned char* a_Data = nullptr;
                 size_t l_Stride = 0;
-                if (!PrepareAccessorRead(a_Model, a_Accessor, 3, sizeof(float), a_Data, l_Stride))
+                if (!PrepareAccessorRead(model, accessor, 3, sizeof(float), a_Data, l_Stride))
                 {
                     return;
                 }
 
-                a_Out.resize(a_Accessor.count);
-                for (size_t it_Index = 0; it_Index < a_Out.size(); ++it_Index)
+                out.resize(accessor.count);
+                for (size_t it_Index = 0; it_Index < out.size(); ++it_Index)
                 {
                     const float* l_Source = reinterpret_cast<const float*>(a_Data + it_Index * l_Stride);
-                    a_Out[it_Index] = glm::vec3(l_Source[0], l_Source[1], l_Source[2]);
+                    out[it_Index] = glm::vec3(l_Source[0], l_Source[1], l_Source[2]);
                 }
             }
 
-            static void LoadTangents(const tinygltf::Model& a_Model, const tinygltf::Accessor& a_Accessor, std::vector<glm::vec4>& a_Out)
+            static void LoadTangents(const tinygltf::Model& model, const tinygltf::Accessor& accessor, std::vector<glm::vec4>& out)
             {
-                a_Out.clear();
-                if (a_Accessor.componentType != TINYGLTF_COMPONENT_TYPE_FLOAT)
+                out.clear();
+                if (accessor.componentType != TINYGLTF_COMPONENT_TYPE_FLOAT)
                 {
-                    TR_CORE_WARN("Unsupported component type {} for TANGENT attribute", a_Accessor.componentType);
+                    TR_CORE_WARN("Unsupported component type {} for TANGENT attribute", accessor.componentType);
                     return;
                 }
 
                 const unsigned char* a_Data = nullptr;
                 size_t l_Stride = 0;
-                if (!PrepareAccessorRead(a_Model, a_Accessor, 4, sizeof(float), a_Data, l_Stride))
+                if (!PrepareAccessorRead(model, accessor, 4, sizeof(float), a_Data, l_Stride))
                 {
                     return;
                 }
 
-                a_Out.resize(a_Accessor.count);
-                for (size_t it_Index = 0; it_Index < a_Out.size(); ++it_Index)
+                out.resize(accessor.count);
+                for (size_t it_Index = 0; it_Index < out.size(); ++it_Index)
                 {
                     const float* l_Source = reinterpret_cast<const float*>(a_Data + it_Index * l_Stride);
-                    a_Out[it_Index] = glm::vec4(l_Source[0], l_Source[1], l_Source[2], l_Source[3]);
+                    out[it_Index] = glm::vec4(l_Source[0], l_Source[1], l_Source[2], l_Source[3]);
                 }
             }
 
-            static void LoadTexCoords(const tinygltf::Model& a_Model, const tinygltf::Accessor& a_Accessor, std::vector<glm::vec2>& a_Out)
+            static void LoadTexCoords(const tinygltf::Model& model, const tinygltf::Accessor& accessor, std::vector<glm::vec2>& out)
             {
-                a_Out.clear();
-                if (a_Accessor.componentType != TINYGLTF_COMPONENT_TYPE_FLOAT)
+                out.clear();
+                if (accessor.componentType != TINYGLTF_COMPONENT_TYPE_FLOAT)
                 {
-                    TR_CORE_WARN("Unsupported component type {} for TEXCOORD_0 attribute", a_Accessor.componentType);
+                    TR_CORE_WARN("Unsupported component type {} for TEXCOORD_0 attribute", accessor.componentType);
                     return;
                 }
 
                 const unsigned char* a_Data = nullptr;
                 size_t l_Stride = 0;
-                if (!PrepareAccessorRead(a_Model, a_Accessor, 2, sizeof(float), a_Data, l_Stride))
+                if (!PrepareAccessorRead(model, accessor, 2, sizeof(float), a_Data, l_Stride))
                 {
                     return;
                 }
 
-                a_Out.resize(a_Accessor.count);
-                for (size_t it_Index = 0; it_Index < a_Out.size(); ++it_Index)
+                out.resize(accessor.count);
+                for (size_t it_Index = 0; it_Index < out.size(); ++it_Index)
                 {
                     const float* l_Source = reinterpret_cast<const float*>(a_Data + it_Index * l_Stride);
-                    a_Out[it_Index] = glm::vec2(l_Source[0], l_Source[1]);
+                    out[it_Index] = glm::vec2(l_Source[0], l_Source[1]);
                 }
             }
 
-            static void LoadColors(const tinygltf::Model& a_Model, const tinygltf::Accessor& a_Accessor, std::vector<glm::vec3>& a_Out)
+            static void LoadColors(const tinygltf::Model& model, const tinygltf::Accessor& accessor, std::vector<glm::vec3>& out)
             {
-                a_Out.clear();
-                const size_t l_ComponentCount = a_Accessor.type == TINYGLTF_TYPE_VEC4 ? 4 : 3;
-                const size_t l_ComponentSize = tinygltf::GetComponentSizeInBytes(a_Accessor.componentType);
+                out.clear();
+                const size_t l_ComponentCount = accessor.type == TINYGLTF_TYPE_VEC4 ? 4 : 3;
+                const size_t l_ComponentSize = tinygltf::GetComponentSizeInBytes(accessor.componentType);
                 if (l_ComponentSize == 0)
                 {
-                    TR_CORE_WARN("Unsupported component type {} for COLOR_0 attribute", a_Accessor.componentType);
+                    TR_CORE_WARN("Unsupported component type {} for COLOR_0 attribute", accessor.componentType);
                     return;
                 }
 
                 const unsigned char* a_Data = nullptr;
                 size_t l_Stride = 0;
-                if (!PrepareAccessorRead(a_Model, a_Accessor, l_ComponentCount, l_ComponentSize, a_Data, l_Stride))
+                if (!PrepareAccessorRead(model, accessor, l_ComponentCount, l_ComponentSize, a_Data, l_Stride))
                 {
                     return;
                 }
 
-                a_Out.resize(a_Accessor.count, glm::vec3(1.0f));
-                for (size_t it_Index = 0; it_Index < a_Out.size(); ++it_Index)
+                out.resize(accessor.count, glm::vec3(1.0f));
+                for (size_t it_Index = 0; it_Index < out.size(); ++it_Index)
                 {
                     glm::vec3 l_Color{ 1.0f };
-                    if (a_Accessor.componentType == TINYGLTF_COMPONENT_TYPE_FLOAT)
+                    if (accessor.componentType == TINYGLTF_COMPONENT_TYPE_FLOAT)
                     {
                         const float* l_Source = reinterpret_cast<const float*>(a_Data + it_Index * l_Stride);
                         l_Color.r = l_Source[0];
                         l_Color.g = l_Source[1];
                         l_Color.b = l_ComponentCount > 2 ? l_Source[2] : 1.0f;
                     }
-                    else if (a_Accessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE)
+                    else if (accessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE)
                     {
                         const uint8_t* l_Source = reinterpret_cast<const uint8_t*>(a_Data + it_Index * l_Stride);
                         l_Color.r = static_cast<float>(l_Source[0]) / 255.0f;
                         l_Color.g = static_cast<float>(l_Source[1]) / 255.0f;
                         l_Color.b = l_ComponentCount > 2 ? static_cast<float>(l_Source[2]) / 255.0f : 1.0f;
                     }
-                    else if (a_Accessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT)
+                    else if (accessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT)
                     {
                         const uint16_t* l_Source = reinterpret_cast<const uint16_t*>(a_Data + it_Index * l_Stride);
                         l_Color.r = static_cast<float>(l_Source[0]) / 65535.0f;
@@ -187,61 +185,61 @@ namespace Trident
                     }
                     else
                     {
-                        TR_CORE_WARN("Unsupported component type {} for COLOR_0 attribute", a_Accessor.componentType);
+                        TR_CORE_WARN("Unsupported component type {} for COLOR_0 attribute", accessor.componentType);
                         return;
                     }
 
-                    a_Out[it_Index] = l_Color;
+                    out[it_Index] = l_Color;
                 }
             }
 
-            static void LoadIndices(const tinygltf::Model& a_Model, const tinygltf::Accessor& a_Accessor, std::vector<uint32_t>& a_Out)
+            static void LoadIndices(const tinygltf::Model& model, const tinygltf::Accessor& accessor, std::vector<uint32_t>& out)
             {
-                a_Out.clear();
-                const size_t l_ComponentSize = tinygltf::GetComponentSizeInBytes(a_Accessor.componentType);
+                out.clear();
+                const size_t l_ComponentSize = tinygltf::GetComponentSizeInBytes(accessor.componentType);
                 if (l_ComponentSize == 0)
                 {
-                    TR_CORE_WARN("Unsupported component type {} for index buffer", a_Accessor.componentType);
+                    TR_CORE_WARN("Unsupported component type {} for index buffer", accessor.componentType);
                     return;
                 }
 
                 const unsigned char* a_Data = nullptr;
                 size_t l_Stride = 0;
-                if (!PrepareAccessorRead(a_Model, a_Accessor, 1, l_ComponentSize, a_Data, l_Stride))
+                if (!PrepareAccessorRead(model, accessor, 1, l_ComponentSize, a_Data, l_Stride))
                 {
                     return;
                 }
 
-                a_Out.resize(a_Accessor.count);
-                for (size_t it_Index = 0; it_Index < a_Out.size(); ++it_Index)
+                out.resize(accessor.count);
+                for (size_t it_Index = 0; it_Index < out.size(); ++it_Index)
                 {
                     const unsigned char* l_Element = a_Data + it_Index * l_Stride;
-                    switch (a_Accessor.componentType)
+                    switch (accessor.componentType)
                     {
                     case TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE:
                     {
                         uint8_t l_Value = 0;
                         std::memcpy(&l_Value, l_Element, sizeof(uint8_t));
-                        a_Out[it_Index] = l_Value;
+                        out[it_Index] = l_Value;
                         break;
                     }
                     case TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT:
                     {
                         uint16_t l_Value = 0;
                         std::memcpy(&l_Value, l_Element, sizeof(uint16_t));
-                        a_Out[it_Index] = l_Value;
+                        out[it_Index] = l_Value;
                         break;
                     }
                     case TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT:
                     {
                         uint32_t l_Value = 0;
                         std::memcpy(&l_Value, l_Element, sizeof(uint32_t));
-                        a_Out[it_Index] = l_Value;
+                        out[it_Index] = l_Value;
                         break;
                     }
                     default:
-                        TR_CORE_WARN("Unsupported index component type {}", a_Accessor.componentType);
-                        a_Out.clear();
+                        TR_CORE_WARN("Unsupported index component type {}", accessor.componentType);
+                        out.clear();
                         return;
                     }
                 }
@@ -251,7 +249,7 @@ namespace Trident
         ModelData ModelLoader::Load(const std::string& filePath)
         {
             ModelData l_ModelData{};
-            fs::path l_Path = Utilities::FileManagement::NormalizePath(filePath);
+            std::filesystem::path l_Path = Utilities::FileManagement::NormalizePath(filePath);
             if (l_Path.extension() != ".gltf" && l_Path.extension() != ".glb")
             {
                 TR_CORE_CRITICAL("Unsupported model format: {}", filePath);
@@ -423,11 +421,13 @@ namespace Trident
 
                             if (l_Pbr.baseColorFactor.size() == 4)
                             {
-                                l_Material.BaseColorFactor = glm::vec4(
+                                l_Material.BaseColorFactor = glm::vec4
+                                (
                                     static_cast<float>(l_Pbr.baseColorFactor[0]),
                                     static_cast<float>(l_Pbr.baseColorFactor[1]),
                                     static_cast<float>(l_Pbr.baseColorFactor[2]),
-                                    static_cast<float>(l_Pbr.baseColorFactor[3]));
+                                    static_cast<float>(l_Pbr.baseColorFactor[3])
+                                );
                             }
 
                             l_Material.MetallicFactor = static_cast<float>(l_Pbr.metallicFactor);
