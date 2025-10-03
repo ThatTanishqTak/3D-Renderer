@@ -98,10 +98,11 @@ namespace Trident
         void SetPerformanceCaptureEnabled(bool enabled);
 
         void SetTransform(const Transform& props);
-        void SetViewport(const ViewportInfo& info) { m_Viewport = info; }
+        void SetViewport(const ViewportInfo& info);
 
         Transform GetTransform() const;
         ViewportInfo GetViewport() const { return m_Viewport; }
+        VkDescriptorSet GetViewportTexture() const;
 
         Camera& GetCamera() { return m_Camera; }
         const Camera& GetCamera() const { return m_Camera; }
@@ -156,6 +157,7 @@ namespace Trident
         VkFramebuffer m_OffscreenFramebuffer = VK_NULL_HANDLE;
         ImTextureID m_OffscreenTextureID;
         VkSampler m_OffscreenSampler = VK_NULL_HANDLE;
+        VkExtent2D m_OffscreenExtent{ 0, 0 };
 
         Buffers m_Buffers;
 
@@ -210,5 +212,7 @@ namespace Trident
         void AccumulateFrameTiming(double frameMilliseconds, double framesPerSecond, VkExtent2D extent, std::chrono::system_clock::time_point captureTimestamp);
         void UpdateFrameTimingStats();
         void ExportPerformanceCapture();
+        void DestroyOffscreenResources();
+        void CreateOrResizeOffscreenResources(VkExtent2D extent);
     };
 }

@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 #include <limits>
+#include <algorithm>
 
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -352,6 +353,40 @@ void ApplicationLayer::Run()
             }
         }
 
+        ImGui::End();
+
+        // Scene window hosts the renderer output so tooling users can iterate without leaving the editor.
+        if (ImGui::Begin("Scene"))
+        {
+            const ImVec2 l_PanelOrigin = ImGui::GetCursorScreenPos();
+            const ImVec2 l_PanelAvailable = ImGui::GetContentRegionAvail();
+
+            // Convert the UI dimensions into renderer-friendly viewport information to align the offscreen pass.
+            Trident::ViewportInfo l_Viewport{};
+            l_Viewport.Position = glm::vec2{ l_PanelOrigin.x, l_PanelOrigin.y };
+            l_Viewport.Size = glm::vec2
+            {
+                std::max(l_PanelAvailable.x, 0.0f),
+                std::max(l_PanelAvailable.y, 0.0f)
+            };
+
+            // The viewport flows Scene -> RenderCommand -> Renderer where the offscreen framebuffer is resized accordingly.
+            Trident::RenderCommand::SetViewport(l_Viewport);
+
+            const ImVec2 l_ImageSize{ l_Viewport.Size.x, l_Viewport.Size.y };
+            const VkDescriptorSet l_ViewportTexture = Trident::RenderCommand::GetViewportTexture();
+            if (l_ViewportTexture != VK_NULL_HANDLE && l_ImageSize.x > 0.0f && l_ImageSize.y > 0.0f)
+            {
+                // The descriptor connects the renderer's color attachment to ImGui so the Scene window mirrors real-time output.
+                ImGui::Image(reinterpret_cast<ImTextureID>(l_ViewportTexture), l_ImageSize);
+                // TODO: Layer additional ImGui draw data for overlays (e.g., selection outlines, safe frames).
+                // TODO: Support multiple cameras by exposing a dropdown that swaps which render target populates the panel.
+            }
+            else
+            {
+                ImGui::TextUnformatted("Scene viewport not ready.");
+            }
+        }
         ImGui::End();
 
         // Scene inspector offers basic ECS debugging hooks for the currently loaded scene.
