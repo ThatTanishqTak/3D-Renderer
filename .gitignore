@@ -1,6 +1,6 @@
 /bin
 /.vs
 /out
-/build
+/Build
 /.pdb
 *.spv
