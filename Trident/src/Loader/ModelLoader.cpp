@@ -308,6 +308,19 @@ namespace Trident
                         continue;
                     }
 
+                    // Indices are needed early because we may derive missing normals from indexed faces later.
+                    // Loading them before branching keeps the data ready for any face-normal accumulation path.
+                    std::vector<uint32_t> l_Indices{};
+                    if (l_Primitive.indices >= 0 && l_Primitive.indices < static_cast<int>(l_Model.accessors.size()))
+                    {
+                        const tinygltf::Accessor& l_IndexAccessor = l_Model.accessors[l_Primitive.indices];
+                        LoadIndices(l_Model, l_IndexAccessor, l_Indices);
+                    }
+                    else if (l_Primitive.indices >= static_cast<int>(l_Model.accessors.size()))
+                    {
+                        TR_CORE_WARN("Primitive references invalid index accessor {} - indices skipped", l_Primitive.indices);
+                    }
+
                     // Optional attributes collected into scratch arrays before building vertices
                     std::vector<glm::vec3> l_Normals{};
                     bool l_HasNormals = false;
@@ -319,8 +332,71 @@ namespace Trident
                     }
                     if (!l_HasNormals)
                     {
-                        TR_CORE_WARN("Primitive in {} is missing normals - applying default normal", filePath);
-                        // TODO: Derive missing normals procedurally when topology allows it.
+                        TR_CORE_WARN("Primitive in {} is missing normals - generating smooth normals", filePath);
+
+                        // When normals are missing we approximate them by accumulating per-face normals at each vertex.
+                        // The face normal is computed via the right-handed cross product of two triangle edges, which yields
+                        // a vector proportional to the triangle area and perpendicular to the surface. Summing these vectors
+                        // across adjacent faces and normalizing later produces smooth shading across shared vertices.
+                        l_Normals.assign(l_Positions.size(), glm::vec3(0.0f));
+
+                        bool l_GeneratedNormals = false;
+                        const auto AccumulateFaceNormal = [&](uint32_t a_Index0, uint32_t a_Index1, uint32_t a_Index2)
+                            {
+                                if (a_Index0 >= l_Positions.size() || a_Index1 >= l_Positions.size() || a_Index2 >= l_Positions.size())
+                                {
+                                    return;
+                                }
+
+                                const glm::vec3& l_Position0 = l_Positions[a_Index0];
+                                const glm::vec3& l_Position1 = l_Positions[a_Index1];
+                                const glm::vec3& l_Position2 = l_Positions[a_Index2];
+
+                                const glm::vec3 l_Edge01 = l_Position1 - l_Position0;
+                                const glm::vec3 l_Edge02 = l_Position2 - l_Position0;
+                                const glm::vec3 l_FaceNormal = glm::cross(l_Edge01, l_Edge02);
+
+                                if (glm::length2(l_FaceNormal) == 0.0f)
+                                {
+                                    return;
+                                }
+
+                                l_Normals[a_Index0] += l_FaceNormal;
+                                l_Normals[a_Index1] += l_FaceNormal;
+                                l_Normals[a_Index2] += l_FaceNormal;
+                                l_GeneratedNormals = true;
+                            };
+
+                        if (!l_Indices.empty())
+                        {
+                            for (size_t it_Index = 0; it_Index + 2 < l_Indices.size(); it_Index += 3)
+                            {
+                                const uint32_t l_Index0 = l_Indices[it_Index + 0];
+                                const uint32_t l_Index1 = l_Indices[it_Index + 1];
+                                const uint32_t l_Index2 = l_Indices[it_Index + 2];
+                                AccumulateFaceNormal(l_Index0, l_Index1, l_Index2);
+                            }
+                        }
+                        else
+                        {
+                            for (size_t it_Vertex = 0; it_Vertex + 2 < l_Positions.size(); it_Vertex += 3)
+                            {
+                                const uint32_t l_Index0 = static_cast<uint32_t>(it_Vertex + 0);
+                                const uint32_t l_Index1 = static_cast<uint32_t>(it_Vertex + 1);
+                                const uint32_t l_Index2 = static_cast<uint32_t>(it_Vertex + 2);
+                                AccumulateFaceNormal(l_Index0, l_Index1, l_Index2);
+                            }
+                        }
+
+                        if (l_GeneratedNormals)
+                        {
+                            // TODO: Revisit smoothing-group awareness or angle-weighted averaging to better respect hard edges.
+                            l_HasNormals = true;
+                        }
+                        else
+                        {
+                            l_Normals.assign(l_Positions.size(), s_DefaultNormal);
+                        }
                     }
 
                     std::vector<glm::vec4> l_Tangents{};
@@ -344,17 +420,6 @@ namespace Trident
                         LoadColors(l_Model, l_ColorAccessor, l_Colors);
                     }
 
-                    std::vector<uint32_t> l_Indices{};
-                    if (l_Primitive.indices >= 0 && l_Primitive.indices < static_cast<int>(l_Model.accessors.size()))
-                    {
-                        const tinygltf::Accessor& l_IndexAccessor = l_Model.accessors[l_Primitive.indices];
-                        LoadIndices(l_Model, l_IndexAccessor, l_Indices);
-                    }
-                    else if (l_Primitive.indices >= static_cast<int>(l_Model.accessors.size()))
-                    {
-                        TR_CORE_WARN("Primitive references invalid index accessor {} - indices skipped", l_Primitive.indices);
-                    }
-
                     l_MeshData.Vertices.resize(l_Positions.size());
                     for (size_t it_Vertex = 0; it_Vertex < l_Positions.size(); ++it_Vertex)
                     {
@@ -364,7 +429,7 @@ namespace Trident
                         l_Vertex.TexCoord = it_Vertex < l_TexCoords.size() ? l_TexCoords[it_Vertex] : glm::vec2(0.0f);
                         l_Vertex.Normal = (l_HasNormals && it_Vertex < l_Normals.size()) ? l_Normals[it_Vertex] : s_DefaultNormal;
 
-                        if (!l_HasNormals || glm::length2(l_Vertex.Normal) == 0.0f)
+                        if (glm::length2(l_Vertex.Normal) == 0.0f)
                         {
                             l_Vertex.Normal = s_DefaultNormal;
                         }
