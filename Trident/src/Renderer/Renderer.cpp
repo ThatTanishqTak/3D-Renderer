@@ -495,11 +495,10 @@ namespace Trident
     VkDescriptorSet Renderer::GetViewportTexture() const
     {
         // Provide the descriptor set that ImGui::Image expects when the viewport is active.
-        if (IsValidViewport() && m_OffscreenTextureID != nullptr)
+        if (IsValidViewport() && m_OffscreenTextureID != VK_NULL_HANDLE)
         {
-            return static_cast<VkDescriptorSet>(m_OffscreenTextureID);
+            return m_OffscreenTextureID;
         }
-
         return VK_NULL_HANDLE;
     }
 
@@ -887,10 +886,11 @@ namespace Trident
     {
         VkDevice l_Device = Application::GetDevice();
 
-        if (m_OffscreenTextureID != nullptr)
+        if (m_OffscreenTextureID != VK_NULL_HANDLE)
         {
-            ImGui_ImplVulkan_RemoveTexture(static_cast<VkDescriptorSet>(m_OffscreenTextureID));
-            m_OffscreenTextureID = nullptr;
+            // Deregister the cached descriptor so ImGui stops referencing the old image view.
+            ImGui_ImplVulkan_RemoveTexture(m_OffscreenTextureID);
+            m_OffscreenTextureID = VK_NULL_HANDLE;
         }
 
         if (m_OffscreenFramebuffer != VK_NULL_HANDLE)
@@ -1043,6 +1043,8 @@ namespace Trident
             return;
         }
 
+
+        // Register (or refresh) the descriptor used by the viewport panel and keep it cached for quick retrieval.
         m_OffscreenTextureID = ImGui_ImplVulkan_AddTexture(m_OffscreenSampler, m_OffscreenImageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         m_OffscreenExtent = extent;
 
