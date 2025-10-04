@@ -969,6 +969,7 @@ namespace Trident
         }
 
         l_Target.m_Extent = { 0, 0 };
+        l_Target.m_CurrentLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
         m_OffscreenTargets.erase(it_Target);
     }
@@ -1048,6 +1049,7 @@ namespace Trident
                 }
 
                 a_Target.m_Extent = { 0, 0 };
+                a_Target.m_CurrentLayout = VK_IMAGE_LAYOUT_UNDEFINED;
             };
 
         a_ResetTarget(target);
@@ -1203,7 +1205,7 @@ namespace Trident
         VkCommandBufferBeginInfo l_BeginInfo{ VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
         vkBeginCommandBuffer(l_CommandBuffer, &l_BeginInfo);
 
-        const OffscreenTarget* l_ActiveTarget = nullptr;
+        OffscreenTarget* l_ActiveTarget = nullptr;
         if (IsValidViewport())
         {
             const auto it_Target = m_OffscreenTargets.find(m_ActiveViewportId);
@@ -1228,6 +1230,37 @@ namespace Trident
 
         if (l_ViewportActive)
         {
+            // Ensure the offscreen image is ready for color attachment writes before we begin the render pass.
+            VkPipelineStageFlags l_PreviousStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+            VkAccessFlags l_PreviousAccess = 0;
+            if (l_ActiveTarget->m_CurrentLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+            {
+                l_PreviousStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+                l_PreviousAccess = VK_ACCESS_SHADER_READ_BIT;
+            }
+            else if (l_ActiveTarget->m_CurrentLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL)
+            {
+                l_PreviousStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+                l_PreviousAccess = VK_ACCESS_TRANSFER_READ_BIT;
+            }
+
+            VkImageMemoryBarrier l_PrepareOffscreen{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+            l_PrepareOffscreen.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            l_PrepareOffscreen.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            l_PrepareOffscreen.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            l_PrepareOffscreen.subresourceRange.baseMipLevel = 0;
+            l_PrepareOffscreen.subresourceRange.levelCount = 1;
+            l_PrepareOffscreen.subresourceRange.baseArrayLayer = 0;
+            l_PrepareOffscreen.subresourceRange.layerCount = 1;
+            l_PrepareOffscreen.oldLayout = l_ActiveTarget->m_CurrentLayout;
+            l_PrepareOffscreen.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            l_PrepareOffscreen.srcAccessMask = l_PreviousAccess;
+            l_PrepareOffscreen.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+            l_PrepareOffscreen.image = l_ActiveTarget->m_Image;
+
+            vkCmdPipelineBarrier(l_CommandBuffer, l_PreviousStage, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, nullptr, 0, nullptr, 1, &l_PrepareOffscreen);
+            l_ActiveTarget->m_CurrentLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
             // First pass: render the scene into the offscreen target that backs the editor viewport.
             VkRenderPassBeginInfo l_OffscreenPass{ VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO };
             l_OffscreenPass.renderPass = m_Pipeline.GetRenderPass();
@@ -1287,25 +1320,125 @@ namespace Trident
             l_OffscreenBarrier.subresourceRange.baseArrayLayer = 0;
             l_OffscreenBarrier.subresourceRange.layerCount = 1;
             l_OffscreenBarrier.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-            l_OffscreenBarrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            l_OffscreenBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
             l_OffscreenBarrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-            l_OffscreenBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_TRANSFER_READ_BIT;
+            l_OffscreenBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
             l_OffscreenBarrier.image = l_ActiveTarget->m_Image;
 
-            vkCmdPipelineBarrier(l_CommandBuffer, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
+            vkCmdPipelineBarrier(l_CommandBuffer, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
                 0, 0, nullptr, 0, nullptr, 1, &l_OffscreenBarrier);
+            l_ActiveTarget->m_CurrentLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
         }
 
-        // Second pass: draw the main swapchain image. We still clear to keep legacy behaviour while the viewport is optional.
+        VkImage l_SwapchainImage = m_Swapchain.GetImages()[imageIndex];
+        VkPipelineStageFlags l_SwapchainSrcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+        VkAccessFlags l_SwapchainSrcAccess = 0;
+
+        // Prepare the swapchain image for either a blit copy or an explicit clear prior to the presentation render pass.
+        VkImageMemoryBarrier l_PrepareSwapchain{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+        l_PrepareSwapchain.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        l_PrepareSwapchain.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        l_PrepareSwapchain.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        l_PrepareSwapchain.subresourceRange.baseMipLevel = 0;
+        l_PrepareSwapchain.subresourceRange.levelCount = 1;
+        l_PrepareSwapchain.subresourceRange.baseArrayLayer = 0;
+        l_PrepareSwapchain.subresourceRange.layerCount = 1;
+        l_PrepareSwapchain.oldLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        l_PrepareSwapchain.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        l_PrepareSwapchain.srcAccessMask = l_SwapchainSrcAccess;
+        l_PrepareSwapchain.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        l_PrepareSwapchain.image = l_SwapchainImage;
+
+        vkCmdPipelineBarrier(l_CommandBuffer, l_SwapchainSrcStage, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &l_PrepareSwapchain);
+
+        if (l_ViewportActive)
+        {
+            // Multi-panel path: copy the rendered viewport into the swapchain image so every editor panel sees a synchronized back buffer.
+            VkImageBlit l_BlitRegion{};
+            l_BlitRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            l_BlitRegion.srcSubresource.mipLevel = 0;
+            l_BlitRegion.srcSubresource.baseArrayLayer = 0;
+            l_BlitRegion.srcSubresource.layerCount = 1;
+            l_BlitRegion.srcOffsets[0] = { 0, 0, 0 };
+            l_BlitRegion.srcOffsets[1] = { static_cast<int32_t>(l_ActiveTarget->m_Extent.width), static_cast<int32_t>(l_ActiveTarget->m_Extent.height), 1 };
+            l_BlitRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            l_BlitRegion.dstSubresource.mipLevel = 0;
+            l_BlitRegion.dstSubresource.baseArrayLayer = 0;
+            l_BlitRegion.dstSubresource.layerCount = 1;
+            l_BlitRegion.dstOffsets[0] = { 0, 0, 0 };
+            l_BlitRegion.dstOffsets[1] = { static_cast<int32_t>(m_Swapchain.GetExtent().width), static_cast<int32_t>(m_Swapchain.GetExtent().height), 1 };
+
+            vkCmdBlitImage(l_CommandBuffer,
+                l_ActiveTarget->m_Image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                l_SwapchainImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                1, &l_BlitRegion, VK_FILTER_LINEAR);
+
+            // After the blit the ImGui descriptor still expects shader read, so return the offscreen image to that layout.
+            VkImageMemoryBarrier l_ToSample{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+            l_ToSample.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            l_ToSample.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            l_ToSample.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            l_ToSample.subresourceRange.baseMipLevel = 0;
+            l_ToSample.subresourceRange.levelCount = 1;
+            l_ToSample.subresourceRange.baseArrayLayer = 0;
+            l_ToSample.subresourceRange.layerCount = 1;
+            l_ToSample.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+            l_ToSample.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            l_ToSample.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+            l_ToSample.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            l_ToSample.image = l_ActiveTarget->m_Image;
+
+            vkCmdPipelineBarrier(l_CommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                0, 0, nullptr, 0, nullptr, 1, &l_ToSample);
+            l_ActiveTarget->m_CurrentLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+            // Future improvement: evaluate layered compositing so multiple render targets can blend before hitting the back buffer.
+        }
+        else
+        {
+            // Legacy path clear performed via transfer op now that the render pass load operation no longer performs it implicitly.
+            VkClearColorValue l_ClearValue{};
+            l_ClearValue.float32[0] = m_ClearColor.r;
+            l_ClearValue.float32[1] = m_ClearColor.g;
+            l_ClearValue.float32[2] = m_ClearColor.b;
+            l_ClearValue.float32[3] = m_ClearColor.a;
+
+            VkImageSubresourceRange l_ClearRange{};
+            l_ClearRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            l_ClearRange.baseMipLevel = 0;
+            l_ClearRange.levelCount = 1;
+            l_ClearRange.baseArrayLayer = 0;
+            l_ClearRange.layerCount = 1;
+
+            vkCmdClearColorImage(l_CommandBuffer, l_SwapchainImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &l_ClearValue, 1, &l_ClearRange);
+        }
+
+        // Transition the swapchain back to COLOR_ATTACHMENT_OPTIMAL so the render pass can output ImGui and any additional overlays.
+        VkImageMemoryBarrier l_ToColorAttachment{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+        l_ToColorAttachment.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        l_ToColorAttachment.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        l_ToColorAttachment.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        l_ToColorAttachment.subresourceRange.baseMipLevel = 0;
+        l_ToColorAttachment.subresourceRange.levelCount = 1;
+        l_ToColorAttachment.subresourceRange.baseArrayLayer = 0;
+        l_ToColorAttachment.subresourceRange.layerCount = 1;
+        l_ToColorAttachment.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        l_ToColorAttachment.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        l_ToColorAttachment.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        l_ToColorAttachment.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        l_ToColorAttachment.image = l_SwapchainImage;
+
+        vkCmdPipelineBarrier(l_CommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+            0, 0, nullptr, 0, nullptr, 1, &l_ToColorAttachment);
+
+        // Second pass: draw the main swapchain image. The attachment now preserves the blit results for multi-panel compositing.
         VkRenderPassBeginInfo l_SwapchainPass{ VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO };
         l_SwapchainPass.renderPass = m_Pipeline.GetRenderPass();
         l_SwapchainPass.framebuffer = m_Pipeline.GetFramebuffers()[imageIndex];
         l_SwapchainPass.renderArea.offset = { 0, 0 };
         l_SwapchainPass.renderArea.extent = m_Swapchain.GetExtent();
-
-        VkClearValue l_ClearColor = a_BuildClearValue();
-        l_SwapchainPass.clearValueCount = 1;
-        l_SwapchainPass.pClearValues = &l_ClearColor;
+        l_SwapchainPass.clearValueCount = 0;
+        l_SwapchainPass.pClearValues = nullptr;
 
         vkCmdBeginRenderPass(l_CommandBuffer, &l_SwapchainPass, VK_SUBPASS_CONTENTS_INLINE);
 
@@ -1345,7 +1478,8 @@ namespace Trident
         }
         else
         {
-            // TODO: Composite the offscreen viewport onto the swapchain once multiple panels are active.
+            // The multi-panel image was already blitted; leave the pass empty so UI overlays stack on top cleanly.
+            // Future improvement: extend this path to support post-processing effects before UI submission.
         }
 
         if (m_ImGuiLayer)

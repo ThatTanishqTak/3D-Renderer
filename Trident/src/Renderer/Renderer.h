@@ -167,6 +167,7 @@ namespace Trident
             VkDescriptorSet m_TextureID = VK_NULL_HANDLE;
             VkSampler m_Sampler = VK_NULL_HANDLE;
             VkExtent2D m_Extent{ 0, 0 };
+            VkImageLayout m_CurrentLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         };
 
         // Offscreen rendering resources keyed by viewport identifier so multiple panels can co-exist.
