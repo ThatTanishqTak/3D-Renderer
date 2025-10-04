@@ -156,6 +156,7 @@ namespace Trident
         VkImageView m_OffscreenImageView = VK_NULL_HANDLE;
         VkFramebuffer m_OffscreenFramebuffer = VK_NULL_HANDLE;
         // Cache the ImGui descriptor set so we can reuse the image binding across frames without re-registering it.
+        VkDescriptorSet m_OffscreenTextureID = VK_NULL_HANDLE; // Track the cached ImGui descriptor; defaults to VK_NULL_HANDLE so no extra initialization is required.
         VkSampler m_OffscreenSampler = VK_NULL_HANDLE;
         VkExtent2D m_OffscreenExtent{ 0, 0 };
 
