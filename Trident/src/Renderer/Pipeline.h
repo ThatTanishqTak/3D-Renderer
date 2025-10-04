@@ -24,6 +24,8 @@ namespace Trident
         VkPipelineLayout GetPipelineLayout() const { return m_PipelineLayout; }
         VkDescriptorSetLayout GetDescriptorSetLayout() const { return m_DescriptorSetLayout; }
         const std::vector<VkFramebuffer>& GetFramebuffers() const { return m_SwapchainFramebuffers; }
+        const std::vector<VkImage>& GetDepthImages() const { return m_SwapchainDepthImages; }
+        VkFormat GetDepthFormat() const { return m_DepthFormat; }
 
     private:
         struct ShaderStage
@@ -43,6 +45,8 @@ namespace Trident
         bool EnsureShaderBinaries();
         bool CompileShaderStage(ShaderStage& shaderStage);
         std::string LocateShaderCompiler() const;
+        VkFormat SelectDepthFormat() const;
+        uint32_t FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) const;
 
         VkShaderModule CreateShaderModule(const std::vector<char>& code);
 
@@ -52,6 +56,10 @@ namespace Trident
         VkPipeline m_GraphicsPipeline = VK_NULL_HANDLE;
         VkDescriptorSetLayout m_DescriptorSetLayout = VK_NULL_HANDLE;
         std::vector<VkFramebuffer> m_SwapchainFramebuffers;
+        std::vector<VkImage> m_SwapchainDepthImages;
+        std::vector<VkDeviceMemory> m_SwapchainDepthMemory;
+        std::vector<VkImageView> m_SwapchainDepthImageViews;
+        VkFormat m_DepthFormat = VK_FORMAT_UNDEFINED;
         std::vector<ShaderStage> m_ShaderStages;
     };
 }

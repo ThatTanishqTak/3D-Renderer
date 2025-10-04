@@ -71,6 +71,7 @@ namespace Trident
         m_Swapchain.Init();
         // Reset the cached swapchain image layouts so new back buffers start from a known undefined state.
         m_SwapchainImageLayouts.assign(m_Swapchain.GetImageCount(), VK_IMAGE_LAYOUT_UNDEFINED);
+        m_SwapchainDepthLayouts.assign(m_Swapchain.GetImageCount(), VK_IMAGE_LAYOUT_UNDEFINED);
         m_Pipeline.Init(m_Swapchain);
         m_Commands.Init(m_Swapchain.GetImageCount());
 
@@ -636,6 +637,7 @@ namespace Trident
         m_Swapchain.Init();
         // Whenever the swapchain rebuilds, reset the cached layouts because new images arrive in an undefined state.
         m_SwapchainImageLayouts.assign(m_Swapchain.GetImageCount(), VK_IMAGE_LAYOUT_UNDEFINED);
+        m_SwapchainDepthLayouts.assign(m_Swapchain.GetImageCount(), VK_IMAGE_LAYOUT_UNDEFINED);
 
         // Rebuild the swapchain-backed framebuffers so that they point at the freshly created images.
         m_Pipeline.RecreateFramebuffers(m_Swapchain);
@@ -990,16 +992,33 @@ namespace Trident
             l_Target.m_Framebuffer = VK_NULL_HANDLE;
         }
 
+        if (l_Target.m_DepthView != VK_NULL_HANDLE)
+        {
+            vkDestroyImageView(l_Device, l_Target.m_DepthView, nullptr);
+            l_Target.m_DepthView = VK_NULL_HANDLE;
+        }
+
         if (l_Target.m_ImageView != VK_NULL_HANDLE)
         {
             vkDestroyImageView(l_Device, l_Target.m_ImageView, nullptr);
             l_Target.m_ImageView = VK_NULL_HANDLE;
         }
 
+        if (l_Target.m_DepthImage != VK_NULL_HANDLE)
+        {
+            vkDestroyImage(l_Device, l_Target.m_DepthImage, nullptr);
+            l_Target.m_DepthImage = VK_NULL_HANDLE;
+        }
+
         if (l_Target.m_Image != VK_NULL_HANDLE)
         {
             vkDestroyImage(l_Device, l_Target.m_Image, nullptr);
             l_Target.m_Image = VK_NULL_HANDLE;
+        }
+        if (l_Target.m_DepthMemory != VK_NULL_HANDLE)
+        {
+            vkFreeMemory(l_Device, l_Target.m_DepthMemory, nullptr);
+            l_Target.m_DepthMemory = VK_NULL_HANDLE;
         }
 
         if (l_Target.m_Memory != VK_NULL_HANDLE)
@@ -1016,6 +1035,7 @@ namespace Trident
 
         l_Target.m_Extent = { 0, 0 };
         l_Target.m_CurrentLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        l_Target.m_DepthLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
         m_OffscreenTargets.erase(it_Target);
     }
@@ -1070,16 +1090,34 @@ namespace Trident
                     a_Target.m_Framebuffer = VK_NULL_HANDLE;
                 }
 
+                if (a_Target.m_DepthView != VK_NULL_HANDLE)
+                {
+                    vkDestroyImageView(l_Device, a_Target.m_DepthView, nullptr);
+                    a_Target.m_DepthView = VK_NULL_HANDLE;
+                }
+
                 if (a_Target.m_ImageView != VK_NULL_HANDLE)
                 {
                     vkDestroyImageView(l_Device, a_Target.m_ImageView, nullptr);
                     a_Target.m_ImageView = VK_NULL_HANDLE;
                 }
 
+                if (a_Target.m_DepthImage != VK_NULL_HANDLE)
+                {
+                    vkDestroyImage(l_Device, a_Target.m_DepthImage, nullptr);
+                    a_Target.m_DepthImage = VK_NULL_HANDLE;
+                }
+
                 if (a_Target.m_Image != VK_NULL_HANDLE)
                 {
                     vkDestroyImage(l_Device, a_Target.m_Image, nullptr);
                     a_Target.m_Image = VK_NULL_HANDLE;
+                }
+
+                if (a_Target.m_DepthMemory != VK_NULL_HANDLE)
+                {
+                    vkFreeMemory(l_Device, a_Target.m_DepthMemory, nullptr);
+                    a_Target.m_DepthMemory = VK_NULL_HANDLE;
                 }
 
                 if (a_Target.m_Memory != VK_NULL_HANDLE)
@@ -1096,6 +1134,7 @@ namespace Trident
 
                 a_Target.m_Extent = { 0, 0 };
                 a_Target.m_CurrentLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+                a_Target.m_DepthLayout = VK_IMAGE_LAYOUT_UNDEFINED;
             };
 
         a_ResetTarget(target);
@@ -1165,10 +1204,72 @@ namespace Trident
             return;
         }
 
+        // Mirror the swapchain depth handling so editor viewports respect the same occlusion rules.
+        VkImageCreateInfo l_DepthInfo{ VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO };
+        l_DepthInfo.imageType = VK_IMAGE_TYPE_2D;
+        l_DepthInfo.extent.width = extent.width;
+        l_DepthInfo.extent.height = extent.height;
+        l_DepthInfo.extent.depth = 1;
+        l_DepthInfo.mipLevels = 1;
+        l_DepthInfo.arrayLayers = 1;
+        l_DepthInfo.format = m_Pipeline.GetDepthFormat();
+        l_DepthInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+        l_DepthInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        l_DepthInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+        l_DepthInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        l_DepthInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+
+        if (vkCreateImage(l_Device, &l_DepthInfo, nullptr, &target.m_DepthImage) != VK_SUCCESS)
+        {
+            TR_CORE_CRITICAL("Failed to create offscreen depth image");
+
+            a_ResetTarget(target);
+
+            return;
+        }
+
+        VkMemoryRequirements l_DepthRequirements{};
+        vkGetImageMemoryRequirements(l_Device, target.m_DepthImage, &l_DepthRequirements);
+
+        VkMemoryAllocateInfo l_DepthAllocate{ VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO };
+        l_DepthAllocate.allocationSize = l_DepthRequirements.size;
+        l_DepthAllocate.memoryTypeIndex = m_Buffers.FindMemoryType(l_DepthRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+        if (vkAllocateMemory(l_Device, &l_DepthAllocate, nullptr, &target.m_DepthMemory) != VK_SUCCESS)
+        {
+            TR_CORE_CRITICAL("Failed to allocate offscreen depth memory");
+
+            a_ResetTarget(target);
+
+            return;
+        }
+
+        vkBindImageMemory(l_Device, target.m_DepthImage, target.m_DepthMemory, 0);
+
+        VkImageViewCreateInfo l_DepthViewInfo{ VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
+        l_DepthViewInfo.image = target.m_DepthImage;
+        l_DepthViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        l_DepthViewInfo.format = l_DepthInfo.format;
+        l_DepthViewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+        l_DepthViewInfo.subresourceRange.baseMipLevel = 0;
+        l_DepthViewInfo.subresourceRange.levelCount = 1;
+        l_DepthViewInfo.subresourceRange.baseArrayLayer = 0;
+        l_DepthViewInfo.subresourceRange.layerCount = 1;
+
+        if (vkCreateImageView(l_Device, &l_DepthViewInfo, nullptr, &target.m_DepthView) != VK_SUCCESS)
+        {
+            TR_CORE_CRITICAL("Failed to create offscreen depth view");
+
+            a_ResetTarget(target);
+
+            return;
+        }
+
+        std::array<VkImageView, 2> l_FramebufferAttachments{ target.m_ImageView, target.m_DepthView };
         VkFramebufferCreateInfo l_FramebufferInfo{ VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO };
         l_FramebufferInfo.renderPass = m_Pipeline.GetRenderPass();
-        l_FramebufferInfo.attachmentCount = 1;
-        l_FramebufferInfo.pAttachments = &target.m_ImageView;
+        l_FramebufferInfo.attachmentCount = static_cast<uint32_t>(l_FramebufferAttachments.size());
+        l_FramebufferInfo.pAttachments = l_FramebufferAttachments.data();
         l_FramebufferInfo.width = extent.width;
         l_FramebufferInfo.height = extent.height;
         l_FramebufferInfo.layers = 1;
@@ -1212,6 +1313,7 @@ namespace Trident
         // Register (or refresh) the descriptor used by the viewport panel and keep it cached for quick retrieval.
         target.m_TextureID = ImGui_ImplVulkan_AddTexture(target.m_Sampler, target.m_ImageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         target.m_Extent = extent;
+        target.m_DepthLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
         TR_CORE_TRACE("Offscreen render target resized to {}x{}", extent.width, extent.height);
     }
@@ -1290,6 +1392,31 @@ namespace Trident
                 l_PreviousAccess = VK_ACCESS_TRANSFER_READ_BIT;
             }
 
+            VkPipelineStageFlags l_DepthPreviousStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+            VkAccessFlags l_DepthPreviousAccess = 0;
+            if (l_ActiveTarget->m_DepthLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
+            {
+                l_DepthPreviousStage = VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+                l_DepthPreviousAccess = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+            }
+
+            VkImageMemoryBarrier l_PrepareDepth{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+            l_PrepareDepth.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            l_PrepareDepth.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            l_PrepareDepth.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+            l_PrepareDepth.subresourceRange.baseMipLevel = 0;
+            l_PrepareDepth.subresourceRange.levelCount = 1;
+            l_PrepareDepth.subresourceRange.baseArrayLayer = 0;
+            l_PrepareDepth.subresourceRange.layerCount = 1;
+            l_PrepareDepth.oldLayout = l_ActiveTarget->m_DepthLayout;
+            l_PrepareDepth.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+            l_PrepareDepth.srcAccessMask = l_DepthPreviousAccess;
+            l_PrepareDepth.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+            l_PrepareDepth.image = l_ActiveTarget->m_DepthImage;
+
+            vkCmdPipelineBarrier(l_CommandBuffer, l_DepthPreviousStage, VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, 0, 0, nullptr, 0, nullptr, 1, &l_PrepareDepth);
+            l_ActiveTarget->m_DepthLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
             VkImageMemoryBarrier l_PrepareOffscreen{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
             l_PrepareOffscreen.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
             l_PrepareOffscreen.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -1315,9 +1442,12 @@ namespace Trident
             l_OffscreenPass.renderArea.extent = l_ActiveTarget->m_Extent;
 
             // Reuse the configured clear colour for both render passes so the viewport preview matches the swapchain output.
-            VkClearValue l_OffscreenClear = a_BuildClearValue();
-            l_OffscreenPass.clearValueCount = 1;
-            l_OffscreenPass.pClearValues = &l_OffscreenClear;
+            std::array<VkClearValue, 2> l_OffscreenClearValues{};
+            l_OffscreenClearValues[0] = a_BuildClearValue();
+            l_OffscreenClearValues[1].depthStencil.depth = 1.0f;
+            l_OffscreenClearValues[1].depthStencil.stencil = 0;
+            l_OffscreenPass.clearValueCount = static_cast<uint32_t>(l_OffscreenClearValues.size());
+            l_OffscreenPass.pClearValues = l_OffscreenClearValues.data();
 
             vkCmdBeginRenderPass(l_CommandBuffer, &l_OffscreenPass, VK_SUBPASS_CONTENTS_INLINE);
 
@@ -1377,6 +1507,12 @@ namespace Trident
         }
 
         VkImage l_SwapchainImage = m_Swapchain.GetImages()[imageIndex];
+        VkImage l_SwapchainDepthImage = VK_NULL_HANDLE;
+        const auto& l_DepthImages = m_Pipeline.GetDepthImages();
+        if (imageIndex < l_DepthImages.size())
+        {
+            l_SwapchainDepthImage = l_DepthImages[imageIndex];
+        }
         VkPipelineStageFlags l_SwapchainSrcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
         VkAccessFlags l_SwapchainSrcAccess = 0;
         VkImageLayout l_PreviousLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -1516,14 +1652,57 @@ namespace Trident
             m_SwapchainImageLayouts[imageIndex] = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
         }
 
+        if (l_SwapchainDepthImage != VK_NULL_HANDLE)
+        {
+            VkPipelineStageFlags l_DepthSrcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+            VkAccessFlags l_DepthSrcAccess = 0;
+            VkImageLayout l_PreviousDepthLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            if (imageIndex < m_SwapchainDepthLayouts.size())
+            {
+                l_PreviousDepthLayout = m_SwapchainDepthLayouts[imageIndex];
+            }
+
+            if (l_PreviousDepthLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
+            {
+                l_DepthSrcStage = VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+                l_DepthSrcAccess = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+            }
+
+            VkImageMemoryBarrier l_PrepareDepthAttachment{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+            l_PrepareDepthAttachment.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            l_PrepareDepthAttachment.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            l_PrepareDepthAttachment.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+            l_PrepareDepthAttachment.subresourceRange.baseMipLevel = 0;
+            l_PrepareDepthAttachment.subresourceRange.levelCount = 1;
+            l_PrepareDepthAttachment.subresourceRange.baseArrayLayer = 0;
+            l_PrepareDepthAttachment.subresourceRange.layerCount = 1;
+            l_PrepareDepthAttachment.oldLayout = l_PreviousDepthLayout;
+            l_PrepareDepthAttachment.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+            l_PrepareDepthAttachment.srcAccessMask = l_DepthSrcAccess;
+            l_PrepareDepthAttachment.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+            l_PrepareDepthAttachment.image = l_SwapchainDepthImage;
+
+            vkCmdPipelineBarrier(l_CommandBuffer, l_DepthSrcStage, VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, 0, 0, nullptr, 0, nullptr, 1, &l_PrepareDepthAttachment);
+
+            if (imageIndex < m_SwapchainDepthLayouts.size())
+            {
+                m_SwapchainDepthLayouts[imageIndex] = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+            }
+        }
+
         // Second pass: draw the main swapchain image. The attachment now preserves the blit results for multi-panel compositing.
         VkRenderPassBeginInfo l_SwapchainPass{ VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO };
         l_SwapchainPass.renderPass = m_Pipeline.GetRenderPass();
         l_SwapchainPass.framebuffer = m_Pipeline.GetFramebuffers()[imageIndex];
         l_SwapchainPass.renderArea.offset = { 0, 0 };
         l_SwapchainPass.renderArea.extent = m_Swapchain.GetExtent();
-        l_SwapchainPass.clearValueCount = 0;
-        l_SwapchainPass.pClearValues = nullptr;
+        // Provide both colour and depth clear values; the colour entry is ignored because the attachment loads, but depth needs a fresh 1.0f each frame.
+        std::array<VkClearValue, 2> l_SwapchainClearValues{};
+        l_SwapchainClearValues[0] = a_BuildClearValue();
+        l_SwapchainClearValues[1].depthStencil.depth = 1.0f;
+        l_SwapchainClearValues[1].depthStencil.stencil = 0;
+        l_SwapchainPass.clearValueCount = static_cast<uint32_t>(l_SwapchainClearValues.size());
+        l_SwapchainPass.pClearValues = l_SwapchainClearValues.data();
 
         vkCmdBeginRenderPass(l_CommandBuffer, &l_SwapchainPass, VK_SUBPASS_CONTENTS_INLINE);
 

@@ -180,11 +180,15 @@ namespace Trident
             VkImage m_Image = VK_NULL_HANDLE;
             VkDeviceMemory m_Memory = VK_NULL_HANDLE;
             VkImageView m_ImageView = VK_NULL_HANDLE;
+            VkImage m_DepthImage = VK_NULL_HANDLE;
+            VkDeviceMemory m_DepthMemory = VK_NULL_HANDLE;
+            VkImageView m_DepthView = VK_NULL_HANDLE;
             VkFramebuffer m_Framebuffer = VK_NULL_HANDLE;
             VkDescriptorSet m_TextureID = VK_NULL_HANDLE;
             VkSampler m_Sampler = VK_NULL_HANDLE;
             VkExtent2D m_Extent{ 0, 0 };
             VkImageLayout m_CurrentLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            VkImageLayout m_DepthLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         };
 
         // Offscreen rendering resources keyed by viewport identifier so multiple panels can co-exist.
@@ -226,6 +230,7 @@ namespace Trident
         bool m_PerformanceCaptureEnabled = false;
         std::vector<FrameTimingSample> m_PerformanceCaptureBuffer;
         std::chrono::system_clock::time_point m_PerformanceCaptureStartTime{};
+        std::vector<VkImageLayout> m_SwapchainDepthLayouts;
 
     private:
         // Core setup

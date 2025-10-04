@@ -63,6 +63,35 @@ namespace Trident
         }
 
         m_SwapchainFramebuffers.clear();
+
+        // Tear down swapchain depth attachments so future recreations can allocate fresh images.
+        for (VkImageView it_View : m_SwapchainDepthImageViews)
+        {
+            if (it_View != VK_NULL_HANDLE)
+            {
+                vkDestroyImageView(Application::GetDevice(), it_View, nullptr);
+            }
+        }
+
+        for (VkImage it_Image : m_SwapchainDepthImages)
+        {
+            if (it_Image != VK_NULL_HANDLE)
+            {
+                vkDestroyImage(Application::GetDevice(), it_Image, nullptr);
+            }
+        }
+
+        for (VkDeviceMemory it_Memory : m_SwapchainDepthMemory)
+        {
+            if (it_Memory != VK_NULL_HANDLE)
+            {
+                vkFreeMemory(Application::GetDevice(), it_Memory, nullptr);
+            }
+        }
+
+        m_SwapchainDepthImageViews.clear();
+        m_SwapchainDepthImages.clear();
+        m_SwapchainDepthMemory.clear();
     }
 
     void Pipeline::DestroyGraphicsPipeline()
@@ -260,9 +289,47 @@ namespace Trident
         return {};
     }
 
+    VkFormat Pipeline::SelectDepthFormat() const
+    {
+        // Prefer higher precision formats so that cascaded shadow maps or SSAO integrations remain stable in the future.
+        const std::array<VkFormat, 3> l_Candidates{ VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT };
+        for (VkFormat l_Format : l_Candidates)
+        {
+            VkFormatProperties l_Properties{};
+            vkGetPhysicalDeviceFormatProperties(Application::GetPhysicalDevice(), l_Format, &l_Properties);
+            if ((l_Properties.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0)
+            {
+                return l_Format;
+            }
+        }
+
+        TR_CORE_CRITICAL("Failed to locate a supported depth format; falling back to VK_FORMAT_D32_SFLOAT");
+        return VK_FORMAT_D32_SFLOAT;
+    }
+
+    uint32_t Pipeline::FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) const
+    {
+        VkPhysicalDeviceMemoryProperties l_MemoryProperties{};
+        vkGetPhysicalDeviceMemoryProperties(Application::GetPhysicalDevice(), &l_MemoryProperties);
+
+        for (uint32_t i = 0; i < l_MemoryProperties.memoryTypeCount; ++i)
+        {
+            if ((typeFilter & (1u << i)) && (l_MemoryProperties.memoryTypes[i].propertyFlags & properties) == properties)
+            {
+                return i;
+            }
+        }
+
+        TR_CORE_CRITICAL("Failed to find suitable memory type (typeFilter = {}, properties = 0x{:X})", typeFilter, properties);
+        return 0;
+    }
+
     void Pipeline::CreateRenderPass(Swapchain& swapchain)
     {
         TR_CORE_TRACE("Creating Render Pass");
+
+        // Locate a depth format that is compatible with the current GPU; this keeps the renderer portable across vendors.
+        m_DepthFormat = SelectDepthFormat();
 
         VkAttachmentDescription l_ColorAttachment{};
         l_ColorAttachment.format = swapchain.GetImageFormat();
@@ -275,26 +342,42 @@ namespace Trident
         l_ColorAttachment.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
         l_ColorAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
+        VkAttachmentDescription l_DepthAttachment{};
+        l_DepthAttachment.format = m_DepthFormat;
+        l_DepthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+        l_DepthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        l_DepthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        l_DepthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        l_DepthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        l_DepthAttachment.initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+        l_DepthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
         VkAttachmentReference l_colorAttachmentReference{};
         l_colorAttachmentReference.attachment = 0;
         l_colorAttachmentReference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+        VkAttachmentReference l_DepthAttachmentReference{};
+        l_DepthAttachmentReference.attachment = 1;
+        l_DepthAttachmentReference.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
         VkSubpassDescription l_Subpass{};
         l_Subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
         l_Subpass.colorAttachmentCount = 1;
         l_Subpass.pColorAttachments = &l_colorAttachmentReference;
+        l_Subpass.pDepthStencilAttachment = &l_DepthAttachmentReference;
 
         VkSubpassDependency l_Dependency{};
         l_Dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
         l_Dependency.dstSubpass = 0;
-        l_Dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        l_Dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
         l_Dependency.srcAccessMask = 0;
-        l_Dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        l_Dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        l_Dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+        l_Dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 
+        std::array<VkAttachmentDescription, 2> l_Attachments{ l_ColorAttachment, l_DepthAttachment };
         VkRenderPassCreateInfo l_RenderPassInfo{ VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO };
-        l_RenderPassInfo.attachmentCount = 1;
-        l_RenderPassInfo.pAttachments = &l_ColorAttachment;
+        l_RenderPassInfo.attachmentCount = static_cast<uint32_t>(l_Attachments.size());
+        l_RenderPassInfo.pAttachments = l_Attachments.data();
         l_RenderPassInfo.subpassCount = 1;
         l_RenderPassInfo.pSubpasses = &l_Subpass;
         l_RenderPassInfo.dependencyCount = 1;
@@ -452,6 +535,14 @@ namespace Trident
         l_ColorBlending.attachmentCount = 1;
         l_ColorBlending.pAttachments = &l_ColorBlendAttachment;
 
+        // Enable depth testing so geometry renders with proper occlusion; less-or-equal supports skybox depth of 1.0f.
+        VkPipelineDepthStencilStateCreateInfo l_DepthStencil{ VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO };
+        l_DepthStencil.depthTestEnable = VK_TRUE;
+        l_DepthStencil.depthWriteEnable = VK_TRUE;
+        l_DepthStencil.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+        l_DepthStencil.depthBoundsTestEnable = VK_FALSE;
+        l_DepthStencil.stencilTestEnable = VK_FALSE;
+
         VkDynamicState l_DynamicStates[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
         VkPipelineDynamicStateCreateInfo l_DynamicState{};
         l_DynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
@@ -482,7 +573,7 @@ namespace Trident
         l_PipelineInfo.pViewportState = &l_ViewportState;
         l_PipelineInfo.pRasterizationState = &l_Rasterizer;
         l_PipelineInfo.pMultisampleState = &l_Multisampling;
-        l_PipelineInfo.pDepthStencilState = nullptr;
+        l_PipelineInfo.pDepthStencilState = &l_DepthStencil;
         l_PipelineInfo.pColorBlendState = &l_ColorBlending;
         l_PipelineInfo.pDynamicState = &l_DynamicState;
         l_PipelineInfo.layout = m_PipelineLayout;
@@ -521,21 +612,80 @@ namespace Trident
     {
         TR_CORE_TRACE("Creating Framebuffers");
 
-        m_SwapchainFramebuffers.resize(swapchain.GetImageViews().size());
+        const VkDevice l_Device = Application::GetDevice();
+        const size_t l_ImageCount = swapchain.GetImageViews().size();
 
-        for (size_t i = 0; i < swapchain.GetImageViews().size(); ++i)
+        m_SwapchainFramebuffers.resize(l_ImageCount);
+        m_SwapchainDepthImages.assign(l_ImageCount, VK_NULL_HANDLE);
+        m_SwapchainDepthMemory.assign(l_ImageCount, VK_NULL_HANDLE);
+        m_SwapchainDepthImageViews.assign(l_ImageCount, VK_NULL_HANDLE);
+
+        for (size_t i = 0; i < l_ImageCount; ++i)
         {
-            VkImageView l_Attachments[] = { swapchain.GetImageViews()[i] };
+            // Create a dedicated depth image for each swapchain back buffer so layout transitions remain independent per frame.
+            VkImageCreateInfo l_DepthInfo{ VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO };
+            l_DepthInfo.imageType = VK_IMAGE_TYPE_2D;
+            l_DepthInfo.extent.width = swapchain.GetExtent().width;
+            l_DepthInfo.extent.height = swapchain.GetExtent().height;
+            l_DepthInfo.extent.depth = 1;
+            l_DepthInfo.mipLevels = 1;
+            l_DepthInfo.arrayLayers = 1;
+            l_DepthInfo.format = m_DepthFormat;
+            l_DepthInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+            l_DepthInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            l_DepthInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+            l_DepthInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+            l_DepthInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+            if (vkCreateImage(l_Device, &l_DepthInfo, nullptr, &m_SwapchainDepthImages[i]) != VK_SUCCESS)
+            {
+                TR_CORE_CRITICAL("Failed to create depth image for swapchain framebuffer {}", i);
+                continue;
+            }
+
+            VkMemoryRequirements l_DepthRequirements{};
+            vkGetImageMemoryRequirements(l_Device, m_SwapchainDepthImages[i], &l_DepthRequirements);
+
+            VkMemoryAllocateInfo l_AllocateInfo{ VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO };
+            l_AllocateInfo.allocationSize = l_DepthRequirements.size;
+            l_AllocateInfo.memoryTypeIndex = FindMemoryType(l_DepthRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+            if (vkAllocateMemory(l_Device, &l_AllocateInfo, nullptr, &m_SwapchainDepthMemory[i]) != VK_SUCCESS)
+            {
+                TR_CORE_CRITICAL("Failed to allocate depth memory for swapchain framebuffer {}", i);
+                continue;
+            }
+
+            vkBindImageMemory(l_Device, m_SwapchainDepthImages[i], m_SwapchainDepthMemory[i], 0);
+
+            VkImageViewCreateInfo l_DepthViewInfo{ VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
+            l_DepthViewInfo.image = m_SwapchainDepthImages[i];
+            l_DepthViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+            l_DepthViewInfo.format = m_DepthFormat;
+            l_DepthViewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+            l_DepthViewInfo.subresourceRange.baseMipLevel = 0;
+            l_DepthViewInfo.subresourceRange.levelCount = 1;
+            l_DepthViewInfo.subresourceRange.baseArrayLayer = 0;
+            l_DepthViewInfo.subresourceRange.layerCount = 1;
+
+            if (vkCreateImageView(l_Device, &l_DepthViewInfo, nullptr, &m_SwapchainDepthImageViews[i]) != VK_SUCCESS)
+            {
+                TR_CORE_CRITICAL("Failed to create depth view for swapchain framebuffer {}", i);
+                continue;
+            }
+
+            std::array<VkImageView, 2> l_Attachments{ swapchain.GetImageViews()[i], m_SwapchainDepthImageViews[i] };
+            // Future improvement: upgrade these attachments to support MSAA or a dedicated depth pre-pass when post effects arrive.
 
             VkFramebufferCreateInfo l_FramebufferInfo{ VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO };
             l_FramebufferInfo.renderPass = m_RenderPass;
-            l_FramebufferInfo.attachmentCount = 1;
-            l_FramebufferInfo.pAttachments = l_Attachments;
+            l_FramebufferInfo.attachmentCount = static_cast<uint32_t>(l_Attachments.size());
+            l_FramebufferInfo.pAttachments = l_Attachments.data();
             l_FramebufferInfo.width = swapchain.GetExtent().width;
             l_FramebufferInfo.height = swapchain.GetExtent().height;
             l_FramebufferInfo.layers = 1;
 
-            if (vkCreateFramebuffer(Application::GetDevice(), &l_FramebufferInfo, nullptr, &m_SwapchainFramebuffers[i]) != VK_SUCCESS)
+            if (vkCreateFramebuffer(l_Device, &l_FramebufferInfo, nullptr, &m_SwapchainFramebuffers[i]) != VK_SUCCESS)
             {
                 TR_CORE_CRITICAL("Failed to create it_Framebuffer {}", i);
             }
