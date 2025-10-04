@@ -16,6 +16,7 @@
 
 #include "ECS/Entity.h"
 #include "Camera/Camera.h"
+#include "Camera/CameraComponent.h"
 
 #include <vulkan/vulkan.h>
 #include <glm/glm.hpp>
@@ -106,10 +107,12 @@ namespace Trident
 
         void SetTransform(const Transform& props);
         void SetViewport(const ViewportInfo& info);
+        void SetViewportCamera(ECS::Entity cameraEntity);
 
         Transform GetTransform() const;
         ViewportInfo GetViewport() const { return m_Viewport; }
         VkDescriptorSet GetViewportTexture() const;
+        ECS::Entity GetViewportCamera() const { return m_ViewportCamera; }
 
         Camera& GetCamera() { return m_Camera; }
         const Camera& GetCamera() const { return m_Camera; }
@@ -128,6 +131,17 @@ namespace Trident
         bool m_Shutdown = false;
 
     private:
+        struct CameraSnapshot
+        {
+            glm::mat4 View{ 1.0f };
+            glm::vec3 Position{ 0.0f };
+            float FieldOfView = 45.0f;
+            float NearClip = 0.1f;
+            float FarClip = 100.0f;
+        };
+
+        CameraSnapshot ResolveViewportCamera() const;
+
         // Swapchain
         Swapchain m_Swapchain;
 
@@ -173,6 +187,7 @@ namespace Trident
         // Offscreen rendering resources keyed by viewport identifier so multiple panels can co-exist.
         std::unordered_map<uint32_t, OffscreenTarget> m_OffscreenTargets;
         uint32_t m_ActiveViewportId = 0;
+        ECS::Entity m_ViewportCamera = std::numeric_limits<ECS::Entity>::max();
 
         Buffers m_Buffers;
 

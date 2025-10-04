@@ -13,10 +13,12 @@
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtx/euler_angles.hpp>
 #include <glm/gtx/matrix_decompose.hpp>
+#include <glm/gtc/matrix_inverse.hpp>
 
 #include "UI/FileDialog.h"
 #include "Loader/ModelLoader.h"
 #include "Loader/TextureLoader.h"
+#include "Camera/CameraComponent.h"
 #include "Renderer/RenderCommand.h"
 #include "Renderer/Renderer.h"
 
@@ -67,6 +69,10 @@ namespace
 
     // Persistently tracked selection so the gizmo can render even when the inspector panel is closed.
     Trident::ECS::Entity s_SelectedEntity = s_InvalidEntity;
+    // Tracks which camera should drive the scene viewport; defaults to the free-flight editor camera.
+    Trident::ECS::Entity s_SelectedViewportCamera = s_InvalidEntity;
+    // Remember the combo-box selection index so the UI remains sticky across frames.
+    int s_SelectedCameraIndex = 0;
 }
 
 ApplicationLayer::ApplicationLayer()
@@ -378,6 +384,64 @@ void ApplicationLayer::Run()
             // The viewport flows Scene -> RenderCommand -> Renderer where the offscreen framebuffer is resized accordingly.
             Trident::RenderCommand::SetViewport(l_Viewport);
 
+            Trident::ECS::Registry& l_Registry = Trident::Application::GetRegistry();
+
+            struct SceneCameraOption
+            {
+                Trident::ECS::Entity Entity = s_InvalidEntity;
+                std::string Label{};
+            };
+
+            std::vector<SceneCameraOption> l_CameraOptions{};
+            l_CameraOptions.reserve(8);
+            l_CameraOptions.push_back({ s_InvalidEntity, "Editor Camera (Free)" });
+
+            const std::vector<Trident::ECS::Entity>& l_AllEntities = l_Registry.GetEntities();
+            for (Trident::ECS::Entity it_Entity : l_AllEntities)
+            {
+                if (!l_Registry.HasComponent<Trident::CameraComponent>(it_Entity))
+                {
+                    continue;
+                }
+
+                const Trident::CameraComponent& l_CameraComponent = l_Registry.GetComponent<Trident::CameraComponent>(it_Entity);
+                std::string l_Label = l_CameraComponent.Name;
+                if (l_Label.empty())
+                {
+                    l_Label = "Camera " + std::to_string(static_cast<unsigned int>(it_Entity));
+                }
+
+                l_CameraOptions.push_back({ it_Entity, std::move(l_Label) });
+            }
+
+            if (s_SelectedCameraIndex >= static_cast<int>(l_CameraOptions.size()))
+            {
+                s_SelectedCameraIndex = 0;
+            }
+
+            const auto a_ItemGetter = [](void* a_UserData, int a_Index, const char** a_OutText) -> bool
+                {
+                    auto* l_Options = static_cast<std::vector<SceneCameraOption>*>(a_UserData);
+                    if (a_Index < 0 || a_Index >= static_cast<int>(l_Options->size()))
+                    {
+                        return false;
+                    }
+
+                    *a_OutText = (*l_Options)[a_Index].Label.c_str();
+                    return true;
+                };
+
+            const bool l_CameraChanged = ImGui::Combo("Viewport Camera", &s_SelectedCameraIndex, a_ItemGetter, static_cast<void*>(&l_CameraOptions), static_cast<int>(l_CameraOptions.size()));
+
+            const Trident::ECS::Entity l_CurrentCameraEntity = l_CameraOptions[s_SelectedCameraIndex].Entity;
+            if (l_CameraChanged || l_CurrentCameraEntity != s_SelectedViewportCamera)
+            {
+                s_SelectedViewportCamera = l_CurrentCameraEntity;
+                Trident::RenderCommand::SetViewportCamera(s_SelectedViewportCamera);
+            }
+
+            // Future growth: expose per-camera overrides (exposure, tone mapping) or allow multi-view layouts pinned to favourite cameras.
+
             glm::vec4 l_ClearColor = Trident::RenderCommand::GetClearColor();
             // Keeping the editor control ready for future per-scene presets and themed viewports.
             if (ImGui::ColorEdit4("Clear Color", glm::value_ptr(l_ClearColor)))
@@ -397,6 +461,36 @@ void ApplicationLayer::Run()
                 const ImVec2 l_ImageMin = ImGui::GetItemRectMin();
                 const ImVec2 l_ImageMax = ImGui::GetItemRectMax();
                 const ImVec2 l_ImageExtent{ l_ImageMax.x - l_ImageMin.x, l_ImageMax.y - l_ImageMin.y };
+
+                glm::mat4 l_ViewMatrix{ 1.0f };
+                float l_FieldOfViewDegrees = 45.0f;
+                float l_NearClipDistance = 0.1f;
+                float l_FarClipDistance = 100.0f;
+
+                if (s_SelectedViewportCamera != s_InvalidEntity && l_Registry.HasComponent<Trident::CameraComponent>(s_SelectedViewportCamera)
+                    && l_Registry.HasComponent<Trident::Transform>(s_SelectedViewportCamera))
+                {
+                    const Trident::CameraComponent& l_CameraComponent = l_Registry.GetComponent<Trident::CameraComponent>(s_SelectedViewportCamera);
+                    const Trident::Transform& l_CameraTransform = l_Registry.GetComponent<Trident::Transform>(s_SelectedViewportCamera);
+
+                    const glm::mat4 l_ModelMatrix = ComposeTransform(l_CameraTransform);
+                    l_ViewMatrix = glm::inverse(l_ModelMatrix);
+                    l_FieldOfViewDegrees = l_CameraComponent.FieldOfView;
+                    l_NearClipDistance = l_CameraComponent.NearClip;
+                    l_FarClipDistance = l_CameraComponent.FarClip;
+                }
+                else
+                {
+                    Trident::Camera& l_EditorCamera = Trident::Application::GetRenderer().GetCamera();
+                    l_ViewMatrix = l_EditorCamera.GetViewMatrix();
+                    l_FieldOfViewDegrees = l_EditorCamera.GetFOV();
+                    l_NearClipDistance = l_EditorCamera.GetNearClip();
+                    l_FarClipDistance = l_EditorCamera.GetFarClip();
+                }
+
+                const float l_AspectRatio = l_ImageExtent.y > 0.0f ? l_ImageExtent.x / l_ImageExtent.y : 1.0f;
+                glm::mat4 l_ProjectionMatrix = glm::perspective(glm::radians(l_FieldOfViewDegrees), l_AspectRatio, l_NearClipDistance, l_FarClipDistance);
+                l_ProjectionMatrix[1][1] *= -1.0f;
 
                 struct ViewportOverlayPrimitive
                 {
@@ -421,20 +515,12 @@ void ApplicationLayer::Run()
                 // 3D scene. Future improvements can aggregate additional ECS state (for example, selection groups or gizmos).
                 if (s_SelectedEntity != s_InvalidEntity)
                 {
-                    Trident::ECS::Registry& l_Registry = Trident::Application::GetRegistry();
                     if (l_Registry.HasComponent<Trident::Transform>(s_SelectedEntity))
                     {
                         const Trident::Transform& l_SelectedTransform = l_Registry.GetComponent<Trident::Transform>(s_SelectedEntity);
 
                         const glm::mat4 l_ModelMatrix = ComposeTransform(l_SelectedTransform);
                         const glm::vec4 l_WorldCenter = l_ModelMatrix * glm::vec4{ 0.0f, 0.0f, 0.0f, 1.0f };
-
-                        Trident::Camera& l_Camera = Trident::Application::GetRenderer().GetCamera();
-                        const glm::mat4 l_ViewMatrix = l_Camera.GetViewMatrix();
-
-                        const float l_AspectRatio = l_ImageExtent.y > 0.0f ? l_ImageExtent.x / l_ImageExtent.y : 1.0f;
-                        glm::mat4 l_ProjectionMatrix = glm::perspective(glm::radians(l_Camera.GetFOV()), l_AspectRatio, l_Camera.GetNearClip(), l_Camera.GetFarClip());
-                        l_ProjectionMatrix[1][1] *= -1.0f; // Vulkan clip space has an inverted Y axis relative to ImGui's screen coordinates.
 
                         const glm::vec4 l_ClipSpace = l_ProjectionMatrix * l_ViewMatrix * l_WorldCenter;
                         if (l_ClipSpace.w > 0.0f)

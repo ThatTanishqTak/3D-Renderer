@@ -21,6 +21,7 @@
 #include <system_error>
 
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/matrix_inverse.hpp>
 #include <imgui_impl_vulkan.h>
 
 namespace
@@ -510,6 +511,7 @@ namespace Trident
     VkDescriptorSet Renderer::GetViewportTexture() const
     {
         // Provide the descriptor set that ImGui::Image expects when the viewport is active.
+        // The actual colour output inside this texture is driven by the camera selected via RenderCommand::SetViewportCamera.
         if (!IsValidViewport())
         {
             return VK_NULL_HANDLE;
@@ -566,6 +568,46 @@ namespace Trident
         CreateOrResizeOffscreenResources(l_Target, l_RequestedExtent);
 
         // Future: consider pooling and recycling detached targets so background viewports can warm-start when reopened.
+    }
+
+    void Renderer::SetViewportCamera(ECS::Entity cameraEntity)
+    {
+        // The UI layer forwards its selection through RenderCommand so the renderer can resolve the correct camera per frame.
+        m_ViewportCamera = cameraEntity;
+    }
+
+    Renderer::CameraSnapshot Renderer::ResolveViewportCamera() const
+    {
+        CameraSnapshot l_Snapshot{};
+        l_Snapshot.View = m_Camera.GetViewMatrix();
+        l_Snapshot.Position = m_Camera.GetPosition();
+        l_Snapshot.FieldOfView = m_Camera.GetFOV();
+        l_Snapshot.NearClip = m_Camera.GetNearClip();
+        l_Snapshot.FarClip = m_Camera.GetFarClip();
+
+        if (m_ViewportCamera == std::numeric_limits<ECS::Entity>::max() || m_Registry == nullptr)
+        {
+            return l_Snapshot;
+        }
+
+        if (!m_Registry->HasComponent<CameraComponent>(m_ViewportCamera) || !m_Registry->HasComponent<Transform>(m_ViewportCamera))
+        {
+            return l_Snapshot;
+        }
+
+        const CameraComponent& l_CameraComponent = m_Registry->GetComponent<CameraComponent>(m_ViewportCamera);
+        const Transform& l_Transform = m_Registry->GetComponent<Transform>(m_ViewportCamera);
+
+        const glm::mat4 l_ModelMatrix = ComposeTransform(l_Transform);
+        const glm::mat4 l_ViewMatrix = glm::inverse(l_ModelMatrix);
+
+        l_Snapshot.View = l_ViewMatrix;
+        l_Snapshot.Position = l_Transform.Position;
+        l_Snapshot.FieldOfView = l_CameraComponent.FieldOfView;
+        l_Snapshot.NearClip = l_CameraComponent.NearClip;
+        l_Snapshot.FarClip = l_CameraComponent.FarClip;
+
+        return l_Snapshot;
     }
 
     void Renderer::RecreateSwapchain()
@@ -1667,14 +1709,15 @@ namespace Trident
     void Renderer::UpdateUniformBuffer(uint32_t currentImage)
     {
         GlobalUniformBuffer l_Global{};
-        l_Global.View = m_Camera.GetViewMatrix();
+        const CameraSnapshot l_CameraSnapshot = ResolveViewportCamera();
+
+        l_Global.View = l_CameraSnapshot.View;
 
         float l_AspectRatio = static_cast<float>(m_Swapchain.GetExtent().width) / static_cast<float>(m_Swapchain.GetExtent().height);
-        l_Global.Projection = glm::perspective(glm::radians(m_Camera.GetFOV()), l_AspectRatio, m_Camera.GetNearClip(), m_Camera.GetFarClip());
+        l_Global.Projection = glm::perspective(glm::radians(l_CameraSnapshot.FieldOfView), l_AspectRatio, l_CameraSnapshot.NearClip, l_CameraSnapshot.FarClip);
         l_Global.Projection[1][1] *= -1.0f; // Flip Y for Vulkan's clip space
 
-        glm::vec3 l_CameraPosition = m_Camera.GetPosition();
-        l_Global.CameraPosition = glm::vec4(l_CameraPosition, 1.0f);
+        l_Global.CameraPosition = glm::vec4(l_CameraSnapshot.Position, 1.0f);
 
         glm::vec3 l_LightDirection = glm::normalize(m_MainLight.Direction);
         l_Global.LightDirection = glm::vec4(l_LightDirection, 0.0f);

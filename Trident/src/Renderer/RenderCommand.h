@@ -14,6 +14,7 @@ namespace Trident
 
         static void SetTransform(const Transform& props);
         static void SetViewport(const ViewportInfo& info);
+        static void SetViewportCamera(ECS::Entity cameraEntity);
         // Mirror Renderer::SetClearColor so editor widgets can adjust the background tone live.
         static void SetClearColor(const glm::vec4& color);
 

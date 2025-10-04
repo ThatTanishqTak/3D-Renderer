@@ -34,6 +34,12 @@ namespace Trident
         Application::GetRenderer().SetViewport(info);
     }
 
+    void RenderCommand::SetViewportCamera(ECS::Entity cameraEntity)
+    {
+        // Preserve a clear UI -> RenderCommand -> Renderer flow so viewport textures reflect the chosen camera entity.
+        Application::GetRenderer().SetViewportCamera(cameraEntity);
+    }
+
     void RenderCommand::SetClearColor(const glm::vec4& color)
     {
         // Forward the request so the renderer updates its cached clear colour immediately.
