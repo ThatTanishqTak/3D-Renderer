@@ -291,6 +291,13 @@ namespace Trident
         std::vector<Vertex> l_AllVertices(m_StagingVertices.get(), m_StagingVertices.get() + l_VertexCount);
         std::vector<uint32_t> l_AllIndices(m_StagingIndices.get(), m_StagingIndices.get() + l_IndexCount);
 
+        // Upload the combined geometry once per load so every mesh in the scene shares a single draw call.
+        m_Buffers.CreateVertexBuffer(l_AllVertices, m_Commands.GetOneTimePool(), m_VertexBuffer, m_VertexBufferMemory);
+        m_Buffers.CreateIndexBuffer(l_AllIndices, m_Commands.GetOneTimePool(), m_IndexBuffer, m_IndexBufferMemory, m_IndexCount);
+
+        // Record the uploaded index count so the command buffer draw guard can validate pending draws.
+        m_IndexCount = static_cast<uint32_t>(l_IndexCount);
+
         m_ModelCount = meshes.size();
         m_TriangleCount = l_IndexCount / 3;
 
