@@ -94,6 +94,8 @@ namespace Trident
 
         m_Viewport.Position = { 0.0f, 0.0f };
         m_Viewport.Size = { static_cast<float>(m_Swapchain.GetExtent().width), static_cast<float>(m_Swapchain.GetExtent().height) };
+        m_Viewport.ViewportID = 0;
+        m_ActiveViewportId = 0;
 
         VkFenceCreateInfo l_FenceInfo{ VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
         l_FenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
@@ -112,7 +114,7 @@ namespace Trident
         m_Commands.Cleanup();
 
         // Tear down any editor viewport resources before the core pipeline disappears.
-        DestroyOffscreenResources();
+        DestroyAllOffscreenResources();
 
         if (m_DescriptorPool != VK_NULL_HANDLE)
         {
@@ -508,21 +510,37 @@ namespace Trident
     VkDescriptorSet Renderer::GetViewportTexture() const
     {
         // Provide the descriptor set that ImGui::Image expects when the viewport is active.
-        if (IsValidViewport() && m_OffscreenTextureID != VK_NULL_HANDLE)
+        if (!IsValidViewport())
         {
-            return m_OffscreenTextureID;
+            return VK_NULL_HANDLE;
         }
+
+        const uint32_t l_ViewportId = m_Viewport.ViewportID;
+        const auto it_Target = m_OffscreenTargets.find(l_ViewportId);
+        if (it_Target == m_OffscreenTargets.end())
+        {
+            return VK_NULL_HANDLE;
+        }
+
+        const OffscreenTarget& l_Target = it_Target->second;
+        if (l_Target.m_TextureID != VK_NULL_HANDLE)
+        {
+            return l_Target.m_TextureID;
+        }
+
         return VK_NULL_HANDLE;
     }
 
     void Renderer::SetViewport(const ViewportInfo& info)
     {
+        const uint32_t l_PreviousViewportId = m_ActiveViewportId;
         m_Viewport = info;
+        m_ActiveViewportId = info.ViewportID;
 
         if (!IsValidViewport())
         {
-            // The viewport was closed or minimized, so free the auxiliary render target.
-            DestroyOffscreenResources();
+            // The viewport was closed or minimized, so free the auxiliary render target when possible.
+            DestroyOffscreenResources(l_PreviousViewportId);
 
             return;
         }
@@ -533,20 +551,21 @@ namespace Trident
 
         if (l_RequestedExtent.width == 0 || l_RequestedExtent.height == 0)
         {
-            DestroyOffscreenResources();
+            DestroyOffscreenResources(m_ActiveViewportId);
 
             return;
         }
 
-        if (l_RequestedExtent.width == m_OffscreenExtent.width && l_RequestedExtent.height == m_OffscreenExtent.height)
+        OffscreenTarget& l_Target = GetOrCreateOffscreenTarget(m_ActiveViewportId);
+        if (l_Target.m_Extent.width == l_RequestedExtent.width && l_Target.m_Extent.height == l_RequestedExtent.height)
         {
             // Nothing to do – the backing image already matches the requested size.
             return;
         }
 
-        CreateOrResizeOffscreenResources(l_RequestedExtent);
+        CreateOrResizeOffscreenResources(l_Target, l_RequestedExtent);
 
-        // TODO: Support multiple simultaneous viewports by tracking a list of images and descriptors.
+        // Future: consider pooling and recycling detached targets so background viewports can warm-start when reopened.
     }
 
     void Renderer::RecreateSwapchain()
@@ -629,7 +648,7 @@ namespace Trident
                 l_ImageCount, m_GlobalUniformBuffers.size(), m_MaterialUniformBuffers.size(), l_ImageCount, m_DescriptorSets.size());
         }
 
-        if (IsValidViewport())
+        if (IsValidViewport() && m_ActiveViewportId != 0)
         {
             VkExtent2D l_ViewportExtent{};
             l_ViewportExtent.width = static_cast<uint32_t>(std::max(m_Viewport.Size.x, 0.0f));
@@ -637,16 +656,17 @@ namespace Trident
 
             if (l_ViewportExtent.width > 0 && l_ViewportExtent.height > 0)
             {
-                CreateOrResizeOffscreenResources(l_ViewportExtent);
+                OffscreenTarget& l_Target = GetOrCreateOffscreenTarget(m_ActiveViewportId);
+                CreateOrResizeOffscreenResources(l_Target, l_ViewportExtent);
             }
             else
             {
-                DestroyOffscreenResources();
+                DestroyOffscreenResources(m_ActiveViewportId);
             }
         }
-        else
+        else if (m_ActiveViewportId != 0)
         {
-            DestroyOffscreenResources();
+            DestroyOffscreenResources(m_ActiveViewportId);
         }
     }
 
@@ -895,58 +915,142 @@ namespace Trident
         TR_CORE_TRACE("Descriptor Sets Allocated ({})", l_ImageCount);
     }
 
-    void Renderer::DestroyOffscreenResources()
+    void Renderer::DestroyOffscreenResources(uint32_t viewportId)
     {
+        if (viewportId == 0)
+        {
+            return;
+        }
+
+        const auto it_Target = m_OffscreenTargets.find(viewportId);
+        if (it_Target == m_OffscreenTargets.end())
+        {
+            return;
+        }
+
         VkDevice l_Device = Application::GetDevice();
+        OffscreenTarget& l_Target = it_Target->second;
 
-        if (m_OffscreenTextureID != VK_NULL_HANDLE)
+        // The renderer owns these handles; releasing them here avoids dangling ImGui descriptors or image memory leaks.
+        if (l_Target.m_TextureID != VK_NULL_HANDLE)
         {
-            // Deregister the cached descriptor so ImGui stops referencing the old image view.
-            ImGui_ImplVulkan_RemoveTexture(m_OffscreenTextureID);
-            m_OffscreenTextureID = VK_NULL_HANDLE;
+            ImGui_ImplVulkan_RemoveTexture(l_Target.m_TextureID);
+            l_Target.m_TextureID = VK_NULL_HANDLE;
         }
 
-        if (m_OffscreenFramebuffer != VK_NULL_HANDLE)
+        if (l_Target.m_Framebuffer != VK_NULL_HANDLE)
         {
-            vkDestroyFramebuffer(l_Device, m_OffscreenFramebuffer, nullptr);
-            m_OffscreenFramebuffer = VK_NULL_HANDLE;
+            vkDestroyFramebuffer(l_Device, l_Target.m_Framebuffer, nullptr);
+            l_Target.m_Framebuffer = VK_NULL_HANDLE;
         }
 
-        if (m_OffscreenImageView != VK_NULL_HANDLE)
+        if (l_Target.m_ImageView != VK_NULL_HANDLE)
         {
-            vkDestroyImageView(l_Device, m_OffscreenImageView, nullptr);
-            m_OffscreenImageView = VK_NULL_HANDLE;
+            vkDestroyImageView(l_Device, l_Target.m_ImageView, nullptr);
+            l_Target.m_ImageView = VK_NULL_HANDLE;
         }
 
-        if (m_OffscreenImage != VK_NULL_HANDLE)
+        if (l_Target.m_Image != VK_NULL_HANDLE)
         {
-            vkDestroyImage(l_Device, m_OffscreenImage, nullptr);
-            m_OffscreenImage = VK_NULL_HANDLE;
+            vkDestroyImage(l_Device, l_Target.m_Image, nullptr);
+            l_Target.m_Image = VK_NULL_HANDLE;
         }
 
-        if (m_OffscreenMemory != VK_NULL_HANDLE)
+        if (l_Target.m_Memory != VK_NULL_HANDLE)
         {
-            vkFreeMemory(l_Device, m_OffscreenMemory, nullptr);
-            m_OffscreenMemory = VK_NULL_HANDLE;
+            vkFreeMemory(l_Device, l_Target.m_Memory, nullptr);
+            l_Target.m_Memory = VK_NULL_HANDLE;
         }
 
-        if (m_OffscreenSampler != VK_NULL_HANDLE)
+        if (l_Target.m_Sampler != VK_NULL_HANDLE)
         {
-            vkDestroySampler(l_Device, m_OffscreenSampler, nullptr);
-            m_OffscreenSampler = VK_NULL_HANDLE;
+            vkDestroySampler(l_Device, l_Target.m_Sampler, nullptr);
+            l_Target.m_Sampler = VK_NULL_HANDLE;
         }
 
-        m_OffscreenExtent = { 0, 0 };
+        l_Target.m_Extent = { 0, 0 };
+
+        m_OffscreenTargets.erase(it_Target);
     }
 
-    void Renderer::CreateOrResizeOffscreenResources(VkExtent2D extent)
+    void Renderer::DestroyAllOffscreenResources()
+    {
+        // Iterate carefully so erasing entries mid-loop remains valid across MSVC/STL implementations.
+        auto it_Target = m_OffscreenTargets.begin();
+        while (it_Target != m_OffscreenTargets.end())
+        {
+            const uint32_t l_ViewportId = it_Target->first;
+            ++it_Target;
+            DestroyOffscreenResources(l_ViewportId);
+        }
+
+        // Future: consider retaining unused targets in a pool so secondary editor panels can resume instantly.
+        m_ActiveViewportId = 0;
+    }
+
+    Renderer::OffscreenTarget& Renderer::GetOrCreateOffscreenTarget(uint32_t viewportId)
+    {
+        auto [it_Target, l_Inserted] = m_OffscreenTargets.try_emplace(viewportId);
+        OffscreenTarget& l_Target = it_Target->second;
+
+        if (l_Inserted)
+        {
+            // New viewport render targets default to a clean state until the first resize allocates GPU memory.
+            l_Target.m_Extent = { 0, 0 };
+        }
+
+        return l_Target;
+    }
+
+    void Renderer::CreateOrResizeOffscreenResources(OffscreenTarget& target, VkExtent2D extent)
     {
         VkDevice l_Device = Application::GetDevice();
 
         // Ensure the GPU is idle before we reuse or release any image memory.
         vkDeviceWaitIdle(l_Device);
 
-        DestroyOffscreenResources();
+        auto a_ResetTarget = [l_Device](OffscreenTarget& a_Target)
+            {
+                if (a_Target.m_TextureID != VK_NULL_HANDLE)
+                {
+                    ImGui_ImplVulkan_RemoveTexture(a_Target.m_TextureID);
+                    a_Target.m_TextureID = VK_NULL_HANDLE;
+                }
+
+                if (a_Target.m_Framebuffer != VK_NULL_HANDLE)
+                {
+                    vkDestroyFramebuffer(l_Device, a_Target.m_Framebuffer, nullptr);
+                    a_Target.m_Framebuffer = VK_NULL_HANDLE;
+                }
+
+                if (a_Target.m_ImageView != VK_NULL_HANDLE)
+                {
+                    vkDestroyImageView(l_Device, a_Target.m_ImageView, nullptr);
+                    a_Target.m_ImageView = VK_NULL_HANDLE;
+                }
+
+                if (a_Target.m_Image != VK_NULL_HANDLE)
+                {
+                    vkDestroyImage(l_Device, a_Target.m_Image, nullptr);
+                    a_Target.m_Image = VK_NULL_HANDLE;
+                }
+
+                if (a_Target.m_Memory != VK_NULL_HANDLE)
+                {
+                    vkFreeMemory(l_Device, a_Target.m_Memory, nullptr);
+                    a_Target.m_Memory = VK_NULL_HANDLE;
+                }
+
+                if (a_Target.m_Sampler != VK_NULL_HANDLE)
+                {
+                    vkDestroySampler(l_Device, a_Target.m_Sampler, nullptr);
+                    a_Target.m_Sampler = VK_NULL_HANDLE;
+                }
+
+                a_Target.m_Extent = { 0, 0 };
+            };
+
+        a_ResetTarget(target);
 
         if (extent.width == 0 || extent.height == 0)
         {
@@ -967,35 +1071,35 @@ namespace Trident
         l_ImageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         l_ImageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
 
-        if (vkCreateImage(l_Device, &l_ImageInfo, nullptr, &m_OffscreenImage) != VK_SUCCESS)
+        if (vkCreateImage(l_Device, &l_ImageInfo, nullptr, &target.m_Image) != VK_SUCCESS)
         {
             TR_CORE_CRITICAL("Failed to create offscreen image");
 
-            DestroyOffscreenResources();
+            a_ResetTarget(target);
 
             return;
         }
 
         VkMemoryRequirements l_MemoryRequirements{};
-        vkGetImageMemoryRequirements(l_Device, m_OffscreenImage, &l_MemoryRequirements);
+        vkGetImageMemoryRequirements(l_Device, target.m_Image, &l_MemoryRequirements);
 
         VkMemoryAllocateInfo l_AllocateInfo{ VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO };
         l_AllocateInfo.allocationSize = l_MemoryRequirements.size;
         l_AllocateInfo.memoryTypeIndex = m_Buffers.FindMemoryType(l_MemoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
-        if (vkAllocateMemory(l_Device, &l_AllocateInfo, nullptr, &m_OffscreenMemory) != VK_SUCCESS)
+        if (vkAllocateMemory(l_Device, &l_AllocateInfo, nullptr, &target.m_Memory) != VK_SUCCESS)
         {
             TR_CORE_CRITICAL("Failed to allocate offscreen image memory");
 
-            DestroyOffscreenResources();
+            a_ResetTarget(target);
 
             return;
         }
 
-        vkBindImageMemory(l_Device, m_OffscreenImage, m_OffscreenMemory, 0);
+        vkBindImageMemory(l_Device, target.m_Image, target.m_Memory, 0);
 
         VkImageViewCreateInfo l_ViewInfo{ VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
-        l_ViewInfo.image = m_OffscreenImage;
+        l_ViewInfo.image = target.m_Image;
         l_ViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
         l_ViewInfo.format = l_ImageInfo.format;
         l_ViewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -1004,11 +1108,11 @@ namespace Trident
         l_ViewInfo.subresourceRange.baseArrayLayer = 0;
         l_ViewInfo.subresourceRange.layerCount = 1;
 
-        if (vkCreateImageView(l_Device, &l_ViewInfo, nullptr, &m_OffscreenImageView) != VK_SUCCESS)
+        if (vkCreateImageView(l_Device, &l_ViewInfo, nullptr, &target.m_ImageView) != VK_SUCCESS)
         {
             TR_CORE_CRITICAL("Failed to create offscreen image view");
 
-            DestroyOffscreenResources();
+            a_ResetTarget(target);
 
             return;
         }
@@ -1016,16 +1120,16 @@ namespace Trident
         VkFramebufferCreateInfo l_FramebufferInfo{ VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO };
         l_FramebufferInfo.renderPass = m_Pipeline.GetRenderPass();
         l_FramebufferInfo.attachmentCount = 1;
-        l_FramebufferInfo.pAttachments = &m_OffscreenImageView;
+        l_FramebufferInfo.pAttachments = &target.m_ImageView;
         l_FramebufferInfo.width = extent.width;
         l_FramebufferInfo.height = extent.height;
         l_FramebufferInfo.layers = 1;
 
-        if (vkCreateFramebuffer(l_Device, &l_FramebufferInfo, nullptr, &m_OffscreenFramebuffer) != VK_SUCCESS)
+        if (vkCreateFramebuffer(l_Device, &l_FramebufferInfo, nullptr, &target.m_Framebuffer) != VK_SUCCESS)
         {
             TR_CORE_CRITICAL("Failed to create offscreen framebuffer");
 
-            DestroyOffscreenResources();
+            a_ResetTarget(target);
 
             return;
         }
@@ -1047,19 +1151,19 @@ namespace Trident
         l_SamplerInfo.minLod = 0.0f;
         l_SamplerInfo.maxLod = 0.0f;
 
-        if (vkCreateSampler(l_Device, &l_SamplerInfo, nullptr, &m_OffscreenSampler) != VK_SUCCESS)
+        if (vkCreateSampler(l_Device, &l_SamplerInfo, nullptr, &target.m_Sampler) != VK_SUCCESS)
         {
             TR_CORE_CRITICAL("Failed to create offscreen sampler");
 
-            DestroyOffscreenResources();
+            a_ResetTarget(target);
 
             return;
         }
 
 
         // Register (or refresh) the descriptor used by the viewport panel and keep it cached for quick retrieval.
-        m_OffscreenTextureID = ImGui_ImplVulkan_AddTexture(m_OffscreenSampler, m_OffscreenImageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-        m_OffscreenExtent = extent;
+        target.m_TextureID = ImGui_ImplVulkan_AddTexture(target.m_Sampler, target.m_ImageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        target.m_Extent = extent;
 
         TR_CORE_TRACE("Offscreen render target resized to {}x{}", extent.width, extent.height);
     }
@@ -1099,7 +1203,17 @@ namespace Trident
         VkCommandBufferBeginInfo l_BeginInfo{ VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
         vkBeginCommandBuffer(l_CommandBuffer, &l_BeginInfo);
 
-        const bool l_ViewportActive = IsValidViewport() && m_OffscreenFramebuffer != VK_NULL_HANDLE;
+        const OffscreenTarget* l_ActiveTarget = nullptr;
+        if (IsValidViewport())
+        {
+            const auto it_Target = m_OffscreenTargets.find(m_ActiveViewportId);
+            if (it_Target != m_OffscreenTargets.end())
+            {
+                l_ActiveTarget = &it_Target->second;
+            }
+        }
+
+        const bool l_ViewportActive = l_ActiveTarget != nullptr && l_ActiveTarget->m_Framebuffer != VK_NULL_HANDLE;
 
         auto a_BuildClearValue = [this]() -> VkClearValue
             {
@@ -1117,9 +1231,9 @@ namespace Trident
             // First pass: render the scene into the offscreen target that backs the editor viewport.
             VkRenderPassBeginInfo l_OffscreenPass{ VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO };
             l_OffscreenPass.renderPass = m_Pipeline.GetRenderPass();
-            l_OffscreenPass.framebuffer = m_OffscreenFramebuffer;
+            l_OffscreenPass.framebuffer = l_ActiveTarget->m_Framebuffer;
             l_OffscreenPass.renderArea.offset = { 0, 0 };
-            l_OffscreenPass.renderArea.extent = m_OffscreenExtent;
+            l_OffscreenPass.renderArea.extent = l_ActiveTarget->m_Extent;
 
             // Reuse the configured clear colour for both render passes so the viewport preview matches the swapchain output.
             VkClearValue l_OffscreenClear = a_BuildClearValue();
@@ -1131,15 +1245,15 @@ namespace Trident
             VkViewport l_OffscreenViewport{};
             l_OffscreenViewport.x = 0.0f;
             l_OffscreenViewport.y = 0.0f;
-            l_OffscreenViewport.width = static_cast<float>(m_OffscreenExtent.width);
-            l_OffscreenViewport.height = static_cast<float>(m_OffscreenExtent.height);
+            l_OffscreenViewport.width = static_cast<float>(l_ActiveTarget->m_Extent.width);
+            l_OffscreenViewport.height = static_cast<float>(l_ActiveTarget->m_Extent.height);
             l_OffscreenViewport.minDepth = 0.0f;
             l_OffscreenViewport.maxDepth = 1.0f;
             vkCmdSetViewport(l_CommandBuffer, 0, 1, &l_OffscreenViewport);
 
             VkRect2D l_OffscreenScissor{};
             l_OffscreenScissor.offset = { 0, 0 };
-            l_OffscreenScissor.extent = m_OffscreenExtent;
+            l_OffscreenScissor.extent = l_ActiveTarget->m_Extent;
             vkCmdSetScissor(l_CommandBuffer, 0, 1, &l_OffscreenScissor);
 
             vkCmdBindPipeline(l_CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline.GetPipeline());
@@ -1176,7 +1290,7 @@ namespace Trident
             l_OffscreenBarrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
             l_OffscreenBarrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
             l_OffscreenBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_TRANSFER_READ_BIT;
-            l_OffscreenBarrier.image = m_OffscreenImage;
+            l_OffscreenBarrier.image = l_ActiveTarget->m_Image;
 
             vkCmdPipelineBarrier(l_CommandBuffer, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
                 0, 0, nullptr, 0, nullptr, 1, &l_OffscreenBarrier);

@@ -26,6 +26,7 @@
 #include <memory>
 #include <functional>
 #include <chrono>
+#include <unordered_map>
 
 namespace Trident
 {
@@ -41,6 +42,7 @@ namespace Trident
 
     struct ViewportInfo
     {
+        uint32_t ViewportID = 0;
         glm::vec2 Position{ 0.0f };
         glm::vec2 Size{ 0.0f };
     };
@@ -155,15 +157,21 @@ namespace Trident
         VkImageView m_TextureImageView = VK_NULL_HANDLE;
         VkSampler m_TextureSampler = VK_NULL_HANDLE;
 
-        // Offscreen rendering
-        VkImage m_OffscreenImage = VK_NULL_HANDLE;
-        VkDeviceMemory m_OffscreenMemory = VK_NULL_HANDLE;
-        VkImageView m_OffscreenImageView = VK_NULL_HANDLE;
-        VkFramebuffer m_OffscreenFramebuffer = VK_NULL_HANDLE;
-        // Cache the ImGui descriptor set so we can reuse the image binding across frames without re-registering it.
-        VkDescriptorSet m_OffscreenTextureID = VK_NULL_HANDLE; // Track the cached ImGui descriptor; defaults to VK_NULL_HANDLE so no extra initialization is required.
-        VkSampler m_OffscreenSampler = VK_NULL_HANDLE;
-        VkExtent2D m_OffscreenExtent{ 0, 0 };
+        struct OffscreenTarget
+        {
+            // Vulkan handles owned by the renderer; lifetime is managed explicitly via DestroyOffscreenResources.
+            VkImage m_Image = VK_NULL_HANDLE;
+            VkDeviceMemory m_Memory = VK_NULL_HANDLE;
+            VkImageView m_ImageView = VK_NULL_HANDLE;
+            VkFramebuffer m_Framebuffer = VK_NULL_HANDLE;
+            VkDescriptorSet m_TextureID = VK_NULL_HANDLE;
+            VkSampler m_Sampler = VK_NULL_HANDLE;
+            VkExtent2D m_Extent{ 0, 0 };
+        };
+
+        // Offscreen rendering resources keyed by viewport identifier so multiple panels can co-exist.
+        std::unordered_map<uint32_t, OffscreenTarget> m_OffscreenTargets;
+        uint32_t m_ActiveViewportId = 0;
 
         Buffers m_Buffers;
 
@@ -219,7 +227,9 @@ namespace Trident
         void AccumulateFrameTiming(double frameMilliseconds, double framesPerSecond, VkExtent2D extent, std::chrono::system_clock::time_point captureTimestamp);
         void UpdateFrameTimingStats();
         void ExportPerformanceCapture();
-        void DestroyOffscreenResources();
-        void CreateOrResizeOffscreenResources(VkExtent2D extent);
+        void DestroyOffscreenResources(uint32_t viewportId);
+        void DestroyAllOffscreenResources();
+        OffscreenTarget& GetOrCreateOffscreenTarget(uint32_t viewportId);
+        void CreateOrResizeOffscreenResources(OffscreenTarget& target, VkExtent2D extent);
     };
 }

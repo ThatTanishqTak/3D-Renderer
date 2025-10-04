@@ -363,6 +363,11 @@ void ApplicationLayer::Run()
 
             // Convert the UI dimensions into renderer-friendly viewport information to align the offscreen pass.
             Trident::ViewportInfo l_Viewport{};
+            if (const ImGuiViewport* l_WindowViewport = ImGui::GetWindowViewport(); l_WindowViewport != nullptr)
+            {
+                // Retain the ImGui viewport identifier so the renderer can cache per-panel render targets.
+                l_Viewport.ViewportID = static_cast<uint32_t>(l_WindowViewport->ID);
+            }
             l_Viewport.Position = glm::vec2{ l_PanelOrigin.x, l_PanelOrigin.y };
             l_Viewport.Size = glm::vec2
             {
