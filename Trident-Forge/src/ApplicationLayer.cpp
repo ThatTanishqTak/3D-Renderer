@@ -391,7 +391,111 @@ void ApplicationLayer::Run()
             {
                 // The descriptor connects the renderer's color attachment to ImGui so the Scene window mirrors real-time output.
                 ImGui::Image(reinterpret_cast<ImTextureID>(l_ViewportTexture), l_ImageSize);
-                // TODO: Layer additional ImGui draw data for overlays (e.g., selection outlines, safe frames).
+                // Capture the screen rectangle that the viewport texture occupies so overlay primitives can be anchored
+// in the same coordinate space. ImGui::Image places the content at GetItemRectMin/Max, which we reuse
+// to keep editor annotations aligned with the pixels inside the render target.
+                const ImVec2 l_ImageMin = ImGui::GetItemRectMin();
+                const ImVec2 l_ImageMax = ImGui::GetItemRectMax();
+                const ImVec2 l_ImageExtent{ l_ImageMax.x - l_ImageMin.x, l_ImageMax.y - l_ImageMin.y };
+
+                struct ViewportOverlayPrimitive
+                {
+                    enum class Type
+                    {
+                        Crosshair,
+                        Text
+                    };
+
+                    Type PrimitiveType = Type::Crosshair;
+                    ImVec2 Position0{}; // Base position (center for crosshair, baseline for text)
+                    ImVec2 Position1{}; // Extents for crosshair; unused for text
+                    ImU32 Color = IM_COL32(255, 255, 255, 255);
+                    float Thickness = 1.0f;
+                    std::string Label{};
+                };
+
+                std::vector<ViewportOverlayPrimitive> l_OverlayPrimitives{};
+                l_OverlayPrimitives.reserve(4);
+
+                // Project the currently selected entity into screen space so artists receive a spatial cue that mirrors the
+                // 3D scene. Future improvements can aggregate additional ECS state (for example, selection groups or gizmos).
+                if (s_SelectedEntity != s_InvalidEntity)
+                {
+                    Trident::ECS::Registry& l_Registry = Trident::Application::GetRegistry();
+                    if (l_Registry.HasComponent<Trident::Transform>(s_SelectedEntity))
+                    {
+                        const Trident::Transform& l_SelectedTransform = l_Registry.GetComponent<Trident::Transform>(s_SelectedEntity);
+
+                        const glm::mat4 l_ModelMatrix = ComposeTransform(l_SelectedTransform);
+                        const glm::vec4 l_WorldCenter = l_ModelMatrix * glm::vec4{ 0.0f, 0.0f, 0.0f, 1.0f };
+
+                        Trident::Camera& l_Camera = Trident::Application::GetRenderer().GetCamera();
+                        const glm::mat4 l_ViewMatrix = l_Camera.GetViewMatrix();
+
+                        const float l_AspectRatio = l_ImageExtent.y > 0.0f ? l_ImageExtent.x / l_ImageExtent.y : 1.0f;
+                        glm::mat4 l_ProjectionMatrix = glm::perspective(glm::radians(l_Camera.GetFOV()), l_AspectRatio, l_Camera.GetNearClip(), l_Camera.GetFarClip());
+                        l_ProjectionMatrix[1][1] *= -1.0f; // Vulkan clip space has an inverted Y axis relative to ImGui's screen coordinates.
+
+                        const glm::vec4 l_ClipSpace = l_ProjectionMatrix * l_ViewMatrix * l_WorldCenter;
+                        if (l_ClipSpace.w > 0.0f)
+                        {
+                            const glm::vec3 l_Ndc = glm::vec3{ l_ClipSpace } / l_ClipSpace.w;
+
+                            if (std::abs(l_Ndc.x) <= 1.0f && std::abs(l_Ndc.y) <= 1.0f && l_Ndc.z >= -1.0f && l_Ndc.z <= 1.0f)
+                            {
+                                // Convert from normalized device coordinates to ImGui's pixel space. The Y axis is flipped so
+                                // the overlay draws in the same orientation as the presented texture.
+                                const float l_ScreenX = l_ImageMin.x + ((l_Ndc.x * 0.5f) + 0.5f) * l_ImageExtent.x;
+                                const float l_ScreenY = l_ImageMin.y + ((-l_Ndc.y * 0.5f) + 0.5f) * l_ImageExtent.y;
+                                const ImVec2 l_ScreenPosition{ l_ScreenX, l_ScreenY };
+
+                                ViewportOverlayPrimitive l_Crosshair{};
+                                l_Crosshair.PrimitiveType = ViewportOverlayPrimitive::Type::Crosshair;
+                                l_Crosshair.Position0 = l_ScreenPosition;
+                                l_Crosshair.Position1 = ImVec2{ 8.0f, 8.0f };
+                                l_Crosshair.Color = IM_COL32(255, 215, 0, 255);
+                                l_Crosshair.Thickness = 1.5f;
+                                l_OverlayPrimitives.emplace_back(l_Crosshair);
+
+                                ViewportOverlayPrimitive l_Label{};
+                                l_Label.PrimitiveType = ViewportOverlayPrimitive::Type::Text;
+                                l_Label.Position0 = ImVec2{ l_ScreenPosition.x + 10.0f, l_ScreenPosition.y - ImGui::GetTextLineHeightWithSpacing() };
+                                l_Label.Color = IM_COL32(255, 255, 255, 255);
+                                l_Label.Label = "Entity " + std::to_string(static_cast<unsigned int>(s_SelectedEntity));
+                                l_OverlayPrimitives.emplace_back(std::move(l_Label));
+                            }
+                        }
+                    }
+                }
+
+                ImDrawList* l_DrawList = ImGui::GetWindowDrawList();
+                if (l_DrawList != nullptr)
+                {
+                    for (const ViewportOverlayPrimitive& it_Primitive : l_OverlayPrimitives)
+                    {
+                        switch (it_Primitive.PrimitiveType)
+                        {
+                        case ViewportOverlayPrimitive::Type::Crosshair:
+                        {
+                            const ImVec2 l_HorizontalStart{ it_Primitive.Position0.x - it_Primitive.Position1.x, it_Primitive.Position0.y };
+                            const ImVec2 l_HorizontalEnd{ it_Primitive.Position0.x + it_Primitive.Position1.x, it_Primitive.Position0.y };
+                            const ImVec2 l_VerticalStart{ it_Primitive.Position0.x, it_Primitive.Position0.y - it_Primitive.Position1.y };
+                            const ImVec2 l_VerticalEnd{ it_Primitive.Position0.x, it_Primitive.Position0.y + it_Primitive.Position1.y };
+                            l_DrawList->AddLine(l_HorizontalStart, l_HorizontalEnd, it_Primitive.Color, it_Primitive.Thickness);
+                            l_DrawList->AddLine(l_VerticalStart, l_VerticalEnd, it_Primitive.Color, it_Primitive.Thickness);
+                            break;
+                        }
+                        case ViewportOverlayPrimitive::Type::Text:
+                            l_DrawList->AddText(it_Primitive.Position0, it_Primitive.Color, it_Primitive.Label.c_str());
+                            break;
+                        default:
+                            break;
+                        }
+                    }
+                }
+
+                // TODO: Expand overlay collection to include safe-frame guides, grid snapping hints, and gizmo layers for
+                // additional editor polish.
                 // TODO: Support multiple cameras by exposing a dropdown that swaps which render target populates the panel.
             }
             else
