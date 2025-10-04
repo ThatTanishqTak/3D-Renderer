@@ -499,6 +499,12 @@ namespace Trident
         m_ImGuiLayer = layer;
     }
 
+    void Renderer::SetClearColor(const glm::vec4& color)
+    {
+        // Persist the preferred clear colour so both render passes remain visually consistent.
+        m_ClearColor = color;
+    }
+
     VkDescriptorSet Renderer::GetViewportTexture() const
     {
         // Provide the descriptor set that ImGui::Image expects when the viewport is active.
@@ -1095,6 +1101,17 @@ namespace Trident
 
         const bool l_ViewportActive = IsValidViewport() && m_OffscreenFramebuffer != VK_NULL_HANDLE;
 
+        auto a_BuildClearValue = [this]() -> VkClearValue
+            {
+                VkClearValue l_Value{};
+                l_Value.color.float32[0] = m_ClearColor.r;
+                l_Value.color.float32[1] = m_ClearColor.g;
+                l_Value.color.float32[2] = m_ClearColor.b;
+                l_Value.color.float32[3] = m_ClearColor.a;
+
+                return l_Value;
+            };
+
         if (l_ViewportActive)
         {
             // First pass: render the scene into the offscreen target that backs the editor viewport.
@@ -1104,7 +1121,8 @@ namespace Trident
             l_OffscreenPass.renderArea.offset = { 0, 0 };
             l_OffscreenPass.renderArea.extent = m_OffscreenExtent;
 
-            VkClearValue l_OffscreenClear = { 0.05f, 0.05f, 0.07f, 1.0f };
+            // Reuse the configured clear colour for both render passes so the viewport preview matches the swapchain output.
+            VkClearValue l_OffscreenClear = a_BuildClearValue();
             l_OffscreenPass.clearValueCount = 1;
             l_OffscreenPass.pClearValues = &l_OffscreenClear;
 
@@ -1171,7 +1189,7 @@ namespace Trident
         l_SwapchainPass.renderArea.offset = { 0, 0 };
         l_SwapchainPass.renderArea.extent = m_Swapchain.GetExtent();
 
-        VkClearValue l_ClearColor = { 0.0f, 0.0f, 0.0f, 1.0f };
+        VkClearValue l_ClearColor = a_BuildClearValue();
         l_SwapchainPass.clearValueCount = 1;
         l_SwapchainPass.pClearValues = &l_ClearColor;
 

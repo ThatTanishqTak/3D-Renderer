@@ -14,10 +14,14 @@ namespace Trident
 
         static void SetTransform(const Transform& props);
         static void SetViewport(const ViewportInfo& info);
+        // Mirror Renderer::SetClearColor so editor widgets can adjust the background tone live.
+        static void SetClearColor(const glm::vec4& color);
 
         static Transform GetTransform();
         static ViewportInfo GetViewport();
         static VkDescriptorSet GetViewportTexture();
         static uint32_t GetCurrentFrame();
+        // Expose the active clear colour so UI panels can stay in sync with renderer preferences.
+        static glm::vec4 GetClearColor();
     };
 }

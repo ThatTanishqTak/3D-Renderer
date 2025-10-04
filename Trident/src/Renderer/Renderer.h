@@ -86,6 +86,11 @@ namespace Trident
         void UploadTexture(const Loader::TextureData& texture);
         void SetImGuiLayer(UI::ImGuiLayer* layer);
 
+        // Allow external systems to adjust the render target clear colour while keeping editor and runtime in sync.
+        void SetClearColor(const glm::vec4& color);
+        // Returns the colour applied when clearing render targets so UI layers can present the current state.
+        glm::vec4 GetClearColor() const { return m_ClearColor; }
+
         uint32_t GetCurrentFrame() const { return m_Commands.CurrentFrame(); }
         size_t GetLastFrameAllocationCount() const { return m_FrameAllocationCount; }
         size_t GetModelCount() const { return m_ModelCount; }
@@ -183,6 +188,7 @@ namespace Trident
         DirectionalLight m_MainLight{};      // Simple directional light driving direct illumination
         glm::vec3 m_AmbientColor{ 0.03f };  // Ambient tint simulating image-based lighting
         float m_AmbientIntensity = 1.0f;     // Scalar multiplier for ambient contribution
+        glm::vec4 m_ClearColor{ 0.0f, 0.0f, 0.0f, 1.0f }; // Default background colour used for both offscreen and swapchain clears
 
         // Performance metrics
         static constexpr size_t s_PerformanceHistorySize = 240;

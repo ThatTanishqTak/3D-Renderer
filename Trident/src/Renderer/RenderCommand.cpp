@@ -34,6 +34,12 @@ namespace Trident
         Application::GetRenderer().SetViewport(info);
     }
 
+    void RenderCommand::SetClearColor(const glm::vec4& color)
+    {
+        // Forward the request so the renderer updates its cached clear colour immediately.
+        Application::GetRenderer().SetClearColor(color);
+    }
+
     Transform RenderCommand::GetTransform()
     {
         return Application::GetRenderer().GetTransform();
@@ -52,5 +58,11 @@ namespace Trident
     uint32_t RenderCommand::GetCurrentFrame()
     {
         return Application::GetRenderer().GetCurrentFrame();
+    }
+
+    glm::vec4 RenderCommand::GetClearColor()
+    {
+        // Provide callers with the renderer's clear colour so UI widgets can display the current setting.
+        return Application::GetRenderer().GetClearColor();
     }
 }

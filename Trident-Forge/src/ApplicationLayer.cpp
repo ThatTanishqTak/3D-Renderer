@@ -373,6 +373,13 @@ void ApplicationLayer::Run()
             // The viewport flows Scene -> RenderCommand -> Renderer where the offscreen framebuffer is resized accordingly.
             Trident::RenderCommand::SetViewport(l_Viewport);
 
+            glm::vec4 l_ClearColor = Trident::RenderCommand::GetClearColor();
+            // Keeping the editor control ready for future per-scene presets and themed viewports.
+            if (ImGui::ColorEdit4("Clear Color", glm::value_ptr(l_ClearColor)))
+            {
+                Trident::RenderCommand::SetClearColor(l_ClearColor);
+            }
+
             const ImVec2 l_ImageSize{ l_Viewport.Size.x, l_Viewport.Size.y };
             const VkDescriptorSet l_ViewportTexture = Trident::RenderCommand::GetViewportTexture();
             if (l_ViewportTexture != VK_NULL_HANDLE && l_ImageSize.x > 0.0f && l_ImageSize.y > 0.0f)
