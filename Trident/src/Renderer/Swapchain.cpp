@@ -60,7 +60,8 @@ namespace Trident
         l_CreateInfo.imageColorSpace = l_SurfaceFormat.colorSpace;
         l_CreateInfo.imageExtent = l_Extent;
         l_CreateInfo.imageArrayLayers = 1;
-        l_CreateInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+        // Ensure swapchain images can also be used as transfer destinations for layout transitions in Renderer.cpp
+        l_CreateInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 
         auto a_Indices = Application::GetQueueFamilyIndices();
         uint32_t l_QueueFamilyIndices[] = { a_Indices.GraphicsFamily.value(), a_Indices.PresentFamily.value() };
