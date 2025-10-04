@@ -341,16 +341,16 @@ namespace Trident
                         l_Normals.assign(l_Positions.size(), glm::vec3(0.0f));
 
                         bool l_GeneratedNormals = false;
-                        const auto AccumulateFaceNormal = [&](uint32_t a_Index0, uint32_t a_Index1, uint32_t a_Index2)
+                        const auto AccumulateFaceNormal = [&](uint32_t index0, uint32_t index1, uint32_t index2)
                             {
-                                if (a_Index0 >= l_Positions.size() || a_Index1 >= l_Positions.size() || a_Index2 >= l_Positions.size())
+                                if (index0 >= l_Positions.size() || index1 >= l_Positions.size() || index2 >= l_Positions.size())
                                 {
                                     return;
                                 }
 
-                                const glm::vec3& l_Position0 = l_Positions[a_Index0];
-                                const glm::vec3& l_Position1 = l_Positions[a_Index1];
-                                const glm::vec3& l_Position2 = l_Positions[a_Index2];
+                                const glm::vec3& l_Position0 = l_Positions[index0];
+                                const glm::vec3& l_Position1 = l_Positions[index1];
+                                const glm::vec3& l_Position2 = l_Positions[index2];
 
                                 const glm::vec3 l_Edge01 = l_Position1 - l_Position0;
                                 const glm::vec3 l_Edge02 = l_Position2 - l_Position0;
@@ -361,9 +361,9 @@ namespace Trident
                                     return;
                                 }
 
-                                l_Normals[a_Index0] += l_FaceNormal;
-                                l_Normals[a_Index1] += l_FaceNormal;
-                                l_Normals[a_Index2] += l_FaceNormal;
+                                l_Normals[index0] += l_FaceNormal;
+                                l_Normals[index1] += l_FaceNormal;
+                                l_Normals[index2] += l_FaceNormal;
                                 l_GeneratedNormals = true;
                             };
 
@@ -399,6 +399,13 @@ namespace Trident
                         }
                     }
 
+                    std::vector<glm::vec2> l_TexCoords{};
+                    if (auto a_TexCoordIt = l_Primitive.attributes.find("TEXCOORD_0"); a_TexCoordIt != l_Primitive.attributes.end())
+                    {
+                        const tinygltf::Accessor& l_TexCoordAccessor = l_Model.accessors[a_TexCoordIt->second];
+                        LoadTexCoords(l_Model, l_TexCoordAccessor, l_TexCoords);
+                    }
+
                     std::vector<glm::vec4> l_Tangents{};
                     if (auto a_TangentIt = l_Primitive.attributes.find("TANGENT"); a_TangentIt != l_Primitive.attributes.end())
                     {
@@ -406,11 +413,73 @@ namespace Trident
                         LoadTangents(l_Model, l_TangentAccessor, l_Tangents);
                     }
 
-                    std::vector<glm::vec2> l_TexCoords{};
-                    if (auto a_TexCoordIt = l_Primitive.attributes.find("TEXCOORD_0"); a_TexCoordIt != l_Primitive.attributes.end())
+                    std::vector<glm::vec3> l_ComputedTangents{};
+                    std::vector<glm::vec3> l_ComputedBitangents{};
+                    bool l_GeneratedTangents = false;
+                    if (l_Tangents.empty() && !l_Positions.empty() && l_TexCoords.size() == l_Positions.size())
                     {
-                        const tinygltf::Accessor& l_TexCoordAccessor = l_Model.accessors[a_TexCoordIt->second];
-                        LoadTexCoords(l_Model, l_TexCoordAccessor, l_TexCoords);
+                        // Tangent data is missing, so we approximate it per triangle using the positions and primary UV set.
+                        l_ComputedTangents.assign(l_Positions.size(), glm::vec3(0.0f));
+                        l_ComputedBitangents.assign(l_Positions.size(), glm::vec3(0.0f));
+
+                        const auto AccumulateTangentFrame =
+                            [&](uint32_t index0, uint32_t index1, uint32_t index2)
+                            {
+                                const glm::vec3& l_Pos0 = l_Positions[index0];
+                                const glm::vec3& l_Pos1 = l_Positions[index1];
+                                const glm::vec3& l_Pos2 = l_Positions[index2];
+
+                                const glm::vec2& l_Uv0 = l_TexCoords[index0];
+                                const glm::vec2& l_Uv1 = l_TexCoords[index1];
+                                const glm::vec2& l_Uv2 = l_TexCoords[index2];
+
+                                const glm::vec3 l_DeltaPos1 = l_Pos1 - l_Pos0;
+                                const glm::vec3 l_DeltaPos2 = l_Pos2 - l_Pos0;
+
+                                const glm::vec2 l_DeltaUv1 = l_Uv1 - l_Uv0;
+                                const glm::vec2 l_DeltaUv2 = l_Uv2 - l_Uv0;
+
+                                const float l_Denominator = (l_DeltaUv1.x * l_DeltaUv2.y) - (l_DeltaUv2.x * l_DeltaUv1.y);
+                                if (glm::abs(l_Denominator) < std::numeric_limits<float>::epsilon())
+                                {
+                                    return;
+                                }
+
+                                const float l_InvDeterminant = 1.0f / l_Denominator;
+                                const glm::vec3 l_Tangent = (l_DeltaPos1 * l_DeltaUv2.y - l_DeltaPos2 * l_DeltaUv1.y) * l_InvDeterminant;
+                                const glm::vec3 l_Bitangent = (l_DeltaPos2 * l_DeltaUv1.x - l_DeltaPos1 * l_DeltaUv2.x) * l_InvDeterminant;
+
+                                l_ComputedTangents[index0] += l_Tangent;
+                                l_ComputedTangents[index1] += l_Tangent;
+                                l_ComputedTangents[index2] += l_Tangent;
+
+                                l_ComputedBitangents[index0] += l_Bitangent;
+                                l_ComputedBitangents[index1] += l_Bitangent;
+                                l_ComputedBitangents[index2] += l_Bitangent;
+
+                                l_GeneratedTangents = true;
+                            };
+
+                        if (!l_Indices.empty())
+                        {
+                            for (size_t it_Index = 0; it_Index + 2 < l_Indices.size(); it_Index += 3)
+                            {
+                                const uint32_t l_Index0 = l_Indices[it_Index + 0];
+                                const uint32_t l_Index1 = l_Indices[it_Index + 1];
+                                const uint32_t l_Index2 = l_Indices[it_Index + 2];
+                                AccumulateTangentFrame(l_Index0, l_Index1, l_Index2);
+                            }
+                        }
+                        else
+                        {
+                            for (size_t it_Vertex = 0; it_Vertex + 2 < l_Positions.size(); it_Vertex += 3)
+                            {
+                                const uint32_t l_Index0 = static_cast<uint32_t>(it_Vertex + 0);
+                                const uint32_t l_Index1 = static_cast<uint32_t>(it_Vertex + 1);
+                                const uint32_t l_Index2 = static_cast<uint32_t>(it_Vertex + 2);
+                                AccumulateTangentFrame(l_Index0, l_Index1, l_Index2);
+                            }
+                        }
                     }
 
                     std::vector<glm::vec3> l_Colors{};
@@ -462,11 +531,48 @@ namespace Trident
                                 l_Vertex.Bitangent = s_DefaultBitangent;
                             }
                         }
+                        else if (l_GeneratedTangents && it_Vertex < l_ComputedTangents.size())
+                        {
+                            // Normalize the accumulated tangent frame and orthogonalize it against the vertex normal.
+                            glm::vec3 l_TangentVec = l_ComputedTangents[it_Vertex];
+                            glm::vec3 l_BitangentVec = l_ComputedBitangents[it_Vertex];
+
+                            if (glm::length2(l_TangentVec) > 0.0f)
+                            {
+                                l_TangentVec = glm::normalize(l_TangentVec - l_Vertex.Normal * glm::dot(l_Vertex.Normal, l_TangentVec));
+                            }
+
+                            if (glm::length2(l_TangentVec) > 0.0f)
+                            {
+                                l_Vertex.Tangent = l_TangentVec;
+
+                                glm::vec3 l_ReconstructedBitangent = glm::cross(l_Vertex.Normal, l_TangentVec);
+                                if (glm::length2(l_BitangentVec) > 0.0f && glm::length2(l_ReconstructedBitangent) > 0.0f)
+                                {
+                                    l_ReconstructedBitangent = glm::normalize(l_ReconstructedBitangent);
+                                    const float l_Handedness = glm::dot(l_ReconstructedBitangent, glm::normalize(l_BitangentVec)) < 0.0f ? -1.0f : 1.0f;
+                                    l_Vertex.Bitangent = l_ReconstructedBitangent * l_Handedness;
+                                }
+                                else if (glm::length2(l_ReconstructedBitangent) > 0.0f)
+                                {
+                                    l_Vertex.Bitangent = glm::normalize(l_ReconstructedBitangent);
+                                }
+                                else
+                                {
+                                    l_Vertex.Bitangent = s_DefaultBitangent;
+                                }
+                            }
+                            else
+                            {
+                                l_Vertex.Tangent = s_DefaultTangent;
+                                l_Vertex.Bitangent = s_DefaultBitangent;
+                            }
+                        }
                         else
                         {
                             l_Vertex.Tangent = s_DefaultTangent;
                             l_Vertex.Bitangent = s_DefaultBitangent;
-                            // TODO: Reconstruct tangents from UVs when source data omits them.
+                            // Tangents remain unset because neither the asset nor UV-driven reconstruction provided enough data.
                         }
 
                         l_MeshData.Vertices[it_Vertex] = l_Vertex;
