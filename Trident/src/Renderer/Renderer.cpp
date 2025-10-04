@@ -69,6 +69,8 @@ namespace Trident
         m_Registry->AddComponent<Transform>(m_Entity);
 
         m_Swapchain.Init();
+        // Reset the cached swapchain image layouts so new back buffers start from a known undefined state.
+        m_SwapchainImageLayouts.assign(m_Swapchain.GetImageCount(), VK_IMAGE_LAYOUT_UNDEFINED);
         m_Pipeline.Init(m_Swapchain);
         m_Commands.Init(m_Swapchain.GetImageCount());
 
@@ -632,6 +634,8 @@ namespace Trident
 
         m_Swapchain.Cleanup();
         m_Swapchain.Init();
+        // Whenever the swapchain rebuilds, reset the cached layouts because new images arrive in an undefined state.
+        m_SwapchainImageLayouts.assign(m_Swapchain.GetImageCount(), VK_IMAGE_LAYOUT_UNDEFINED);
 
         // Rebuild the swapchain-backed framebuffers so that they point at the freshly created images.
         m_Pipeline.RecreateFramebuffers(m_Swapchain);
@@ -1375,6 +1379,36 @@ namespace Trident
         VkImage l_SwapchainImage = m_Swapchain.GetImages()[imageIndex];
         VkPipelineStageFlags l_SwapchainSrcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
         VkAccessFlags l_SwapchainSrcAccess = 0;
+        VkImageLayout l_PreviousLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+        if (imageIndex < m_SwapchainImageLayouts.size())
+        {
+            l_PreviousLayout = m_SwapchainImageLayouts[imageIndex];
+        }
+
+        // Map the cached layout to the pipeline stage/access masks the barrier expects.
+        switch (l_PreviousLayout)
+        {
+        case VK_IMAGE_LAYOUT_PRESENT_SRC_KHR:
+            // Presented images relax to bottom-of-pipe with no further access requirements.
+            l_SwapchainSrcStage = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+            l_SwapchainSrcAccess = 0;
+            break;
+        case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:
+            l_SwapchainSrcStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+            l_SwapchainSrcAccess = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+            break;
+        case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
+            l_SwapchainSrcStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+            l_SwapchainSrcAccess = VK_ACCESS_TRANSFER_WRITE_BIT;
+            break;
+        case VK_IMAGE_LAYOUT_UNDEFINED:
+        default:
+            // Fresh images begin at the top of the pipe with no access hazards to satisfy.
+            l_SwapchainSrcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+            l_SwapchainSrcAccess = 0;
+            break;
+        }
 
         // Prepare the swapchain image for either a blit copy or an explicit clear prior to the presentation render pass.
         VkImageMemoryBarrier l_PrepareSwapchain{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
@@ -1385,13 +1419,18 @@ namespace Trident
         l_PrepareSwapchain.subresourceRange.levelCount = 1;
         l_PrepareSwapchain.subresourceRange.baseArrayLayer = 0;
         l_PrepareSwapchain.subresourceRange.layerCount = 1;
-        l_PrepareSwapchain.oldLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        l_PrepareSwapchain.oldLayout = l_PreviousLayout;
         l_PrepareSwapchain.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
         l_PrepareSwapchain.srcAccessMask = l_SwapchainSrcAccess;
         l_PrepareSwapchain.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
         l_PrepareSwapchain.image = l_SwapchainImage;
 
         vkCmdPipelineBarrier(l_CommandBuffer, l_SwapchainSrcStage, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &l_PrepareSwapchain);
+        // Persist the layout change so the next frame knows the transfer destination state is active and validation stays happy.
+        if (imageIndex < m_SwapchainImageLayouts.size())
+        {
+            m_SwapchainImageLayouts[imageIndex] = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        }
 
         if (l_ViewportActive)
         {
@@ -1472,6 +1511,10 @@ namespace Trident
 
         vkCmdPipelineBarrier(l_CommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
             0, 0, nullptr, 0, nullptr, 1, &l_ToColorAttachment);
+        if (imageIndex < m_SwapchainImageLayouts.size())
+        {
+            m_SwapchainImageLayouts[imageIndex] = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        }
 
         // Second pass: draw the main swapchain image. The attachment now preserves the blit results for multi-panel compositing.
         VkRenderPassBeginInfo l_SwapchainPass{ VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO };
@@ -1539,7 +1582,7 @@ namespace Trident
         l_PresentBarrier.subresourceRange.levelCount = 1;
         l_PresentBarrier.subresourceRange.baseArrayLayer = 0;
         l_PresentBarrier.subresourceRange.layerCount = 1;
-        l_PresentBarrier.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        l_PresentBarrier.oldLayout = (imageIndex < m_SwapchainImageLayouts.size()) ? m_SwapchainImageLayouts[imageIndex] : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
         l_PresentBarrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
         l_PresentBarrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
         l_PresentBarrier.dstAccessMask = 0;
@@ -1547,6 +1590,12 @@ namespace Trident
 
         vkCmdPipelineBarrier(l_CommandBuffer, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
             0, 0, nullptr, 0, nullptr, 1, &l_PresentBarrier);
+        
+        if (imageIndex < m_SwapchainImageLayouts.size())
+        {
+            // Keep the cached state aligned with the presentation transition so validation remains silent in future frames.
+            m_SwapchainImageLayouts[imageIndex] = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        }
 
         if (vkEndCommandBuffer(l_CommandBuffer) != VK_SUCCESS)
         {

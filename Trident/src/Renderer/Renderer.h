@@ -145,6 +145,9 @@ namespace Trident
         // Swapchain
         Swapchain m_Swapchain;
 
+        // Cache the swapchain image layouts so we can transition from the correct state each frame and keep validation quiet.
+        std::vector<VkImageLayout> m_SwapchainImageLayouts;
+
         // Buffers
         VkBuffer m_VertexBuffer = VK_NULL_HANDLE;
         VkDeviceMemory m_VertexBufferMemory = VK_NULL_HANDLE;
