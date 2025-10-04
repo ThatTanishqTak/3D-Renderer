@@ -18,8 +18,8 @@ namespace Trident
         const std::vector<VkCommandBuffer>& GetCommandBuffers() const { return m_CommandBuffers; }
         VkCommandBuffer& GetCommandBuffer(uint32_t index) { return m_CommandBuffers[index]; }
 
-        VkSemaphore GetImageAvailableSemaphorePerImage(uint32_t imageIndex) const { return m_ImageAvailableSemaphoresPerImage[imageIndex]; }
-        VkSemaphore GetRenderFinishedSemaphorePerImage(uint32_t imageIndex) const { return m_RenderFinishedSemaphoresPerImage[imageIndex]; }
+        VkSemaphore GetImageAvailableSemaphorePerImage(size_t imageIndex) const { return m_ImageAvailableSemaphoresPerImage[imageIndex]; }
+        VkSemaphore GetRenderFinishedSemaphoreForFrame(size_t frameIndex) const { return m_RenderFinishedSemaphoresPerFrame[frameIndex]; }
         VkFence GetInFlightFence(size_t index) const { return m_InFlightFences[index]; }
         VkFence& GetImageInFlight(size_t index) { return m_ImagesInFlight[index]; }
 
@@ -44,7 +44,9 @@ namespace Trident
         VkCommandPool m_CommandPool = VK_NULL_HANDLE;
         std::vector<VkCommandBuffer> m_CommandBuffers;
         std::vector<VkSemaphore> m_ImageAvailableSemaphoresPerImage;
-        std::vector<VkSemaphore> m_RenderFinishedSemaphoresPerImage;
+        // Render-finished semaphores are owned per frame-in-flight so they cannot be re-signaled until
+        // presentation has consumed them. The array length matches the frame count tracked by m_CurrentFrame.
+        std::vector<VkSemaphore> m_RenderFinishedSemaphoresPerFrame;
         std::vector<VkFence> m_InFlightFences;
         std::vector<VkFence> m_ImagesInFlight;
         size_t m_CurrentFrame = 0;

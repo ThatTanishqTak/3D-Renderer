@@ -1789,10 +1789,15 @@ namespace Trident
     bool Renderer::SubmitFrame(uint32_t imageIndex, VkFence inFlightFence)
     {
         VkCommandBuffer l_CommandBuffer = m_Commands.GetCommandBuffer(imageIndex);
+        const size_t l_CurrentFrame = m_Commands.CurrentFrame();
 
-        VkSemaphore l_WaitSemaphores[] = { m_Commands.GetImageAvailableSemaphorePerImage(m_Commands.CurrentFrame()) };
+        // Synchronization chain:
+        // 1. Wait for the swapchain image acquired semaphore tied to the frame slot (keeps acquire/submit pacing aligned).
+        // 2. Submit work that renders into the image for this frame-in-flight.
+        // 3. Signal the frame's render-finished semaphore so presentation waits on the exact same handle.
+        VkSemaphore l_WaitSemaphores[] = { m_Commands.GetImageAvailableSemaphorePerImage(l_CurrentFrame) };
         VkPipelineStageFlags l_WaitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
-        VkSemaphore l_SignalSemaphores[] = { m_Commands.GetRenderFinishedSemaphorePerImage(imageIndex) };
+        VkSemaphore l_SignalSemaphores[] = { m_Commands.GetRenderFinishedSemaphoreForFrame(l_CurrentFrame) };
 
         VkSubmitInfo l_SubmitInfo{ VK_STRUCTURE_TYPE_SUBMIT_INFO };
         l_SubmitInfo.waitSemaphoreCount = 1;
@@ -1828,11 +1833,15 @@ namespace Trident
 
     void Renderer::PresentFrame(uint32_t imageIndex)
     {
-        VkSemaphore l_SignalSemaphores[] = { m_Commands.GetRenderFinishedSemaphorePerImage(imageIndex) };
+        const size_t l_CurrentFrame = m_Commands.CurrentFrame();
+
+        // Presentation waits on the per-frame semaphore that SubmitFrame signaled. This keeps validation happy by ensuring
+        // the handle is only recycled after vkQueuePresentKHR consumes it.
+        VkSemaphore l_WaitSemaphores[] = { m_Commands.GetRenderFinishedSemaphoreForFrame(l_CurrentFrame) };
 
         VkPresentInfoKHR l_PresentInfo{ VK_STRUCTURE_TYPE_PRESENT_INFO_KHR };
         l_PresentInfo.waitSemaphoreCount = 1;
-        l_PresentInfo.pWaitSemaphores = l_SignalSemaphores;
+        l_PresentInfo.pWaitSemaphores = l_WaitSemaphores;
 
         VkSwapchainKHR l_Swapchains[] = { m_Swapchain.GetSwapchain() };
         l_PresentInfo.swapchainCount = 1;
@@ -1840,6 +1849,8 @@ namespace Trident
         l_PresentInfo.pImageIndices = &imageIndex;
 
         VkResult l_PresentResult = vkQueuePresentKHR(Application::GetPresentQueue(), &l_PresentInfo);
+
+        // Future improvement: leverage VK_EXT_swapchain_maintenance1 to release images earlier if presentation gets backlogged.
 
         if (l_PresentResult == VK_ERROR_OUT_OF_DATE_KHR || l_PresentResult == VK_SUBOPTIMAL_KHR)
         {

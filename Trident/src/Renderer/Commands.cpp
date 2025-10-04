@@ -16,21 +16,30 @@ namespace Trident
 
     void Commands::Cleanup()
     {
-        for (size_t i = 0; i < m_ImageAvailableSemaphoresPerImage.size(); ++i)
+        const VkDevice l_Device = Application::GetDevice();
+
+        // Tear down per-frame semaphores before pool destruction so presentation never observes recycled handles mid-teardown.
+        for (VkSemaphore l_RenderFinished : m_RenderFinishedSemaphoresPerFrame)
         {
-            if (m_RenderFinishedSemaphoresPerImage[i] != VK_NULL_HANDLE)
+            if (l_RenderFinished != VK_NULL_HANDLE)
             {
-                vkDestroySemaphore(Application::GetDevice(), m_RenderFinishedSemaphoresPerImage[i], nullptr);
+                vkDestroySemaphore(l_Device, l_RenderFinished, nullptr);
             }
+        }
 
-            if (m_ImageAvailableSemaphoresPerImage[i] != VK_NULL_HANDLE)
+        for (VkSemaphore l_ImageAvailable : m_ImageAvailableSemaphoresPerImage)
+        {
+            if (l_ImageAvailable != VK_NULL_HANDLE)
             {
-                vkDestroySemaphore(Application::GetDevice(), m_ImageAvailableSemaphoresPerImage[i], nullptr);
+                vkDestroySemaphore(l_Device, l_ImageAvailable, nullptr);
             }
+        }
 
-            if (m_InFlightFences[i] != VK_NULL_HANDLE)
+        for (VkFence l_InFlightFence : m_InFlightFences)
+        {
+            if (l_InFlightFence != VK_NULL_HANDLE)
             {
-                vkDestroyFence(Application::GetDevice(), m_InFlightFences[i], nullptr);
+                vkDestroyFence(l_Device, l_InFlightFence, nullptr);
             }
         }
 
@@ -51,33 +60,41 @@ namespace Trident
         }
 
         m_ImageAvailableSemaphoresPerImage.clear();
-        m_RenderFinishedSemaphoresPerImage.clear();
+        m_RenderFinishedSemaphoresPerFrame.clear();
         m_InFlightFences.clear();
         m_ImagesInFlight.clear();
     }
 
     void Commands::Recreate(uint32_t commandBufferCount)
     {
-        for (size_t i = 0; i < m_ImageAvailableSemaphoresPerImage.size(); ++i)
+        const VkDevice l_Device = Application::GetDevice();
+
+        for (VkSemaphore l_RenderFinished : m_RenderFinishedSemaphoresPerFrame)
         {
-            if (m_RenderFinishedSemaphoresPerImage[i] != VK_NULL_HANDLE)
+            if (l_RenderFinished != VK_NULL_HANDLE)
             {
-                vkDestroySemaphore(Application::GetDevice(), m_RenderFinishedSemaphoresPerImage[i], nullptr);
+                vkDestroySemaphore(l_Device, l_RenderFinished, nullptr);
             }
+        }
 
-            if (m_ImageAvailableSemaphoresPerImage[i] != VK_NULL_HANDLE)
+        for (VkSemaphore l_ImageAvailable : m_ImageAvailableSemaphoresPerImage)
+        {
+            if (l_ImageAvailable != VK_NULL_HANDLE)
             {
-                vkDestroySemaphore(Application::GetDevice(), m_ImageAvailableSemaphoresPerImage[i], nullptr);
+                vkDestroySemaphore(l_Device, l_ImageAvailable, nullptr);
             }
+        }
 
-            if (m_InFlightFences[i] != VK_NULL_HANDLE)
+        for (VkFence l_InFlightFence : m_InFlightFences)
+        {
+            if (l_InFlightFence != VK_NULL_HANDLE)
             {
-                vkDestroyFence(Application::GetDevice(), m_InFlightFences[i], nullptr);
+                vkDestroyFence(l_Device, l_InFlightFence, nullptr);
             }
         }
 
         m_ImageAvailableSemaphoresPerImage.clear();
-        m_RenderFinishedSemaphoresPerImage.clear();
+        m_RenderFinishedSemaphoresPerFrame.clear();
         m_InFlightFences.clear();
         m_ImagesInFlight.clear();
 
@@ -161,9 +178,11 @@ namespace Trident
     {
         TR_CORE_TRACE("Creating Sync Objects");
 
+        const size_t l_FrameCount = swapchainImageCount; // Frames in flight currently mirror the swapchain image count.
+
         m_ImageAvailableSemaphoresPerImage.resize(swapchainImageCount);
-        m_RenderFinishedSemaphoresPerImage.resize(swapchainImageCount);
-        m_InFlightFences.resize(swapchainImageCount);
+        m_RenderFinishedSemaphoresPerFrame.resize(l_FrameCount);
+        m_InFlightFences.resize(l_FrameCount);
         m_ImagesInFlight.resize(swapchainImageCount);
 
         std::fill(m_ImagesInFlight.begin(), m_ImagesInFlight.end(), VK_NULL_HANDLE);
@@ -172,10 +191,10 @@ namespace Trident
         VkFenceCreateInfo fenceInfo{ VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
         fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-        for (uint32_t i = 0; i < swapchainImageCount; ++i)
+        for (size_t i = 0; i < l_FrameCount; ++i)
         {
             if (vkCreateSemaphore(Application::GetDevice(), &semaphoreInfo, nullptr, &m_ImageAvailableSemaphoresPerImage[i]) != VK_SUCCESS ||
-                vkCreateSemaphore(Application::GetDevice(), &semaphoreInfo, nullptr, &m_RenderFinishedSemaphoresPerImage[i]) != VK_SUCCESS ||
+                vkCreateSemaphore(Application::GetDevice(), &semaphoreInfo, nullptr, &m_RenderFinishedSemaphoresPerFrame[i]) != VK_SUCCESS ||
                 vkCreateFence(Application::GetDevice(), &fenceInfo, nullptr, &m_InFlightFences[i]) != VK_SUCCESS)
             {
                 TR_CORE_CRITICAL("Failed to create sync objects for image {}", i);
@@ -183,6 +202,8 @@ namespace Trident
         }
 
         TR_CORE_TRACE("Sync Objects Created ({})", swapchainImageCount);
+
+        // Future improvement: adopt VK_KHR_timeline_semaphore or VK_EXT_swapchain_maintenance1 when driver coverage improves.
     }
 
 }
