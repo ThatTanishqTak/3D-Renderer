@@ -1451,6 +1451,24 @@ namespace Trident
 
             vkCmdBeginRenderPass(l_CommandBuffer, &l_OffscreenPass, VK_SUBPASS_CONTENTS_INLINE);
 
+            // Explicitly clear the colour attachment so the viewport image always starts from the requested editor clear colour.
+            VkClearAttachment l_ColorAttachmentClear{};
+            l_ColorAttachmentClear.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            l_ColorAttachmentClear.colorAttachment = 0;
+            l_ColorAttachmentClear.clearValue.color.float32[0] = m_ClearColor.r;
+            l_ColorAttachmentClear.clearValue.color.float32[1] = m_ClearColor.g;
+            l_ColorAttachmentClear.clearValue.color.float32[2] = m_ClearColor.b;
+            l_ColorAttachmentClear.clearValue.color.float32[3] = m_ClearColor.a;
+
+            VkClearRect l_ColorClearRect{};
+            l_ColorClearRect.rect.offset = { 0, 0 };
+            l_ColorClearRect.rect.extent = l_ActiveTarget->m_Extent;
+            l_ColorClearRect.baseArrayLayer = 0;
+            l_ColorClearRect.layerCount = 1;
+
+            vkCmdClearAttachments(l_CommandBuffer, 1, &l_ColorAttachmentClear, 1, &l_ColorClearRect);
+            // Future improvement: consider a dedicated render pass with VK_ATTACHMENT_LOAD_OP_CLEAR for the editor path to simplify state management.
+
             VkViewport l_OffscreenViewport{};
             l_OffscreenViewport.x = 0.0f;
             l_OffscreenViewport.y = 0.0f;
