@@ -1309,10 +1309,43 @@ namespace Trident
             return;
         }
 
+        VkCommandBuffer l_BootstrapCommandBuffer = m_Commands.GetOneTimePool().Acquire();
+        VkCommandBufferBeginInfo l_BootstrapBeginInfo{ VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
+        l_BootstrapBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+        vkBeginCommandBuffer(l_BootstrapCommandBuffer, &l_BootstrapBeginInfo);
+
+        VkImageMemoryBarrier l_BootstrapBarrier{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+        l_BootstrapBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        l_BootstrapBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        l_BootstrapBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        l_BootstrapBarrier.subresourceRange.baseMipLevel = 0;
+        l_BootstrapBarrier.subresourceRange.levelCount = 1;
+        l_BootstrapBarrier.subresourceRange.baseArrayLayer = 0;
+        l_BootstrapBarrier.subresourceRange.layerCount = 1;
+        l_BootstrapBarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        l_BootstrapBarrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        l_BootstrapBarrier.srcAccessMask = 0;
+        l_BootstrapBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        l_BootstrapBarrier.image = target.m_Image;
+
+        // Bootstrap the image layout so descriptor writes and validation stay in sync when the viewport samples before the first render pass.
+        vkCmdPipelineBarrier(l_BootstrapCommandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &l_BootstrapBarrier);
+
+        vkEndCommandBuffer(l_BootstrapCommandBuffer);
+
+        VkSubmitInfo l_BootstrapSubmitInfo{ VK_STRUCTURE_TYPE_SUBMIT_INFO };
+        l_BootstrapSubmitInfo.commandBufferCount = 1;
+        l_BootstrapSubmitInfo.pCommandBuffers = &l_BootstrapCommandBuffer;
+
+        vkQueueSubmit(Application::GetGraphicsQueue(), 1, &l_BootstrapSubmitInfo, VK_NULL_HANDLE);
+        vkQueueWaitIdle(Application::GetGraphicsQueue());
+
+        m_Commands.GetOneTimePool().Release(l_BootstrapCommandBuffer);
 
         // Register (or refresh) the descriptor used by the viewport panel and keep it cached for quick retrieval.
         target.m_TextureID = ImGui_ImplVulkan_AddTexture(target.m_Sampler, target.m_ImageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         target.m_Extent = extent;
+        target.m_CurrentLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         target.m_DepthLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
         TR_CORE_TRACE("Offscreen render target resized to {}x{}", extent.width, extent.height);
