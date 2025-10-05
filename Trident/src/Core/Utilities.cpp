@@ -1,5 +1,7 @@
 #include "Utilities.h"
 
+#include "Loader/AssimpExtensions.h"
+
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/sinks/basic_file_sink.h>
 
@@ -49,11 +51,22 @@ namespace Trident
         void FileWatcher::RegisterDefaultDirectories()
         {
             static const std::vector<std::string> s_ShaderExtensions{ ".vert", ".frag", ".comp", ".geom", ".tesc", ".tese" };
-            static const std::vector<std::string> s_ModelExtensions{ ".gltf", ".glb", ".fbx" };
             static const std::vector<std::string> s_TextureExtensions{ ".png", ".jpg", ".jpeg", ".tga", ".bmp", ".ktx", ".hdr", ".dds" };
 
+            // Model hot-reload support mirrors Assimp's importer capabilities so we avoid hard-coding the format list.
+            const std::vector<std::string>& l_AssimpExtensions = Loader::AssimpExtensions::GetNormalizedExtensions();
+
+            // Guard against environments where Assimp is unavailable by falling back to a minimal, well-tested set of extensions.
+            // TODO: Expand the fallback list or persist the generated list if offline cache becomes necessary.
+            const std::vector<std::string>* l_ModelExtensions = &l_AssimpExtensions;
+            if (l_AssimpExtensions.empty())
+            {
+                static const std::vector<std::string> s_MinimalModelExtensions{ ".gltf", ".glb", ".fbx" };
+                l_ModelExtensions = &s_MinimalModelExtensions;
+            }
+
             RegisterWatch(std::filesystem::path("Assets") / "Shaders", WatchType::Shader, s_ShaderExtensions);
-            RegisterWatch(std::filesystem::path("Assets") / "Models", WatchType::Model, s_ModelExtensions);
+            RegisterWatch(std::filesystem::path("Assets") / "Models", WatchType::Model, *l_ModelExtensions);
             RegisterWatch(std::filesystem::path("Assets") / "Textures", WatchType::Texture, s_TextureExtensions);
         }
 
