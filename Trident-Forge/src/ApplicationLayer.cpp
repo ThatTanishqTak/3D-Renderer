@@ -179,6 +179,37 @@ void ApplicationLayer::Run()
         m_Engine->Update();
         m_ImGuiLayer->BeginFrame();
 
+        // Surface layout persistence controls so designers can intentionally snapshot or restore workspace arrangements.
+        if (ImGui::BeginMainMenuBar())
+        {
+            if (ImGui::BeginMenu("Layout"))
+            {
+                if (ImGui::MenuItem("Save Current Layout"))
+                {
+                    m_ImGuiLayer->SaveLayoutToDisk();
+                }
+
+                if (ImGui::MenuItem("Load Layout From Disk"))
+                {
+                    if (!m_ImGuiLayer->LoadLayoutFromDisk())
+                    {
+                        // If loading fails we rebuild the default so the dockspace stays valid.
+                        m_ImGuiLayer->ResetLayoutToDefault();
+                    }
+                }
+
+                if (ImGui::MenuItem("Reset Layout To Default"))
+                {
+                    m_ImGuiLayer->ResetLayoutToDefault();
+                }
+
+                ImGui::EndMenu();
+            }
+
+            ImGui::EndMainMenuBar();
+        }
+
+
         DrawViewportPanel();
         DrawWorldOutlinerPanel();
         DrawDetailsPanel();

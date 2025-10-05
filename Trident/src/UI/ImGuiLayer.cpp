@@ -6,7 +6,10 @@
 #include <imgui_internal.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_vulkan.h>
+
 #include <algorithm>
+#include <filesystem>
+#include <system_error>
 
 namespace
 {
@@ -94,6 +97,34 @@ namespace Trident
             io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
             io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
             ImGui::StyleColorsDark();
+
+            // Persist layout customisation to a renderer-scoped file so editor and runtime do not conflict.
+            const std::filesystem::path l_LayoutDirectory{ "Assets/Layouts" };
+            const std::filesystem::path l_LayoutFile = l_LayoutDirectory / "DefaultLayout.ini";
+            m_LayoutIniFilePath = l_LayoutFile.string();
+            io.IniFilename = m_LayoutIniFilePath.c_str();
+
+            std::error_code l_DirectoryError{};
+            std::filesystem::create_directories(l_LayoutDirectory, l_DirectoryError);
+            if (l_DirectoryError)
+            {
+                TR_CORE_WARN("Unable to ensure ImGui layout directory '{}' exists: {}", l_LayoutDirectory.string(), l_DirectoryError.message());
+            }
+
+            // When no saved layout is available we bootstrap the hard-coded dock builder profile before ImGui writes a fresh file.
+            if (std::filesystem::exists(l_LayoutFile))
+            {
+                if (!LoadLayoutFromDisk())
+                {
+                    TR_CORE_WARN("Falling back to default dockspace layout after failing to load '{}'.", m_LayoutIniFilePath);
+                    ResetLayoutToDefault();
+                }
+            }
+            else
+            {
+                TR_CORE_INFO("ImGui layout file '{}' not found. Applying default dockspace and awaiting user save.", m_LayoutIniFilePath);
+                ResetLayoutToDefault();
+            }
 
             if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
             {
@@ -216,6 +247,69 @@ namespace Trident
         void ImGuiLayer::Render(VkCommandBuffer commandBuffer)
         {
             ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);
+        }
+
+        bool ImGuiLayer::SaveLayoutToDisk() const
+        {
+            if (m_LayoutIniFilePath.empty())
+            {
+                TR_CORE_ERROR("Cannot save ImGui layout because the ini file path has not been initialised.");
+                return false;
+            }
+
+            ImGui::SaveIniSettingsToDisk(m_LayoutIniFilePath.c_str());
+
+            const bool l_FileExists = std::filesystem::exists(m_LayoutIniFilePath);
+            if (!l_FileExists)
+            {
+                TR_CORE_WARN("ImGui reported saving layout data, but '{}' was not created.", m_LayoutIniFilePath);
+                return false;
+            }
+
+            TR_CORE_INFO("Saved ImGui layout to '{}'.", m_LayoutIniFilePath);
+            return true;
+        }
+
+        bool ImGuiLayer::LoadLayoutFromDisk()
+        {
+            if (m_LayoutIniFilePath.empty())
+            {
+                TR_CORE_ERROR("Cannot load ImGui layout because the ini file path has not been initialised.");
+                return false;
+            }
+
+            if (!std::filesystem::exists(m_LayoutIniFilePath))
+            {
+                TR_CORE_WARN("ImGui layout file '{}' does not exist.", m_LayoutIniFilePath);
+                return false;
+            }
+
+            ImGui::LoadIniSettingsFromDisk(m_LayoutIniFilePath.c_str());
+            m_DockspaceInitialized = true;
+
+            TR_CORE_INFO("Loaded ImGui layout from '{}'.", m_LayoutIniFilePath);
+            return true;
+        }
+
+        void ImGuiLayer::ResetLayoutToDefault()
+        {
+            TR_CORE_INFO("Resetting ImGui layout to built-in dockspace arrangement.");
+
+            // Clearing the active settings ensures the builder recreates the layout before any disk persistence occurs.
+            ImGui::LoadIniSettingsFromMemory("", 0);
+            m_DockspaceInitialized = false;
+
+            if (!m_LayoutIniFilePath.empty())
+            {
+                std::error_code l_RemoveError{};
+                std::filesystem::remove(m_LayoutIniFilePath, l_RemoveError);
+                if (l_RemoveError)
+                {
+                    TR_CORE_WARN("Failed to remove previous layout file '{}': {}", m_LayoutIniFilePath, l_RemoveError.message());
+                }
+            }
+
+            // Future improvement: support selecting between multiple layout presets and auto-versioning them here.
         }
     }
 }

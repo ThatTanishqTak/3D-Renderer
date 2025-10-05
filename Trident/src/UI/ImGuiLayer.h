@@ -3,6 +3,8 @@
 #include <vulkan/vulkan.h>
 #include <GLFW/glfw3.h>
 
+#include <string>
+
 namespace Trident
 {
     namespace UI
@@ -20,11 +22,16 @@ namespace Trident
             void EndFrame();
             void Render(VkCommandBuffer commandBuffer);
 
+            bool SaveLayoutToDisk() const;
+            bool LoadLayoutFromDisk();
+            void ResetLayoutToDefault();
+
         private:
             VkDescriptorPool m_DescriptorPool = VK_NULL_HANDLE;
             VkDevice m_Device = VK_NULL_HANDLE;
             VkQueue m_Queue = VK_NULL_HANDLE;
             bool m_DockspaceInitialized = false;
+            std::string m_LayoutIniFilePath{};
         };
     }
 }
