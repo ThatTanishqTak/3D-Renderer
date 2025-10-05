@@ -1845,10 +1845,10 @@ namespace Trident
         // Synchronization chain:
         // 1. Wait for the swapchain image acquired semaphore tied to the frame slot (keeps acquire/submit pacing aligned).
         // 2. Submit work that renders into the image for this frame-in-flight.
-        // 3. Signal the frame's render-finished semaphore so presentation waits on the exact same handle.
+        // 3. Signal the image-scoped render-finished semaphore so presentation waits on the exact same handle when that image is presented.
         VkSemaphore l_WaitSemaphores[] = { m_Commands.GetImageAvailableSemaphorePerImage(l_CurrentFrame) };
         VkPipelineStageFlags l_WaitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
-        VkSemaphore l_SignalSemaphores[] = { m_Commands.GetRenderFinishedSemaphoreForFrame(l_CurrentFrame) };
+        VkSemaphore l_SignalSemaphores[] = { m_Commands.GetRenderFinishedSemaphoreForImage(imageIndex) };
 
         VkSubmitInfo l_SubmitInfo{ VK_STRUCTURE_TYPE_SUBMIT_INFO };
         l_SubmitInfo.waitSemaphoreCount = 1;
@@ -1886,9 +1886,9 @@ namespace Trident
     {
         const size_t l_CurrentFrame = m_Commands.CurrentFrame();
 
-        // Presentation waits on the per-frame semaphore that SubmitFrame signaled. This keeps validation happy by ensuring
-        // the handle is only recycled after vkQueuePresentKHR consumes it.
-        VkSemaphore l_WaitSemaphores[] = { m_Commands.GetRenderFinishedSemaphoreForFrame(l_CurrentFrame) };
+        // Presentation waits on the per-image semaphore that SubmitFrame signaled. This keeps validation happy by ensuring
+        // the handle is only recycled after vkQueuePresentKHR consumes it and the swapchain re-issues the image.
+        VkSemaphore l_WaitSemaphores[] = { m_Commands.GetRenderFinishedSemaphoreForImage(imageIndex) };
 
         VkPresentInfoKHR l_PresentInfo{ VK_STRUCTURE_TYPE_PRESENT_INFO_KHR };
         l_PresentInfo.waitSemaphoreCount = 1;

@@ -18,8 +18,8 @@ namespace Trident
     {
         const VkDevice l_Device = Application::GetDevice();
 
-        // Tear down per-frame semaphores before pool destruction so presentation never observes recycled handles mid-teardown.
-        for (VkSemaphore l_RenderFinished : m_RenderFinishedSemaphoresPerFrame)
+        // Tear down per-image semaphores before pool destruction so presentation never observes recycled handles mid-teardown.
+        for (VkSemaphore l_RenderFinished : m_RenderFinishedSemaphoresPerImage)
         {
             if (l_RenderFinished != VK_NULL_HANDLE)
             {
@@ -60,7 +60,7 @@ namespace Trident
         }
 
         m_ImageAvailableSemaphoresPerImage.clear();
-        m_RenderFinishedSemaphoresPerFrame.clear();
+        m_RenderFinishedSemaphoresPerImage.clear();
         m_InFlightFences.clear();
         m_ImagesInFlight.clear();
     }
@@ -69,7 +69,7 @@ namespace Trident
     {
         const VkDevice l_Device = Application::GetDevice();
 
-        for (VkSemaphore l_RenderFinished : m_RenderFinishedSemaphoresPerFrame)
+        for (VkSemaphore l_RenderFinished : m_RenderFinishedSemaphoresPerImage)
         {
             if (l_RenderFinished != VK_NULL_HANDLE)
             {
@@ -94,7 +94,7 @@ namespace Trident
         }
 
         m_ImageAvailableSemaphoresPerImage.clear();
-        m_RenderFinishedSemaphoresPerFrame.clear();
+        m_RenderFinishedSemaphoresPerImage.clear();
         m_InFlightFences.clear();
         m_ImagesInFlight.clear();
 
@@ -181,9 +181,12 @@ namespace Trident
         const size_t l_FrameCount = swapchainImageCount; // Frames in flight currently mirror the swapchain image count.
 
         m_ImageAvailableSemaphoresPerImage.resize(swapchainImageCount);
-        m_RenderFinishedSemaphoresPerFrame.resize(l_FrameCount);
+        m_RenderFinishedSemaphoresPerImage.resize(swapchainImageCount);
         m_InFlightFences.resize(l_FrameCount);
         m_ImagesInFlight.resize(swapchainImageCount);
+
+        // Each swapchain image gets its own render-finished semaphore so the handle is only reused after vkAcquireNextImageKHR
+        // returns that same image again. Frames in flight still use a fence ring to rate-limit CPU submissions.
 
         std::fill(m_ImagesInFlight.begin(), m_ImagesInFlight.end(), VK_NULL_HANDLE);
 
@@ -191,13 +194,20 @@ namespace Trident
         VkFenceCreateInfo fenceInfo{ VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
         fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-        for (size_t i = 0; i < l_FrameCount; ++i)
+        for (size_t i = 0; i < swapchainImageCount; ++i)
         {
             if (vkCreateSemaphore(Application::GetDevice(), &semaphoreInfo, nullptr, &m_ImageAvailableSemaphoresPerImage[i]) != VK_SUCCESS ||
-                vkCreateSemaphore(Application::GetDevice(), &semaphoreInfo, nullptr, &m_RenderFinishedSemaphoresPerFrame[i]) != VK_SUCCESS ||
-                vkCreateFence(Application::GetDevice(), &fenceInfo, nullptr, &m_InFlightFences[i]) != VK_SUCCESS)
+                vkCreateSemaphore(Application::GetDevice(), &semaphoreInfo, nullptr, &m_RenderFinishedSemaphoresPerImage[i]) != VK_SUCCESS)
             {
                 TR_CORE_CRITICAL("Failed to create sync objects for image {}", i);
+            }
+        }
+
+        for (size_t i = 0; i < l_FrameCount; ++i)
+        {
+            if (vkCreateFence(Application::GetDevice(), &fenceInfo, nullptr, &m_InFlightFences[i]) != VK_SUCCESS)
+            {
+                TR_CORE_CRITICAL("Failed to create in-flight fence for frame {}", i);
             }
         }
 
