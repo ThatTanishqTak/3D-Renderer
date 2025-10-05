@@ -34,13 +34,6 @@ namespace Trident
     namespace UI { class ImGuiLayer; }
     namespace ECS { class Registry; }
 
-    struct Transform
-    {
-        glm::vec3 Position{ 0.0f };
-        glm::vec3 Rotation{ 0.0f };
-        glm::vec3 Scale{ 1.0f };
-    };
-
     struct ViewportInfo
     {
         uint32_t ViewportID = 0;

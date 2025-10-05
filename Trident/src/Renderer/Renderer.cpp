@@ -2,6 +2,7 @@
 
 #include "Application.h"
 
+#include "ECS/Components/TransformComponent.h"
 #include "Geometry/Mesh.h"
 #include "UI/ImGuiLayer.h"
 #include "Core/Utilities.h"

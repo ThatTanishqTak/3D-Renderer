@@ -22,6 +22,7 @@
 #include "Camera/CameraComponent.h"
 #include "Renderer/RenderCommand.h"
 #include "Renderer/Renderer.h"
+#include "ECS/Components/TransformComponent.h"
 
 namespace
 {
