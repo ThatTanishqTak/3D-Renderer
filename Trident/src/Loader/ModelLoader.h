@@ -12,8 +12,9 @@ namespace Trident
     {
         struct ModelData
         {
-            std::vector<Geometry::Mesh> Meshes;         // Geometry buffers extracted from a glTF/FBX document
+            std::vector<Geometry::Mesh> Meshes;         // Geometry buffers extracted from the source document
             std::vector<Geometry::Material> Materials; // Companion material table referenced by Mesh::MaterialIndex
+            std::vector<std::string> Textures;         // Normalized texture paths shared by materials in the same order as their indices
         };
 
         class ModelLoader
