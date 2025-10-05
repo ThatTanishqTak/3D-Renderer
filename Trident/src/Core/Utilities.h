@@ -27,20 +27,47 @@ namespace Trident
 {
 	namespace Utilities
 	{
-		class Log
-		{
-		public:
-			static void Init();
+        class Log
+        {
+        public:
+            static void Init();
 
-			static std::shared_ptr<spdlog::logger>& GetCoreLogger() { return s_CoreLogger; }
-			static std::shared_ptr<spdlog::logger>& GetClientLogger() { return s_ClientLogger; }
+            static std::shared_ptr<spdlog::logger>& GetCoreLogger() { return s_CoreLogger; }
+            static std::shared_ptr<spdlog::logger>& GetClientLogger() { return s_ClientLogger; }
 
-		private:
-			static std::shared_ptr<spdlog::logger> s_CoreLogger;
-			static std::shared_ptr<spdlog::logger> s_ClientLogger;
-		};
+        private:
+            static std::shared_ptr<spdlog::logger> s_CoreLogger;
+            static std::shared_ptr<spdlog::logger> s_ClientLogger;
+        };
 
-		//------------------------------------------------------------------------------------------------------------------------------------------------------//
+        //------------------------------------------------------------------------------------------------------------------------------------------------------//
+
+        // Thread-safe buffer that captures log entries for the editor console.
+        class ConsoleLog
+        {
+        public:
+            struct Entry
+            {
+                spdlog::level::level_enum Level = spdlog::level::info;             // Severity used for filtering and styling.
+                std::chrono::system_clock::time_point Timestamp{};                  // Moment the message was recorded.
+                std::string Message;                                                // Final formatted log message.
+            };
+
+        public:
+            static void PushEntry(spdlog::level::level_enum level, std::string message);
+            static std::vector<Entry> GetSnapshot();
+            static void Clear();
+
+        private:
+            static void PruneIfNeeded();
+
+        private:
+            static std::mutex s_BufferMutex;                                           // Synchronises access to the buffer.
+            static std::deque<Entry> s_Buffer;                                         // Ring buffer that stores the captured messages.
+            static size_t s_MaxEntries;                                                // Hard cap that prevents unbounded growth.
+        };
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------//
 
 		class FileManagement
 		{

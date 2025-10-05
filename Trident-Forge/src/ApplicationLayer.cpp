@@ -15,6 +15,7 @@
 #include <glm/gtx/matrix_decompose.hpp>
 #include <glm/gtc/matrix_inverse.hpp>
 
+#include "Core/Utilities.h"
 #include "UI/FileDialog.h"
 #include "Loader/ModelLoader.h"
 #include "Loader/TextureLoader.h"
@@ -73,6 +74,63 @@ namespace
     Trident::ECS::Entity s_SelectedViewportCamera = s_InvalidEntity;
     // Remember the combo-box selection index so the UI remains sticky across frames.
     int s_SelectedCameraIndex = 0;
+
+    // Console window configuration toggles stored across frames for a consistent user experience.
+    bool s_ShowConsoleErrors = true;
+    bool s_ShowConsoleWarnings = true;
+    bool s_ShowConsoleLogs = true;
+    bool s_ConsoleAutoScroll = true;
+    size_t s_LastConsoleEntryCount = 0;
+
+    // Convert a timestamp to a human readable clock string that fits in the console.
+    std::string FormatConsoleTimestamp(const std::chrono::system_clock::time_point& a_TimePoint)
+    {
+        std::time_t l_TimeT = std::chrono::system_clock::to_time_t(a_TimePoint);
+        std::tm l_LocalTime{};
+
+#if defined(_MSC_VER)
+        localtime_s(&l_LocalTime, &l_TimeT);
+#else
+        localtime_r(&l_TimeT, &l_LocalTime);
+#endif
+
+        std::ostringstream l_Stream;
+        l_Stream << std::put_time(&l_LocalTime, "%H:%M:%S");
+        return l_Stream.str();
+    }
+
+    // Decide whether an entry should be shown given the active severity toggles.
+    bool ShouldDisplayConsoleEntry(spdlog::level::level_enum a_Level)
+    {
+        switch (a_Level)
+        {
+        case spdlog::level::critical:
+        case spdlog::level::err:
+            return s_ShowConsoleErrors;
+        case spdlog::level::warn:
+            return s_ShowConsoleWarnings;
+        default:
+            return s_ShowConsoleLogs;
+        }
+    }
+
+    // Pick a colour for a log entry so important events stand out while browsing history.
+    ImVec4 GetConsoleColour(spdlog::level::level_enum a_Level)
+    {
+        switch (a_Level)
+        {
+        case spdlog::level::critical:
+        case spdlog::level::err:
+            return { 0.94f, 0.33f, 0.33f, 1.0f };
+        case spdlog::level::warn:
+            return { 0.97f, 0.78f, 0.26f, 1.0f };
+        case spdlog::level::debug:
+        case spdlog::level::trace:
+            return { 0.60f, 0.80f, 0.98f, 1.0f };
+        default:
+            return { 0.85f, 0.85f, 0.85f, 1.0f };
+        }
+    }
 }
 
 ApplicationLayer::ApplicationLayer()
@@ -164,6 +222,58 @@ void ApplicationLayer::Run()
             ImGui::Text("Captured Samples: %zu", Trident::Application::GetRenderer().GetPerformanceCaptureSampleCount());
         }
 
+        ImGui::End();
+
+        if (ImGui::Begin("Console"))
+        {
+            // Pull a copy of the buffered entries so rendering does not hold the logging mutex for long periods.
+            std::vector<Trident::Utilities::ConsoleLog::Entry> l_LogEntries = Trident::Utilities::ConsoleLog::GetSnapshot();
+
+            if (ImGui::Button("Clear"))
+            {
+                Trident::Utilities::ConsoleLog::Clear();
+                s_LastConsoleEntryCount = 0;
+            }
+
+            ImGui::SameLine();
+            ImGui::Checkbox("Auto-scroll", &s_ConsoleAutoScroll);
+
+            ImGui::Separator();
+
+            ImGui::Checkbox("Errors", &s_ShowConsoleErrors);
+            ImGui::SameLine();
+            ImGui::Checkbox("Warnings", &s_ShowConsoleWarnings);
+            ImGui::SameLine();
+            ImGui::Checkbox("Logs", &s_ShowConsoleLogs);
+
+            ImGui::Separator();
+
+            ImGui::BeginChild("ConsoleScrollRegion", ImVec2(0.0f, 0.0f), false, ImGuiWindowFlags_HorizontalScrollbar);
+
+            for (const Trident::Utilities::ConsoleLog::Entry& it_Entry : l_LogEntries)
+            {
+                if (!ShouldDisplayConsoleEntry(it_Entry.Level))
+                {
+                    continue;
+                }
+
+                const std::string l_Timestamp = FormatConsoleTimestamp(it_Entry.Timestamp);
+                const ImVec4 l_Colour = GetConsoleColour(it_Entry.Level);
+
+                ImGui::PushStyleColor(ImGuiCol_Text, l_Colour);
+                ImGui::Text("[%s] %s", l_Timestamp.c_str(), it_Entry.Message.c_str());
+                ImGui::PopStyleColor();
+            }
+
+            if (s_ConsoleAutoScroll && !l_LogEntries.empty() && l_LogEntries.size() != s_LastConsoleEntryCount)
+            {
+                ImGui::SetScrollHereY(1.0f);
+            }
+
+            ImGui::EndChild();
+
+            s_LastConsoleEntryCount = l_LogEntries.size();
+        }
         ImGui::End();
 
         // Camera control panel allows artists to align shots without diving into engine code.

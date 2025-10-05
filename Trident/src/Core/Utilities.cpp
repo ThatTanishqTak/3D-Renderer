@@ -4,22 +4,92 @@
 
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/sinks/basic_file_sink.h>
+#include <spdlog/sinks/base_sink.h>
 
 namespace Trident
 {
     namespace Utilities
     {
+        namespace
+        {
+            // Custom sink that forwards every log record into the ImGui console buffer.
+            class ImGuiLogSink final : public spdlog::sinks::base_sink<std::mutex>
+            {
+            protected:
+                void sink_it_(const spdlog::details::log_msg& a_Message) override
+                {
+                    spdlog::memory_buf_t l_Buffer;
+                    formatter_->format(a_Message, l_Buffer);
+
+                    ConsoleLog::PushEntry(a_Message.level, fmt::to_string(l_Buffer));
+                }
+
+                void flush_() override
+                {
+                    // The console buffer is memory backed, so there is nothing to flush explicitly.
+                }
+            };
+        }
+
         std::shared_ptr<spdlog::logger> Log::s_CoreLogger;
         std::shared_ptr<spdlog::logger> Log::s_ClientLogger;
+        std::mutex ConsoleLog::s_BufferMutex;
+        std::deque<ConsoleLog::Entry> ConsoleLog::s_Buffer;
+        size_t ConsoleLog::s_MaxEntries = 2000;
+
+        void ConsoleLog::PushEntry(spdlog::level::level_enum level, std::string message)
+        {
+            // Guard access so log calls from multiple threads do not corrupt the buffer.
+            std::lock_guard<std::mutex> l_Lock(s_BufferMutex);
+
+            Entry l_Entry{};
+            l_Entry.Level = level;
+            l_Entry.Timestamp = std::chrono::system_clock::now();
+            l_Entry.Message = std::move(message);
+
+            s_Buffer.push_back(std::move(l_Entry));
+            PruneIfNeeded();
+        }
+
+        std::vector<ConsoleLog::Entry> ConsoleLog::GetSnapshot()
+        {
+            std::lock_guard<std::mutex> l_Lock(s_BufferMutex);
+            return { s_Buffer.begin(), s_Buffer.end() };
+        }
+
+        void ConsoleLog::Clear()
+        {
+            std::lock_guard<std::mutex> l_Lock(s_BufferMutex);
+            s_Buffer.clear();
+        }
+
+        void ConsoleLog::PruneIfNeeded()
+        {
+            if (s_Buffer.size() <= s_MaxEntries)
+            {
+                return;
+            }
+
+            const size_t l_Overflow = s_Buffer.size() - s_MaxEntries;
+            for (size_t l_Index = 0; l_Index < l_Overflow; ++l_Index)
+            {
+                s_Buffer.pop_front();
+            }
+        }
 
         void Log::Init()
         {
+            // Reset the in-memory console buffer each time logging is initialised so sessions start cleanly.
+            ConsoleLog::Clear();
+
             std::vector<spdlog::sink_ptr> logSinks;
             logSinks.emplace_back(std::make_shared<spdlog::sinks::stdout_color_sink_mt>());
             logSinks.emplace_back(std::make_shared<spdlog::sinks::basic_file_sink_mt>("Trident.log", true));
+            logSinks.emplace_back(std::make_shared<ImGuiLogSink>());
 
             logSinks[0]->set_pattern("%^[%T] %n: %v%$");
             logSinks[1]->set_pattern("[%T] [%l] %n: %v");
+            logSinks[2]->set_pattern("[%l] %n: %v");
 
             s_CoreLogger = std::make_shared<spdlog::logger>("TRIDENT", begin(logSinks), end(logSinks));
             spdlog::register_logger(s_CoreLogger);
