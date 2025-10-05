@@ -811,9 +811,7 @@ void ApplicationLayer::DrawTransformGizmo(Trident::ECS::Entity a_SelectedEntity)
         return;
     }
 
-    // Fetch the camera matrices used by the renderer so the gizmo aligns with the actual scene view.
-    Trident::Camera& l_Camera = Trident::Application::GetRenderer().GetCamera();
-    glm::mat4 l_ViewMatrix = l_Camera.GetViewMatrix();
+    // Fetch the viewport rectangle published by the renderer so the gizmo aligns with the active scene view.
 
     const Trident::ViewportInfo l_ViewportInfo = Trident::Application::GetRenderer().GetViewport();
     ImVec2 l_RectPosition{};
@@ -833,8 +831,38 @@ void ApplicationLayer::DrawTransformGizmo(Trident::ECS::Entity a_SelectedEntity)
         l_RectSize = l_MainViewport->Size;
     }
 
+    // Mirror the Scene panel camera selection logic so the gizmo uses whichever camera the user targeted.
+    glm::mat4 l_ViewMatrix{ 1.0f };
+    float l_FieldOfViewDegrees = 45.0f;
+    float l_NearClipDistance = 0.1f;
+    float l_FarClipDistance = 100.0f;
+
+    if (s_SelectedViewportCamera != s_InvalidEntity
+        && l_Registry.HasComponent<Trident::CameraComponent>(s_SelectedViewportCamera)
+        && l_Registry.HasComponent<Trident::Transform>(s_SelectedViewportCamera))
+    {
+        // A scene camera is actively selected; derive view/projection parameters from the ECS components.
+        const Trident::CameraComponent& l_CameraComponent = l_Registry.GetComponent<Trident::CameraComponent>(s_SelectedViewportCamera);
+        const Trident::Transform& l_CameraTransform = l_Registry.GetComponent<Trident::Transform>(s_SelectedViewportCamera);
+
+        const glm::mat4 l_ModelMatrix = ComposeTransform(l_CameraTransform);
+        l_ViewMatrix = glm::inverse(l_ModelMatrix);
+        l_FieldOfViewDegrees = l_CameraComponent.FieldOfView;
+        l_NearClipDistance = l_CameraComponent.NearClip;
+        l_FarClipDistance = l_CameraComponent.FarClip;
+    }
+    else
+    {
+        // Fall back to the editor camera when no ECS-driven viewport camera is active.
+        Trident::Camera& l_Camera = Trident::Application::GetRenderer().GetCamera();
+        l_ViewMatrix = l_Camera.GetViewMatrix();
+        l_FieldOfViewDegrees = l_Camera.GetFOV();
+        l_NearClipDistance = l_Camera.GetNearClip();
+        l_FarClipDistance = l_Camera.GetFarClip();
+    }
+
     const float l_AspectRatio = l_RectSize.y > 0.0f ? l_RectSize.x / l_RectSize.y : 1.0f;
-    glm::mat4 l_ProjectionMatrix = glm::perspective(glm::radians(l_Camera.GetFOV()), l_AspectRatio, l_Camera.GetNearClip(), l_Camera.GetFarClip());
+    glm::mat4 l_ProjectionMatrix = glm::perspective(glm::radians(l_FieldOfViewDegrees), l_AspectRatio, l_NearClipDistance, l_FarClipDistance);
     l_ProjectionMatrix[1][1] *= -1.0f;
 
     Trident::Transform& l_Transform = l_Registry.GetComponent<Trident::Transform>(a_SelectedEntity);
