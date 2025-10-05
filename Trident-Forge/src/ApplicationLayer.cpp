@@ -815,17 +815,22 @@ void ApplicationLayer::DrawTransformGizmo(Trident::ECS::Entity a_SelectedEntity)
     Trident::Camera& l_Camera = Trident::Application::GetRenderer().GetCamera();
     glm::mat4 l_ViewMatrix = l_Camera.GetViewMatrix();
 
-    const ImGuiViewport* l_MainViewport = ImGui::GetMainViewport();
-    ImVec2 l_RectPosition = l_MainViewport->Pos;
-    ImVec2 l_RectSize = l_MainViewport->Size;
-
     const Trident::ViewportInfo l_ViewportInfo = Trident::Application::GetRenderer().GetViewport();
+    ImVec2 l_RectPosition{};
+    ImVec2 l_RectSize{};
+
     if (l_ViewportInfo.Size.x > 0.0f && l_ViewportInfo.Size.y > 0.0f)
     {
-        // Offset the gizmo rectangle by the viewport position to support docked scene windows in the future.
-        l_RectPosition.x += l_ViewportInfo.Position.x;
-        l_RectPosition.y += l_ViewportInfo.Position.y;
+        // Use the viewport data directly so the gizmo tracks the rendered scene even with multi-viewport enabled.
+        l_RectPosition = ImVec2{ l_ViewportInfo.Position.x, l_ViewportInfo.Position.y };
         l_RectSize = ImVec2{ l_ViewportInfo.Size.x, l_ViewportInfo.Size.y };
+    }
+    else
+    {
+        // Fall back to the main viewport bounds when the renderer has not published explicit viewport information yet.
+        const ImGuiViewport* l_MainViewport = ImGui::GetMainViewport();
+        l_RectPosition = l_MainViewport->Pos;
+        l_RectSize = l_MainViewport->Size;
     }
 
     const float l_AspectRatio = l_RectSize.y > 0.0f ? l_RectSize.x / l_RectSize.y : 1.0f;
