@@ -1,5 +1,6 @@
 #include "Loader/SceneLoader.h"
 #include "Loader/ModelLoader.h"
+#include "Loader/AssimpExtensions.h"
 #include "Core/Utilities.h"
 
 #include <filesystem>
@@ -23,6 +24,10 @@ namespace Trident
                 return l_Scene;
             }
 
+            const std::vector<std::string>& l_SupportedExtensions = AssimpExtensions::GetNormalizedExtensions();
+            // Assimp exposes its supported formats at runtime, letting us accept any importer-capable asset.
+            // TODO: Consider caching the directory scan results so repeated scene loads avoid redundant disk hits.
+
             for (const auto& a_Entry : fs::directory_iterator(l_Path))
             {
                 if (!a_Entry.is_regular_file())
@@ -36,7 +41,9 @@ namespace Trident
                         return static_cast<char>(std::tolower(a_Char));
                     });
 
-                if (l_Extension == ".gltf" || l_Extension == ".glb" || l_Extension == ".fbx")
+                const bool l_IsAssimpSupported = std::find(l_SupportedExtensions.begin(), l_SupportedExtensions.end(), l_Extension) != l_SupportedExtensions.end();
+                // The directory scan now trusts Assimp's advertised extensions instead of a hard-coded allowlist.
+                if (l_IsAssimpSupported)
                 {
                     auto a_ModelData = ModelLoader::Load(a_Entry.path().string());
                     if (!a_ModelData.Meshes.empty())
