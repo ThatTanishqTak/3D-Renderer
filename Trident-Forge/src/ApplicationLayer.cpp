@@ -173,653 +173,476 @@ ApplicationLayer::~ApplicationLayer()
 
 void ApplicationLayer::Run()
 {
-    static std::string l_ModelPath{};
-    static std::string l_TexturePath{};
-    static std::string l_OnnxPath{};
-    static bool l_OpenModelDialog = false;
-    static bool l_OpenTextureDialog = false;
-    static bool l_OpenOnnxDialog = false;
-    static bool l_OnnxLoaded = false;
-
-    // Main application loop
+    // Main application loop aligning editor windows with Unreal terminology for future docking profiles.
     while (!m_Window->ShouldClose())
     {
-        // Update the engine and render the UI
         m_Engine->Update();
         m_ImGuiLayer->BeginFrame();
-        
-        ImGui::Begin("Stats");
-        ImGui::Text("FPS: %.2f", Trident::Utilities::Time::GetFPS());
-        ImGui::Text("Allocations: %zu", Trident::Application::GetRenderer().GetLastFrameAllocationCount());
-        ImGui::Text("Models: %zu", Trident::Application::GetRenderer().GetModelCount());
-        ImGui::Text("Triangles: %zu", Trident::Application::GetRenderer().GetTriangleCount());
-        
-        // Surface GPU/CPU timing information gathered inside the renderer so tools users can monitor stability.
-        const Trident::Renderer::FrameTimingStats& l_PerfStats = Trident::Application::GetRenderer().GetFrameTimingStats();
-        const size_t l_PerfCount = Trident::Application::GetRenderer().GetFrameTimingHistoryCount();
-        if (l_PerfCount > 0)
-        {
-            ImGui::Separator();
-            ImGui::Text("Frame Avg: %.3f ms", l_PerfStats.AverageMilliseconds);
-            ImGui::Text("Frame Min: %.3f ms", l_PerfStats.MinimumMilliseconds);
-            ImGui::Text("Frame Max: %.3f ms", l_PerfStats.MaximumMilliseconds);
-            ImGui::Text("Average FPS: %.2f", l_PerfStats.AverageFPS);
-        }
-        else
-        {
-            ImGui::Separator();
-            ImGui::TextUnformatted("Collecting frame metrics...");
-        }
 
-        bool l_PerformanceCapture = Trident::Application::GetRenderer().IsPerformanceCaptureEnabled();
-        if (ImGui::Checkbox("Capture Performance", &l_PerformanceCapture))
-        {
-            Trident::Application::GetRenderer().SetPerformanceCaptureEnabled(l_PerformanceCapture);
-        }
-
-        if (Trident::Application::GetRenderer().IsPerformanceCaptureEnabled())
-        {
-            ImGui::Text("Captured Samples: %zu", Trident::Application::GetRenderer().GetPerformanceCaptureSampleCount());
-        }
-
-        ImGui::End();
-
-        if (ImGui::Begin("Console"))
-        {
-            // Pull a copy of the buffered entries so rendering does not hold the logging mutex for long periods.
-            std::vector<Trident::Utilities::ConsoleLog::Entry> l_LogEntries = Trident::Utilities::ConsoleLog::GetSnapshot();
-
-            if (ImGui::Button("Clear"))
-            {
-                Trident::Utilities::ConsoleLog::Clear();
-                s_LastConsoleEntryCount = 0;
-            }
-
-            ImGui::SameLine();
-            ImGui::Checkbox("Auto-scroll", &s_ConsoleAutoScroll);
-
-            ImGui::Separator();
-
-            ImGui::Checkbox("Errors", &s_ShowConsoleErrors);
-            ImGui::SameLine();
-            ImGui::Checkbox("Warnings", &s_ShowConsoleWarnings);
-            ImGui::SameLine();
-            ImGui::Checkbox("Logs", &s_ShowConsoleLogs);
-
-            ImGui::Separator();
-
-            ImGui::BeginChild("ConsoleScrollRegion", ImVec2(0.0f, 0.0f), false, ImGuiWindowFlags_HorizontalScrollbar);
-
-            for (const Trident::Utilities::ConsoleLog::Entry& it_Entry : l_LogEntries)
-            {
-                if (!ShouldDisplayConsoleEntry(it_Entry.Level))
-                {
-                    continue;
-                }
-
-                const std::string l_Timestamp = FormatConsoleTimestamp(it_Entry.Timestamp);
-                const ImVec4 l_Colour = GetConsoleColour(it_Entry.Level);
-
-                ImGui::PushStyleColor(ImGuiCol_Text, l_Colour);
-                ImGui::Text("[%s] %s", l_Timestamp.c_str(), it_Entry.Message.c_str());
-                ImGui::PopStyleColor();
-            }
-
-            if (s_ConsoleAutoScroll && !l_LogEntries.empty() && l_LogEntries.size() != s_LastConsoleEntryCount)
-            {
-                ImGui::SetScrollHereY(1.0f);
-            }
-
-            ImGui::EndChild();
-
-            s_LastConsoleEntryCount = l_LogEntries.size();
-        }
-        ImGui::End();
-
-        // Camera control panel allows artists to align shots without diving into engine code.
-        if (ImGui::Begin("Camera"))
-        {
-            Trident::Camera& l_Camera = Trident::Application::GetRenderer().GetCamera();
-
-            glm::vec3 l_CameraPosition = l_Camera.GetPosition();
-            if (ImGui::DragFloat3("Position", glm::value_ptr(l_CameraPosition), 0.1f))
-            {
-                l_Camera.SetPosition(l_CameraPosition);
-            }
-
-            float l_YawDegrees = l_Camera.GetYaw();
-            if (ImGui::DragFloat("Yaw", &l_YawDegrees, 0.1f, -360.0f, 360.0f))
-            {
-                l_Camera.SetYaw(l_YawDegrees);
-            }
-
-            float l_PitchDegrees = l_Camera.GetPitch();
-            if (ImGui::DragFloat("Pitch", &l_PitchDegrees, 0.1f, -89.0f, 89.0f))
-            {
-                l_Camera.SetPitch(l_PitchDegrees);
-            }
-
-            float l_FieldOfView = l_Camera.GetFOV();
-            if (ImGui::SliderFloat("Field of View", &l_FieldOfView, 1.0f, 120.0f))
-            {
-                l_Camera.SetFOV(l_FieldOfView);
-            }
-
-            float l_FarClipValue = l_Camera.GetFarClip();
-            float l_NearClipValue = l_Camera.GetNearClip();
-            if (ImGui::DragFloat("Near Clip", &l_NearClipValue, 0.01f, 0.001f, l_FarClipValue - 0.01f))
-            {
-                l_Camera.SetNearClip(l_NearClipValue);
-                l_FarClipValue = l_Camera.GetFarClip();
-            }
-
-            float l_MinFarClip = l_Camera.GetNearClip() + 0.01f;
-            if (ImGui::DragFloat("Far Clip", &l_FarClipValue, 1.0f, l_MinFarClip, 20000.0f))
-            {
-                l_Camera.SetFarClip(l_FarClipValue);
-            }
-        }
-        ImGui::End();
-
-        // Material panel exposes glTF shading terms for lightweight look-dev.
-        if (ImGui::Begin("Materials"))
-        {
-            std::vector<Trident::Geometry::Material>& l_Materials = Trident::Application::GetRenderer().GetMaterials();
-            if (l_Materials.empty())
-            {
-                ImGui::TextUnformatted("No materials loaded.");
-            }
-            else
-            {
-                for (size_t it_Index = 0; it_Index < l_Materials.size(); ++it_Index)
-                {
-                    Trident::Geometry::Material& l_Material = l_Materials[it_Index];
-                    ImGui::PushID(static_cast<int>(it_Index));
-
-                    ImGui::Text("Material %zu", it_Index);
-                    glm::vec4 l_BaseColor = l_Material.BaseColorFactor;
-                    if (ImGui::ColorEdit4("Albedo", glm::value_ptr(l_BaseColor)))
-                    {
-                        l_Material.BaseColorFactor = l_BaseColor;
-                    }
-
-                    float l_Roughness = l_Material.RoughnessFactor;
-                    if (ImGui::SliderFloat("Roughness", &l_Roughness, 0.0f, 1.0f))
-                    {
-                        l_Material.RoughnessFactor = l_Roughness;
-                    }
-
-                    float l_Metallic = l_Material.MetallicFactor;
-                    if (ImGui::SliderFloat("Metallic", &l_Metallic, 0.0f, 1.0f))
-                    {
-                        l_Material.MetallicFactor = l_Metallic;
-                    }
-
-                    ImGui::PopID();
-
-                    if (it_Index + 1 < l_Materials.size())
-                    {
-                        ImGui::Separator();
-                    }
-                }
-            }
-        }
-        ImGui::End();
-
-        ImGui::Begin("Content");
-        ImGui::Text("Model: %s", l_ModelPath.c_str());
-        if (ImGui::Button("Load Model"))
-        {
-            l_OpenModelDialog = true;
-            ImGui::OpenPopup("ModelDialog");
-        }
-
-        if (l_OpenModelDialog)
-        {
-            if (Trident::UI::FileDialog::Open("ModelDialog", l_ModelPath, ".fbx"))
-            {
-                auto a_ModelData = Trident::Loader::ModelLoader::Load(l_ModelPath);
-                Trident::Application::GetRenderer().UploadMesh(a_ModelData.Meshes, a_ModelData.Materials);
-                
-                l_OpenModelDialog = false;
-            }
-
-            if (!ImGui::IsPopupOpen("ModelDialog"))
-            {
-                l_OpenModelDialog = false;
-            }
-        }
-
-        ImGui::Text("Texture: %s", l_TexturePath.c_str());
-        if (ImGui::Button("Load Texture"))
-        {
-            l_OpenTextureDialog = true;
-            ImGui::OpenPopup("TextureDialog");
-        }
-
-        if (l_OpenTextureDialog)
-        {
-            if (Trident::UI::FileDialog::Open("TextureDialog", l_TexturePath))
-            {
-                auto a_Texture = Trident::Loader::TextureLoader::Load(l_TexturePath);
-                Trident::Application::GetRenderer().UploadTexture(a_Texture);
-
-                l_OpenTextureDialog = false;
-            }
-
-            if (!ImGui::IsPopupOpen("TextureDialog"))
-            {
-                l_OpenTextureDialog = false;
-            }
-        }
-
-        static std::string l_ScenePath{};
-        static bool l_OpenSceneDialog = false;
-
-        ImGui::Text("Scene: %s", l_ScenePath.c_str());
-        if (ImGui::Button("Load Scene"))
-        {
-            l_OpenSceneDialog = true;
-            ImGui::OpenPopup("SceneDialog");
-        }
-
-        if (l_OpenSceneDialog)
-        {
-            if (Trident::UI::FileDialog::Open("SceneDialog", l_ScenePath, ".scene"))
-            {
-                m_Engine->LoadScene(l_ScenePath);
-                l_OpenSceneDialog = false;
-            }
-
-            if (!ImGui::IsPopupOpen("SceneDialog"))
-            {
-                l_OpenSceneDialog = false;
-            }
-        }
-
-        ImGui::Text("ONNX: %s", l_OnnxPath.c_str());
-        if (ImGui::Button("Load ONNX"))
-        {
-            l_OpenOnnxDialog = true;
-            ImGui::OpenPopup("ONNXDialog");
-        }
-
-        if (l_OpenOnnxDialog)
-        {
-            if (Trident::UI::FileDialog::Open("ONNXDialog", l_OnnxPath, ".onnx"))
-            {
-                l_OnnxLoaded = m_ONNX.LoadModel(l_OnnxPath);
-                l_OpenOnnxDialog = false;
-            }
-
-            if (!ImGui::IsPopupOpen("ONNXDialog"))
-            {
-                l_OpenOnnxDialog = false;
-            }
-        }
-
-        if (l_OnnxLoaded && ImGui::Button("Run Inference"))
-        {
-            std::vector<float> l_Input{ 0.0f };
-            std::vector<int64_t> l_Shape{ 1 };
-            auto l_Output = m_ONNX.Run(l_Input, l_Shape);
-            if (!l_Output.empty())
-            {
-                TR_INFO("Inference result: {}", l_Output[0]);
-            }
-        }
-
-        ImGui::End();
-
-        // Scene window hosts the renderer output so tooling users can iterate without leaving the editor.
-        if (ImGui::Begin("Scene"))
-        {
-            const ImVec2 l_PanelOrigin = ImGui::GetCursorScreenPos();
-            const ImVec2 l_PanelAvailable = ImGui::GetContentRegionAvail();
-
-            // Convert the UI dimensions into renderer-friendly viewport information to align the offscreen pass.
-            Trident::ViewportInfo l_Viewport{};
-            if (const ImGuiViewport* l_WindowViewport = ImGui::GetWindowViewport(); l_WindowViewport != nullptr)
-            {
-                // Retain the ImGui viewport identifier so the renderer can cache per-panel render targets.
-                l_Viewport.ViewportID = static_cast<uint32_t>(l_WindowViewport->ID);
-            }
-            l_Viewport.Position = glm::vec2{ l_PanelOrigin.x, l_PanelOrigin.y };
-            l_Viewport.Size = glm::vec2
-            {
-                std::max(l_PanelAvailable.x, 0.0f),
-                std::max(l_PanelAvailable.y, 0.0f)
-            };
-
-            // The viewport flows Scene -> RenderCommand -> Renderer where the offscreen framebuffer is resized accordingly.
-            Trident::RenderCommand::SetViewport(l_Viewport);
-
-            Trident::ECS::Registry& l_Registry = Trident::Application::GetRegistry();
-
-            struct SceneCameraOption
-            {
-                Trident::ECS::Entity Entity = s_InvalidEntity;
-                std::string Label{};
-            };
-
-            std::vector<SceneCameraOption> l_CameraOptions{};
-            l_CameraOptions.reserve(8);
-            l_CameraOptions.push_back({ s_InvalidEntity, "Editor Camera (Free)" });
-
-            const std::vector<Trident::ECS::Entity>& l_AllEntities = l_Registry.GetEntities();
-            for (Trident::ECS::Entity it_Entity : l_AllEntities)
-            {
-                if (!l_Registry.HasComponent<Trident::CameraComponent>(it_Entity))
-                {
-                    continue;
-                }
-
-                const Trident::CameraComponent& l_CameraComponent = l_Registry.GetComponent<Trident::CameraComponent>(it_Entity);
-                std::string l_Label = l_CameraComponent.Name;
-                if (l_Label.empty())
-                {
-                    l_Label = "Camera " + std::to_string(static_cast<unsigned int>(it_Entity));
-                }
-
-                l_CameraOptions.push_back({ it_Entity, std::move(l_Label) });
-            }
-
-            if (s_SelectedCameraIndex >= static_cast<int>(l_CameraOptions.size()))
-            {
-                s_SelectedCameraIndex = 0;
-            }
-
-            const auto a_ItemGetter = [](void* a_UserData, int a_Index, const char** a_OutText) -> bool
-                {
-                    auto* l_Options = static_cast<std::vector<SceneCameraOption>*>(a_UserData);
-                    if (a_Index < 0 || a_Index >= static_cast<int>(l_Options->size()))
-                    {
-                        return false;
-                    }
-
-                    *a_OutText = (*l_Options)[a_Index].Label.c_str();
-                    return true;
-                };
-
-            const bool l_CameraChanged = ImGui::Combo("Viewport Camera", &s_SelectedCameraIndex, a_ItemGetter, static_cast<void*>(&l_CameraOptions), static_cast<int>(l_CameraOptions.size()));
-
-            const Trident::ECS::Entity l_CurrentCameraEntity = l_CameraOptions[s_SelectedCameraIndex].Entity;
-            if (l_CameraChanged || l_CurrentCameraEntity != s_SelectedViewportCamera)
-            {
-                s_SelectedViewportCamera = l_CurrentCameraEntity;
-                Trident::RenderCommand::SetViewportCamera(s_SelectedViewportCamera);
-            }
-
-            // Future growth: expose per-camera overrides (exposure, tone mapping) or allow multi-view layouts pinned to favourite cameras.
-
-            glm::vec4 l_ClearColor = Trident::RenderCommand::GetClearColor();
-            // Keeping the editor control ready for future per-scene presets and themed viewports.
-            if (ImGui::ColorEdit4("Clear Color", glm::value_ptr(l_ClearColor)))
-            {
-                Trident::RenderCommand::SetClearColor(l_ClearColor);
-            }
-
-            const ImVec2 l_ImageSize{ l_Viewport.Size.x, l_Viewport.Size.y };
-            const VkDescriptorSet l_ViewportTexture = Trident::RenderCommand::GetViewportTexture();
-            if (l_ViewportTexture != VK_NULL_HANDLE && l_ImageSize.x > 0.0f && l_ImageSize.y > 0.0f)
-            {
-                // The descriptor connects the renderer's color attachment to ImGui so the Scene window mirrors real-time output.
-                ImGui::Image(reinterpret_cast<ImTextureID>(l_ViewportTexture), l_ImageSize);
-                // Capture the screen rectangle that the viewport texture occupies so overlay primitives can be anchored
-// in the same coordinate space. ImGui::Image places the content at GetItemRectMin/Max, which we reuse
-// to keep editor annotations aligned with the pixels inside the render target.
-                const ImVec2 l_ImageMin = ImGui::GetItemRectMin();
-                const ImVec2 l_ImageMax = ImGui::GetItemRectMax();
-                const ImVec2 l_ImageExtent{ l_ImageMax.x - l_ImageMin.x, l_ImageMax.y - l_ImageMin.y };
-
-                glm::mat4 l_ViewMatrix{ 1.0f };
-                float l_FieldOfViewDegrees = 45.0f;
-                float l_NearClipDistance = 0.1f;
-                float l_FarClipDistance = 100.0f;
-
-                if (s_SelectedViewportCamera != s_InvalidEntity && l_Registry.HasComponent<Trident::CameraComponent>(s_SelectedViewportCamera)
-                    && l_Registry.HasComponent<Trident::Transform>(s_SelectedViewportCamera))
-                {
-                    const Trident::CameraComponent& l_CameraComponent = l_Registry.GetComponent<Trident::CameraComponent>(s_SelectedViewportCamera);
-                    const Trident::Transform& l_CameraTransform = l_Registry.GetComponent<Trident::Transform>(s_SelectedViewportCamera);
-
-                    const glm::mat4 l_ModelMatrix = ComposeTransform(l_CameraTransform);
-                    l_ViewMatrix = glm::inverse(l_ModelMatrix);
-                    l_FieldOfViewDegrees = l_CameraComponent.FieldOfView;
-                    l_NearClipDistance = l_CameraComponent.NearClip;
-                    l_FarClipDistance = l_CameraComponent.FarClip;
-                }
-                else
-                {
-                    Trident::Camera& l_EditorCamera = Trident::Application::GetRenderer().GetCamera();
-                    l_ViewMatrix = l_EditorCamera.GetViewMatrix();
-                    l_FieldOfViewDegrees = l_EditorCamera.GetFOV();
-                    l_NearClipDistance = l_EditorCamera.GetNearClip();
-                    l_FarClipDistance = l_EditorCamera.GetFarClip();
-                }
-
-                const float l_AspectRatio = l_ImageExtent.y > 0.0f ? l_ImageExtent.x / l_ImageExtent.y : 1.0f;
-                glm::mat4 l_ProjectionMatrix = glm::perspective(glm::radians(l_FieldOfViewDegrees), l_AspectRatio, l_NearClipDistance, l_FarClipDistance);
-                l_ProjectionMatrix[1][1] *= -1.0f;
-
-                struct ViewportOverlayPrimitive
-                {
-                    enum class Type
-                    {
-                        Crosshair,
-                        Text
-                    };
-
-                    Type PrimitiveType = Type::Crosshair;
-                    ImVec2 Position0{}; // Base position (center for crosshair, baseline for text)
-                    ImVec2 Position1{}; // Extents for crosshair; unused for text
-                    ImU32 Color = IM_COL32(255, 255, 255, 255);
-                    float Thickness = 1.0f;
-                    std::string Label{};
-                };
-
-                std::vector<ViewportOverlayPrimitive> l_OverlayPrimitives{};
-                l_OverlayPrimitives.reserve(4);
-
-                // Project the currently selected entity into screen space so artists receive a spatial cue that mirrors the
-                // 3D scene. Future improvements can aggregate additional ECS state (for example, selection groups or gizmos).
-                if (s_SelectedEntity != s_InvalidEntity)
-                {
-                    if (l_Registry.HasComponent<Trident::Transform>(s_SelectedEntity))
-                    {
-                        const Trident::Transform& l_SelectedTransform = l_Registry.GetComponent<Trident::Transform>(s_SelectedEntity);
-
-                        const glm::mat4 l_ModelMatrix = ComposeTransform(l_SelectedTransform);
-                        const glm::vec4 l_WorldCenter = l_ModelMatrix * glm::vec4{ 0.0f, 0.0f, 0.0f, 1.0f };
-
-                        const glm::vec4 l_ClipSpace = l_ProjectionMatrix * l_ViewMatrix * l_WorldCenter;
-                        if (l_ClipSpace.w > 0.0f)
-                        {
-                            const glm::vec3 l_Ndc = glm::vec3{ l_ClipSpace } / l_ClipSpace.w;
-
-                            if (std::abs(l_Ndc.x) <= 1.0f && std::abs(l_Ndc.y) <= 1.0f && l_Ndc.z >= -1.0f && l_Ndc.z <= 1.0f)
-                            {
-                                // Convert from normalized device coordinates to ImGui's pixel space. The Y axis is flipped so
-                                // the overlay draws in the same orientation as the presented texture.
-                                const float l_ScreenX = l_ImageMin.x + ((l_Ndc.x * 0.5f) + 0.5f) * l_ImageExtent.x;
-                                const float l_ScreenY = l_ImageMin.y + ((-l_Ndc.y * 0.5f) + 0.5f) * l_ImageExtent.y;
-                                const ImVec2 l_ScreenPosition{ l_ScreenX, l_ScreenY };
-
-                                ViewportOverlayPrimitive l_Crosshair{};
-                                l_Crosshair.PrimitiveType = ViewportOverlayPrimitive::Type::Crosshair;
-                                l_Crosshair.Position0 = l_ScreenPosition;
-                                l_Crosshair.Position1 = ImVec2{ 8.0f, 8.0f };
-                                l_Crosshair.Color = IM_COL32(255, 215, 0, 255);
-                                l_Crosshair.Thickness = 1.5f;
-                                l_OverlayPrimitives.emplace_back(l_Crosshair);
-
-                                ViewportOverlayPrimitive l_Label{};
-                                l_Label.PrimitiveType = ViewportOverlayPrimitive::Type::Text;
-                                l_Label.Position0 = ImVec2{ l_ScreenPosition.x + 10.0f, l_ScreenPosition.y - ImGui::GetTextLineHeightWithSpacing() };
-                                l_Label.Color = IM_COL32(255, 255, 255, 255);
-                                l_Label.Label = "Entity " + std::to_string(static_cast<unsigned int>(s_SelectedEntity));
-                                l_OverlayPrimitives.emplace_back(std::move(l_Label));
-                            }
-                        }
-                    }
-                }
-
-                ImDrawList* l_DrawList = ImGui::GetWindowDrawList();
-                if (l_DrawList != nullptr)
-                {
-                    for (const ViewportOverlayPrimitive& it_Primitive : l_OverlayPrimitives)
-                    {
-                        switch (it_Primitive.PrimitiveType)
-                        {
-                        case ViewportOverlayPrimitive::Type::Crosshair:
-                        {
-                            const ImVec2 l_HorizontalStart{ it_Primitive.Position0.x - it_Primitive.Position1.x, it_Primitive.Position0.y };
-                            const ImVec2 l_HorizontalEnd{ it_Primitive.Position0.x + it_Primitive.Position1.x, it_Primitive.Position0.y };
-                            const ImVec2 l_VerticalStart{ it_Primitive.Position0.x, it_Primitive.Position0.y - it_Primitive.Position1.y };
-                            const ImVec2 l_VerticalEnd{ it_Primitive.Position0.x, it_Primitive.Position0.y + it_Primitive.Position1.y };
-                            l_DrawList->AddLine(l_HorizontalStart, l_HorizontalEnd, it_Primitive.Color, it_Primitive.Thickness);
-                            l_DrawList->AddLine(l_VerticalStart, l_VerticalEnd, it_Primitive.Color, it_Primitive.Thickness);
-                            break;
-                        }
-                        case ViewportOverlayPrimitive::Type::Text:
-                            l_DrawList->AddText(it_Primitive.Position0, it_Primitive.Color, it_Primitive.Label.c_str());
-                            break;
-                        default:
-                            break;
-                        }
-                    }
-                }
-
-                // TODO: Expand overlay collection to include safe-frame guides, grid snapping hints, and gizmo layers for
-                // additional editor polish.
-                // TODO: Support multiple cameras by exposing a dropdown that swaps which render target populates the panel.
-            }
-            else
-            {
-                ImGui::TextUnformatted("Scene viewport not ready.");
-            }
-        }
-        ImGui::End();
-
-        // Scene inspector offers basic ECS debugging hooks for the currently loaded scene.
-        if (ImGui::Begin("Scene Inspector"))
-        {
-            Trident::ECS::Registry& l_Registry = Trident::Application::GetRegistry();
-            const std::vector<Trident::ECS::Entity>& l_Entities = l_Registry.GetEntities();
-
-            if (l_Entities.empty())
-            {
-                ImGui::TextUnformatted("No entities in the active scene.");
-                s_SelectedEntity = s_InvalidEntity;
-            }
-            else
-            {
-                ImGui::Text("Entities (%zu)", l_Entities.size());
-                if (ImGui::BeginListBox("##EntityList"))
-                {
-                    for (Trident::ECS::Entity it_Entity : l_Entities)
-                    {
-                        bool l_IsSelected = it_Entity == s_SelectedEntity;
-                        std::string l_Label = "Entity " + std::to_string(static_cast<unsigned int>(it_Entity));
-                        if (ImGui::Selectable(l_Label.c_str(), l_IsSelected))
-                        {
-                            s_SelectedEntity = it_Entity;
-                        }
-
-                        if (l_IsSelected)
-                        {
-                            ImGui::SetItemDefaultFocus();
-                        }
-                    }
-                    ImGui::EndListBox();
-                }
-
-                if (s_SelectedEntity != s_InvalidEntity)
-                {
-                    ImGui::Separator();
-                    ImGui::Text("Selected Entity: %u", static_cast<unsigned int>(s_SelectedEntity));
-
-                    if (l_Registry.HasComponent<Trident::Transform>(s_SelectedEntity))
-                    {
-                        Trident::Transform& l_Transform = l_Registry.GetComponent<Trident::Transform>(s_SelectedEntity);
-                        bool l_TransformChanged = false;
-
-                        glm::vec3 l_Position = l_Transform.Position;
-                        if (ImGui::DragFloat3("Position", glm::value_ptr(l_Position), 0.1f))
-                        {
-                            l_Transform.Position = l_Position;
-                            l_TransformChanged = true;
-                        }
-
-                        glm::vec3 l_Rotation = l_Transform.Rotation;
-                        if (ImGui::DragFloat3("Rotation", glm::value_ptr(l_Rotation), 0.1f))
-                        {
-                            l_Transform.Rotation = l_Rotation;
-                            l_TransformChanged = true;
-                        }
-
-                        glm::vec3 l_Scale = l_Transform.Scale;
-                        if (ImGui::DragFloat3("Scale", glm::value_ptr(l_Scale), 0.01f, 0.01f, 100.0f))
-                        {
-                            l_Transform.Scale = l_Scale;
-                            l_TransformChanged = true;
-                        }
-
-                        if (l_TransformChanged)
-                        {
-                            Trident::Application::GetRenderer().SetTransform(l_Transform);
-                        }
-
-                        ImGui::Separator();
-                        ImGui::TextUnformatted("Gizmo Operation");
-                        if (ImGui::RadioButton("Translate", s_GizmoOperation == ImGuizmo::TRANSLATE))
-                        {
-                            s_GizmoOperation = ImGuizmo::TRANSLATE;
-                        }
-                        ImGui::SameLine();
-                        if (ImGui::RadioButton("Rotate", s_GizmoOperation == ImGuizmo::ROTATE))
-                        {
-                            s_GizmoOperation = ImGuizmo::ROTATE;
-                        }
-                        ImGui::SameLine();
-                        if (ImGui::RadioButton("Scale", s_GizmoOperation == ImGuizmo::SCALE))
-                        {
-                            s_GizmoOperation = ImGuizmo::SCALE;
-                        }
-
-                        ImGui::TextUnformatted("Gizmo Space");
-                        if (ImGui::RadioButton("Local", s_GizmoMode == ImGuizmo::LOCAL))
-                        {
-                            s_GizmoMode = ImGuizmo::LOCAL;
-                        }
-                        ImGui::SameLine();
-                        if (ImGui::RadioButton("World", s_GizmoMode == ImGuizmo::WORLD))
-                        {
-                            s_GizmoMode = ImGuizmo::WORLD;
-                        }
-                    }
-                    else
-                    {
-                        ImGui::TextUnformatted("Transform component not present.");
-                    }
-                }
-            }
-        }
-        ImGui::End();
+        DrawViewportPanel();
+        DrawWorldOutlinerPanel();
+        DrawDetailsPanel();
+        DrawContentBrowserPanel();
+        DrawOutputLogPanel();
 
         // Render the gizmo on top of the viewport once all inspector edits are applied.
         DrawTransformGizmo(s_SelectedEntity);
 
-        // Provide visibility into the background hot-reload system so developers can diagnose issues quickly.
-        ImGui::Begin("Live Reload");
+        m_ImGuiLayer->EndFrame();
+        m_Engine->RenderScene();
+    }
+}
+
+void ApplicationLayer::DrawViewportPanel()
+{
+    // The primary viewport renders the scene output and provides high-level camera assignment hooks.
+    if (!ImGui::Begin("Viewport"))
+    {
+        ImGui::End();
+        return;
+    }
+
+    const ImVec2 l_PanelOrigin = ImGui::GetCursorScreenPos();
+    const ImVec2 l_PanelAvailable = ImGui::GetContentRegionAvail();
+
+    Trident::ViewportInfo l_Viewport{};
+    if (const ImGuiViewport* l_WindowViewport = ImGui::GetWindowViewport(); l_WindowViewport != nullptr)
+    {
+        l_Viewport.ViewportID = static_cast<uint32_t>(l_WindowViewport->ID);
+    }
+    l_Viewport.Position = glm::vec2{ l_PanelOrigin.x, l_PanelOrigin.y };
+    l_Viewport.Size = glm::vec2
+    {
+        std::max(l_PanelAvailable.x, 0.0f),
+        std::max(l_PanelAvailable.y, 0.0f)
+    };
+
+    Trident::RenderCommand::SetViewport(l_Viewport);
+
+    Trident::ECS::Registry& l_Registry = Trident::Application::GetRegistry();
+
+    struct ViewportCameraOption
+    {
+        Trident::ECS::Entity Entity = s_InvalidEntity;
+        std::string Label{};
+    };
+
+    std::vector<ViewportCameraOption> l_CameraOptions{};
+    l_CameraOptions.reserve(8);
+    l_CameraOptions.push_back({ s_InvalidEntity, "Editor Camera (Free)" });
+
+    const std::vector<Trident::ECS::Entity>& l_AllEntities = l_Registry.GetEntities();
+    for (Trident::ECS::Entity it_Entity : l_AllEntities)
+    {
+        if (!l_Registry.HasComponent<Trident::CameraComponent>(it_Entity))
+        {
+            continue;
+        }
+
+        const Trident::CameraComponent& l_CameraComponent = l_Registry.GetComponent<Trident::CameraComponent>(it_Entity);
+        std::string l_Label = l_CameraComponent.Name;
+        if (l_Label.empty())
+        {
+            l_Label = "Camera " + std::to_string(static_cast<unsigned int>(it_Entity));
+        }
+
+        l_CameraOptions.push_back({ it_Entity, std::move(l_Label) });
+    }
+
+    if (s_SelectedCameraIndex >= static_cast<int>(l_CameraOptions.size()))
+    {
+        s_SelectedCameraIndex = 0;
+    }
+
+    const auto a_ItemGetter = [](void* a_UserData, int a_Index, const char** a_OutText) -> bool
+        {
+            auto* l_Options = static_cast<std::vector<ViewportCameraOption>*>(a_UserData);
+            if (a_Index < 0 || a_Index >= static_cast<int>(l_Options->size()))
+            {
+                return false;
+            }
+
+            *a_OutText = (*l_Options)[a_Index].Label.c_str();
+            return true;
+        };
+
+    const bool l_CameraChanged = ImGui::Combo("Viewport Camera", &s_SelectedCameraIndex, a_ItemGetter, static_cast<void*>(&l_CameraOptions), static_cast<int>(l_CameraOptions.size()));
+
+    const Trident::ECS::Entity l_CurrentCameraEntity = l_CameraOptions[s_SelectedCameraIndex].Entity;
+    if (l_CameraChanged || l_CurrentCameraEntity != s_SelectedViewportCamera)
+    {
+        s_SelectedViewportCamera = l_CurrentCameraEntity;
+        Trident::RenderCommand::SetViewportCamera(s_SelectedViewportCamera);
+    }
+
+    // Future slot: add a cinematic toolbar or sequencer controls to trigger play-in-editor clips.
+
+    glm::vec4 l_ClearColor = Trident::RenderCommand::GetClearColor();
+    if (ImGui::ColorEdit4("Clear Color", glm::value_ptr(l_ClearColor)))
+    {
+        Trident::RenderCommand::SetClearColor(l_ClearColor);
+    }
+
+    const ImVec2 l_ImageSize{ l_Viewport.Size.x, l_Viewport.Size.y };
+    const VkDescriptorSet l_ViewportTexture = Trident::RenderCommand::GetViewportTexture();
+    if (l_ViewportTexture != VK_NULL_HANDLE && l_ImageSize.x > 0.0f && l_ImageSize.y > 0.0f)
+    {
+        ImGui::Image(reinterpret_cast<ImTextureID>(l_ViewportTexture), l_ImageSize);
+
+        const ImVec2 l_ImageMin = ImGui::GetItemRectMin();
+        const ImVec2 l_ImageMax = ImGui::GetItemRectMax();
+        const ImVec2 l_ImageExtent{ l_ImageMax.x - l_ImageMin.x, l_ImageMax.y - l_ImageMin.y };
+
+        glm::mat4 l_ViewMatrix{ 1.0f };
+        float l_FieldOfViewDegrees = 45.0f;
+        float l_NearClipDistance = 0.1f;
+        float l_FarClipDistance = 100.0f;
+
+        if (s_SelectedViewportCamera != s_InvalidEntity && l_Registry.HasComponent<Trident::CameraComponent>(s_SelectedViewportCamera)
+            && l_Registry.HasComponent<Trident::Transform>(s_SelectedViewportCamera))
+        {
+            const Trident::CameraComponent& l_CameraComponent = l_Registry.GetComponent<Trident::CameraComponent>(s_SelectedViewportCamera);
+            const Trident::Transform& l_CameraTransform = l_Registry.GetComponent<Trident::Transform>(s_SelectedViewportCamera);
+
+            const glm::mat4 l_ModelMatrix = ComposeTransform(l_CameraTransform);
+            l_ViewMatrix = glm::inverse(l_ModelMatrix);
+            l_FieldOfViewDegrees = l_CameraComponent.FieldOfView;
+            l_NearClipDistance = l_CameraComponent.NearClip;
+            l_FarClipDistance = l_CameraComponent.FarClip;
+        }
+        else
+        {
+            Trident::Camera& l_EditorCamera = Trident::Application::GetRenderer().GetCamera();
+            l_ViewMatrix = l_EditorCamera.GetViewMatrix();
+            l_FieldOfViewDegrees = l_EditorCamera.GetFOV();
+            l_NearClipDistance = l_EditorCamera.GetNearClip();
+            l_FarClipDistance = l_EditorCamera.GetFarClip();
+        }
+
+        const float l_AspectRatio = l_ImageExtent.y > 0.0f ? l_ImageExtent.x / l_ImageExtent.y : 1.0f;
+        glm::mat4 l_ProjectionMatrix = glm::perspective(glm::radians(l_FieldOfViewDegrees), l_AspectRatio, l_NearClipDistance, l_FarClipDistance);
+        l_ProjectionMatrix[1][1] *= -1.0f;
+
+        struct ViewportOverlayPrimitive
+        {
+            enum class Type
+            {
+                Crosshair,
+                Text
+            };
+
+            Type PrimitiveType = Type::Crosshair;
+            ImVec2 Position0{};
+            ImVec2 Position1{};
+            ImU32 Color = IM_COL32(255, 255, 255, 255);
+            float Thickness = 1.0f;
+            std::string Label{};
+        };
+
+        std::vector<ViewportOverlayPrimitive> l_OverlayPrimitives{};
+        l_OverlayPrimitives.reserve(4);
+
+        if (s_SelectedEntity != s_InvalidEntity)
+        {
+            if (l_Registry.HasComponent<Trident::Transform>(s_SelectedEntity))
+            {
+                const Trident::Transform& l_SelectedTransform = l_Registry.GetComponent<Trident::Transform>(s_SelectedEntity);
+
+                const glm::mat4 l_ModelMatrix = ComposeTransform(l_SelectedTransform);
+                const glm::vec4 l_WorldCenter = l_ModelMatrix * glm::vec4{ 0.0f, 0.0f, 0.0f, 1.0f };
+
+                const glm::vec4 l_ClipSpace = l_ProjectionMatrix * l_ViewMatrix * l_WorldCenter;
+                if (l_ClipSpace.w > 0.0f)
+                {
+                    const glm::vec3 l_Ndc = glm::vec3{ l_ClipSpace } / l_ClipSpace.w;
+
+                    if (std::abs(l_Ndc.x) <= 1.0f && std::abs(l_Ndc.y) <= 1.0f && l_Ndc.z >= -1.0f && l_Ndc.z <= 1.0f)
+                    {
+                        const float l_ScreenX = l_ImageMin.x + ((l_Ndc.x * 0.5f) + 0.5f) * l_ImageExtent.x;
+                        const float l_ScreenY = l_ImageMin.y + ((-l_Ndc.y * 0.5f) + 0.5f) * l_ImageExtent.y;
+                        const ImVec2 l_ScreenPosition{ l_ScreenX, l_ScreenY };
+
+                        ViewportOverlayPrimitive l_Crosshair{};
+                        l_Crosshair.PrimitiveType = ViewportOverlayPrimitive::Type::Crosshair;
+                        l_Crosshair.Position0 = l_ScreenPosition;
+                        l_Crosshair.Position1 = ImVec2{ 8.0f, 8.0f };
+                        l_Crosshair.Color = IM_COL32(255, 215, 0, 255);
+                        l_Crosshair.Thickness = 1.5f;
+                        l_OverlayPrimitives.emplace_back(l_Crosshair);
+
+                        ViewportOverlayPrimitive l_Label{};
+                        l_Label.PrimitiveType = ViewportOverlayPrimitive::Type::Text;
+                        l_Label.Position0 = ImVec2{ l_ScreenPosition.x + 10.0f, l_ScreenPosition.y - ImGui::GetTextLineHeightWithSpacing() };
+                        l_Label.Color = IM_COL32(255, 255, 255, 255);
+                        l_Label.Label = "Entity " + std::to_string(static_cast<unsigned int>(s_SelectedEntity));
+                        l_OverlayPrimitives.emplace_back(std::move(l_Label));
+                    }
+                }
+            }
+        }
+
+        ImDrawList* l_DrawList = ImGui::GetWindowDrawList();
+        if (l_DrawList != nullptr)
+        {
+            for (const ViewportOverlayPrimitive& it_Primitive : l_OverlayPrimitives)
+            {
+                switch (it_Primitive.PrimitiveType)
+                {
+                case ViewportOverlayPrimitive::Type::Crosshair:
+                {
+                    const ImVec2 l_HorizontalStart{ it_Primitive.Position0.x - it_Primitive.Position1.x, it_Primitive.Position0.y };
+                    const ImVec2 l_HorizontalEnd{ it_Primitive.Position0.x + it_Primitive.Position1.x, it_Primitive.Position0.y };
+                    const ImVec2 l_VerticalStart{ it_Primitive.Position0.x, it_Primitive.Position0.y - it_Primitive.Position1.y };
+                    const ImVec2 l_VerticalEnd{ it_Primitive.Position0.x, it_Primitive.Position0.y + it_Primitive.Position1.y };
+                    l_DrawList->AddLine(l_HorizontalStart, l_HorizontalEnd, it_Primitive.Color, it_Primitive.Thickness);
+                    l_DrawList->AddLine(l_VerticalStart, l_VerticalEnd, it_Primitive.Color, it_Primitive.Thickness);
+                    break;
+                }
+                case ViewportOverlayPrimitive::Type::Text:
+                    l_DrawList->AddText(it_Primitive.Position0, it_Primitive.Color, it_Primitive.Label.c_str());
+                    break;
+                default:
+                    break;
+                }
+            }
+        }
+
+        // TODO: Expand overlay collection to include safe-frame guides, grid snapping hints, and gizmo layers for
+        // additional editor polish.
+    }
+    else
+    {
+        ImGui::TextUnformatted("Scene viewport not ready.");
+    }
+
+    ImGui::End();
+}
+
+void ApplicationLayer::DrawWorldOutlinerPanel()
+{
+    // The world outliner focuses on scene hierarchy management; future work can add folders and search.
+    if (!ImGui::Begin("World Outliner"))
+    {
+        ImGui::End();
+        return;
+    }
+
+    Trident::ECS::Registry& l_Registry = Trident::Application::GetRegistry();
+    const std::vector<Trident::ECS::Entity>& l_Entities = l_Registry.GetEntities();
+
+    if (l_Entities.empty())
+    {
+        ImGui::TextUnformatted("No entities in the active scene.");
+        s_SelectedEntity = s_InvalidEntity;
+    }
+    else
+    {
+        ImGui::Text("Entities (%zu)", l_Entities.size());
+        if (ImGui::BeginListBox("##WorldOutlinerList"))
+        {
+            for (Trident::ECS::Entity it_Entity : l_Entities)
+            {
+                bool l_IsSelected = it_Entity == s_SelectedEntity;
+                std::string l_Label = "Entity " + std::to_string(static_cast<unsigned int>(it_Entity));
+                if (ImGui::Selectable(l_Label.c_str(), l_IsSelected))
+                {
+                    s_SelectedEntity = it_Entity;
+                }
+
+                if (l_IsSelected)
+                {
+                    ImGui::SetItemDefaultFocus();
+                }
+            }
+            ImGui::EndListBox();
+        }
+    }
+
+    // Placeholder: integrate search filters or layer visibility toggles alongside the hierarchy in later passes.
+
+    ImGui::End();
+}
+
+void ApplicationLayer::DrawDetailsPanel()
+{
+    // The details panel aggregates selection editing, scene controls, and tooling such as live-reload.
+    if (!ImGui::Begin("Details"))
+    {
+        ImGui::End();
+        return;
+    }
+
+    Trident::ECS::Registry& l_Registry = Trident::Application::GetRegistry();
+
+    if (s_SelectedEntity != s_InvalidEntity)
+    {
+        ImGui::Text("Selected Entity: %u", static_cast<unsigned int>(s_SelectedEntity));
+
+        if (l_Registry.HasComponent<Trident::Transform>(s_SelectedEntity))
+        {
+            Trident::Transform& l_Transform = l_Registry.GetComponent<Trident::Transform>(s_SelectedEntity);
+            bool l_TransformChanged = false;
+
+            glm::vec3 l_Position = l_Transform.Position;
+            if (ImGui::DragFloat3("Position", glm::value_ptr(l_Position), 0.1f))
+            {
+                l_Transform.Position = l_Position;
+                l_TransformChanged = true;
+            }
+
+            glm::vec3 l_Rotation = l_Transform.Rotation;
+            if (ImGui::DragFloat3("Rotation", glm::value_ptr(l_Rotation), 0.1f))
+            {
+                l_Transform.Rotation = l_Rotation;
+                l_TransformChanged = true;
+            }
+
+            glm::vec3 l_Scale = l_Transform.Scale;
+            if (ImGui::DragFloat3("Scale", glm::value_ptr(l_Scale), 0.01f, 0.01f, 100.0f))
+            {
+                l_Transform.Scale = l_Scale;
+                l_TransformChanged = true;
+            }
+
+            if (l_TransformChanged)
+            {
+                Trident::Application::GetRenderer().SetTransform(l_Transform);
+            }
+        }
+        else
+        {
+            ImGui::TextUnformatted("Transform component not present.");
+        }
+    }
+    else
+    {
+        ImGui::TextUnformatted("Select an entity to edit its components.");
+    }
+
+    ImGui::Separator();
+
+    ImGui::TextUnformatted("Gizmo Controls");
+    if (ImGui::RadioButton("Translate", s_GizmoOperation == ImGuizmo::TRANSLATE))
+    {
+        s_GizmoOperation = ImGuizmo::TRANSLATE;
+    }
+    ImGui::SameLine();
+    if (ImGui::RadioButton("Rotate", s_GizmoOperation == ImGuizmo::ROTATE))
+    {
+        s_GizmoOperation = ImGuizmo::ROTATE;
+    }
+    ImGui::SameLine();
+    if (ImGui::RadioButton("Scale", s_GizmoOperation == ImGuizmo::SCALE))
+    {
+        s_GizmoOperation = ImGuizmo::SCALE;
+    }
+
+    if (ImGui::RadioButton("Local", s_GizmoMode == ImGuizmo::LOCAL))
+    {
+        s_GizmoMode = ImGuizmo::LOCAL;
+    }
+    ImGui::SameLine();
+    if (ImGui::RadioButton("World", s_GizmoMode == ImGuizmo::WORLD))
+    {
+        s_GizmoMode = ImGuizmo::WORLD;
+    }
+
+    ImGui::Separator();
+
+    if (ImGui::CollapsingHeader("Editor Camera", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        Trident::Camera& l_Camera = Trident::Application::GetRenderer().GetCamera();
+
+        glm::vec3 l_CameraPosition = l_Camera.GetPosition();
+        if (ImGui::DragFloat3("Position", glm::value_ptr(l_CameraPosition), 0.1f))
+        {
+            l_Camera.SetPosition(l_CameraPosition);
+        }
+
+        float l_YawDegrees = l_Camera.GetYaw();
+        if (ImGui::DragFloat("Yaw", &l_YawDegrees, 0.1f, -360.0f, 360.0f))
+        {
+            l_Camera.SetYaw(l_YawDegrees);
+        }
+
+        float l_PitchDegrees = l_Camera.GetPitch();
+        if (ImGui::DragFloat("Pitch", &l_PitchDegrees, 0.1f, -89.0f, 89.0f))
+        {
+            l_Camera.SetPitch(l_PitchDegrees);
+        }
+
+        float l_FieldOfView = l_Camera.GetFOV();
+        if (ImGui::SliderFloat("Field of View", &l_FieldOfView, 1.0f, 120.0f))
+        {
+            l_Camera.SetFOV(l_FieldOfView);
+        }
+
+        float l_FarClipValue = l_Camera.GetFarClip();
+        float l_NearClipValue = l_Camera.GetNearClip();
+        if (ImGui::DragFloat("Near Clip", &l_NearClipValue, 0.01f, 0.001f, l_FarClipValue - 0.01f))
+        {
+            l_Camera.SetNearClip(l_NearClipValue);
+            l_FarClipValue = l_Camera.GetFarClip();
+        }
+
+        const float l_MinFarClip = l_Camera.GetNearClip() + 0.01f;
+        if (ImGui::DragFloat("Far Clip", &l_FarClipValue, 1.0f, l_MinFarClip, 20000.0f))
+        {
+            l_Camera.SetFarClip(l_FarClipValue);
+        }
+    }
+
+    if (ImGui::CollapsingHeader("Materials", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        std::vector<Trident::Geometry::Material>& l_Materials = Trident::Application::GetRenderer().GetMaterials();
+        if (l_Materials.empty())
+        {
+            ImGui::TextUnformatted("No materials loaded.");
+        }
+        else
+        {
+            for (size_t it_Index = 0; it_Index < l_Materials.size(); ++it_Index)
+            {
+                Trident::Geometry::Material& l_Material = l_Materials[it_Index];
+                ImGui::PushID(static_cast<int>(it_Index));
+
+                ImGui::Text("Material %zu", it_Index);
+                glm::vec4 l_BaseColor = l_Material.BaseColorFactor;
+                if (ImGui::ColorEdit4("Albedo", glm::value_ptr(l_BaseColor)))
+                {
+                    l_Material.BaseColorFactor = l_BaseColor;
+                }
+
+                float l_Roughness = l_Material.RoughnessFactor;
+                if (ImGui::SliderFloat("Roughness", &l_Roughness, 0.0f, 1.0f))
+                {
+                    l_Material.RoughnessFactor = l_Roughness;
+                }
+
+                float l_Metallic = l_Material.MetallicFactor;
+                if (ImGui::SliderFloat("Metallic", &l_Metallic, 0.0f, 1.0f))
+                {
+                    l_Material.MetallicFactor = l_Metallic;
+                }
+
+                ImGui::PopID();
+
+                if (it_Index + 1 < l_Materials.size())
+                {
+                    ImGui::Separator();
+                }
+            }
+        }
+    }
+
+    if (ImGui::CollapsingHeader("Live Reload", ImGuiTreeNodeFlags_DefaultOpen))
+    {
         Trident::Utilities::FileWatcher& l_Watcher = Trident::Utilities::FileWatcher::Get();
         bool l_AutoReload = l_Watcher.IsAutoReloadEnabled();
         if (ImGui::Checkbox("Automatic Reload", &l_AutoReload))
         {
             l_Watcher.EnableAutoReload(l_AutoReload);
         }
-
-        ImGui::Separator();
 
         const auto a_StatusToString = [](Trident::Utilities::FileWatcher::ReloadStatus a_Status) -> const char*
             {
@@ -878,7 +701,7 @@ void ApplicationLayer::Run()
                 }
 
                 ImGui::TableSetColumnIndex(4);
-                bool l_Disabled = it_Event.Status == Trident::Utilities::FileWatcher::ReloadStatus::Queued;
+                const bool l_Disabled = it_Event.Status == Trident::Utilities::FileWatcher::ReloadStatus::Queued;
                 ImGui::BeginDisabled(l_Disabled);
                 ImGui::PushID(static_cast<int>(it_Event.Id));
                 const char* l_Label = it_Event.Status == Trident::Utilities::FileWatcher::ReloadStatus::Failed ? "Retry" : "Queue";
@@ -896,13 +719,226 @@ void ApplicationLayer::Run()
         {
             ImGui::TextUnformatted("No reload events captured yet.");
         }
-
-        ImGui::End();
-
-        m_ImGuiLayer->EndFrame();
-
-        m_Engine->RenderScene();
     }
+
+    // Placeholder for upcoming tabs such as animation blueprints or sequencer integration.
+
+    ImGui::End();
+}
+
+void ApplicationLayer::DrawContentBrowserPanel()
+{
+    // The content browser consolidates asset importers and placeholder hooks for future folders and filters.
+    if (!ImGui::Begin("Content Browser"))
+    {
+        ImGui::End();
+        return;
+    }
+
+    static std::string s_ModelPath{};
+    static std::string s_TexturePath{};
+    static std::string s_ScenePath{};
+    static std::string s_OnnxPath{};
+    static bool s_OpenModelDialog = false;
+    static bool s_OpenTextureDialog = false;
+    static bool s_OpenSceneDialog = false;
+    static bool s_OpenOnnxDialog = false;
+    static bool s_OnnxLoaded = false;
+
+    ImGui::Text("Model: %s", s_ModelPath.c_str());
+    if (ImGui::Button("Load Model"))
+    {
+        s_OpenModelDialog = true;
+        ImGui::OpenPopup("ModelDialog");
+    }
+
+    if (s_OpenModelDialog)
+    {
+        if (Trident::UI::FileDialog::Open("ModelDialog", s_ModelPath, ".fbx"))
+        {
+            auto a_ModelData = Trident::Loader::ModelLoader::Load(s_ModelPath);
+            Trident::Application::GetRenderer().UploadMesh(a_ModelData.Meshes, a_ModelData.Materials);
+            s_OpenModelDialog = false;
+        }
+
+        if (!ImGui::IsPopupOpen("ModelDialog"))
+        {
+            s_OpenModelDialog = false;
+        }
+    }
+
+    ImGui::Text("Texture: %s", s_TexturePath.c_str());
+    if (ImGui::Button("Load Texture"))
+    {
+        s_OpenTextureDialog = true;
+        ImGui::OpenPopup("TextureDialog");
+    }
+
+    if (s_OpenTextureDialog)
+    {
+        if (Trident::UI::FileDialog::Open("TextureDialog", s_TexturePath))
+        {
+            auto a_Texture = Trident::Loader::TextureLoader::Load(s_TexturePath);
+            Trident::Application::GetRenderer().UploadTexture(a_Texture);
+            s_OpenTextureDialog = false;
+        }
+
+        if (!ImGui::IsPopupOpen("TextureDialog"))
+        {
+            s_OpenTextureDialog = false;
+        }
+    }
+
+    ImGui::Text("Scene: %s", s_ScenePath.c_str());
+    if (ImGui::Button("Load Scene"))
+    {
+        s_OpenSceneDialog = true;
+        ImGui::OpenPopup("SceneDialog");
+    }
+
+    if (s_OpenSceneDialog)
+    {
+        if (Trident::UI::FileDialog::Open("SceneDialog", s_ScenePath, ".scene"))
+        {
+            m_Engine->LoadScene(s_ScenePath);
+            s_OpenSceneDialog = false;
+        }
+
+        if (!ImGui::IsPopupOpen("SceneDialog"))
+        {
+            s_OpenSceneDialog = false;
+        }
+    }
+
+    ImGui::Text("ONNX: %s", s_OnnxPath.c_str());
+    if (ImGui::Button("Load ONNX"))
+    {
+        s_OpenOnnxDialog = true;
+        ImGui::OpenPopup("ONNXDialog");
+    }
+
+    if (s_OpenOnnxDialog)
+    {
+        if (Trident::UI::FileDialog::Open("ONNXDialog", s_OnnxPath, ".onnx"))
+        {
+            s_OnnxLoaded = m_ONNX.LoadModel(s_OnnxPath);
+            s_OpenOnnxDialog = false;
+        }
+
+        if (!ImGui::IsPopupOpen("ONNXDialog"))
+        {
+            s_OpenOnnxDialog = false;
+        }
+    }
+
+    if (s_OnnxLoaded && ImGui::Button("Run Inference"))
+    {
+        std::vector<float> l_Input{ 0.0f };
+        std::vector<int64_t> l_Shape{ 1 };
+        auto a_Output = m_ONNX.Run(l_Input, l_Shape);
+        if (!a_Output.empty())
+        {
+            TR_INFO("Inference result: {}", a_Output[0]);
+        }
+    }
+
+    // TODO: Embed asset thumbnails and breadcrumb navigation similar to Unreal's content drawer.
+
+    ImGui::End();
+}
+
+void ApplicationLayer::DrawOutputLogPanel()
+{
+    // The output log combines frame statistics with filtered logging controls for a single dockable surface.
+    if (!ImGui::Begin("Output Log"))
+    {
+        ImGui::End();
+        return;
+    }
+
+    ImGui::TextUnformatted("Frame Statistics");
+    ImGui::Text("FPS: %.2f", Trident::Utilities::Time::GetFPS());
+    ImGui::Text("Allocations: %zu", Trident::Application::GetRenderer().GetLastFrameAllocationCount());
+    ImGui::Text("Models: %zu", Trident::Application::GetRenderer().GetModelCount());
+    ImGui::Text("Triangles: %zu", Trident::Application::GetRenderer().GetTriangleCount());
+
+    const Trident::Renderer::FrameTimingStats& l_PerfStats = Trident::Application::GetRenderer().GetFrameTimingStats();
+    const size_t l_PerfCount = Trident::Application::GetRenderer().GetFrameTimingHistoryCount();
+    if (l_PerfCount > 0)
+    {
+        ImGui::Text("Frame Avg: %.3f ms", l_PerfStats.AverageMilliseconds);
+        ImGui::Text("Frame Min: %.3f ms", l_PerfStats.MinimumMilliseconds);
+        ImGui::Text("Frame Max: %.3f ms", l_PerfStats.MaximumMilliseconds);
+        ImGui::Text("Average FPS: %.2f", l_PerfStats.AverageFPS);
+    }
+    else
+    {
+        ImGui::TextUnformatted("Collecting frame metrics...");
+    }
+
+    bool l_PerformanceCapture = Trident::Application::GetRenderer().IsPerformanceCaptureEnabled();
+    if (ImGui::Checkbox("Capture Performance", &l_PerformanceCapture))
+    {
+        Trident::Application::GetRenderer().SetPerformanceCaptureEnabled(l_PerformanceCapture);
+    }
+
+    if (Trident::Application::GetRenderer().IsPerformanceCaptureEnabled())
+    {
+        ImGui::Text("Captured Samples: %zu", Trident::Application::GetRenderer().GetPerformanceCaptureSampleCount());
+    }
+
+    ImGui::Separator();
+
+    std::vector<Trident::Utilities::ConsoleLog::Entry> l_LogEntries = Trident::Utilities::ConsoleLog::GetSnapshot();
+
+    if (ImGui::Button("Clear"))
+    {
+        Trident::Utilities::ConsoleLog::Clear();
+        s_LastConsoleEntryCount = 0;
+    }
+
+    ImGui::SameLine();
+    ImGui::Checkbox("Auto-scroll", &s_ConsoleAutoScroll);
+
+    ImGui::Separator();
+
+    ImGui::Checkbox("Errors", &s_ShowConsoleErrors);
+    ImGui::SameLine();
+    ImGui::Checkbox("Warnings", &s_ShowConsoleWarnings);
+    ImGui::SameLine();
+    ImGui::Checkbox("Logs", &s_ShowConsoleLogs);
+
+    ImGui::Separator();
+
+    ImGui::BeginChild("OutputLogScroll", ImVec2(0.0f, 0.0f), false, ImGuiWindowFlags_HorizontalScrollbar);
+
+    for (const Trident::Utilities::ConsoleLog::Entry& it_Entry : l_LogEntries)
+    {
+        if (!ShouldDisplayConsoleEntry(it_Entry.Level))
+        {
+            continue;
+        }
+
+        const std::string l_Timestamp = FormatConsoleTimestamp(it_Entry.Timestamp);
+        const ImVec4 l_Colour = GetConsoleColour(it_Entry.Level);
+
+        ImGui::PushStyleColor(ImGuiCol_Text, l_Colour);
+        ImGui::Text("[%s] %s", l_Timestamp.c_str(), it_Entry.Message.c_str());
+        ImGui::PopStyleColor();
+    }
+
+    if (s_ConsoleAutoScroll && !l_LogEntries.empty() && l_LogEntries.size() != s_LastConsoleEntryCount)
+    {
+        ImGui::SetScrollHereY(1.0f);
+    }
+
+    ImGui::EndChild();
+
+    s_LastConsoleEntryCount = l_LogEntries.size();
+
+    // Future addition: surface shader compiler errors and asset validation summaries alongside runtime logs.
+
+    ImGui::End();
 }
 
 void ApplicationLayer::DrawTransformGizmo(Trident::ECS::Entity a_SelectedEntity)

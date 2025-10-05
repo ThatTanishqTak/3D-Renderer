@@ -22,6 +22,11 @@ public:
     void Run();
 
 private:
+    void DrawViewportPanel();
+    void DrawWorldOutlinerPanel();
+    void DrawDetailsPanel();
+    void DrawContentBrowserPanel();
+    void DrawOutputLogPanel();
     void DrawTransformGizmo(Trident::ECS::Entity selectedEntity);
 
 private:
