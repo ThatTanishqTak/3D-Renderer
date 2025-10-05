@@ -2,6 +2,10 @@
 #include "Loader/ModelLoader.h"
 #include "Loader/AssimpExtensions.h"
 #include "Core/Utilities.h"
+#include "Application.h"
+
+#include "ECS/Components/MeshComponent.h"
+#include "ECS/Components/TransformComponent.h"
 
 #include <filesystem>
 #include <utility>
@@ -17,6 +21,9 @@ namespace Trident
         SceneData SceneLoader::Load(const std::string& directoryPath)
         {
             SceneData l_Scene{};
+
+            // Resolve the active registry up front so meshes can spawn ECS entities as they are imported.
+            ECS::Registry& l_Registry = Application::GetRegistry();
             fs::path l_Path = Utilities::FileManagement::NormalizePath(directoryPath);
             if (!fs::is_directory(l_Path))
             {
@@ -55,7 +62,16 @@ namespace Trident
                             {
                                 l_Mesh.MaterialIndex += static_cast<int>(l_MaterialOffset);
                             }
+                            const size_t l_NewMeshIndex = l_Scene.Meshes.size();
                             l_Scene.Meshes.push_back(std::move(l_Mesh));
+
+                            // Create an entity for the imported mesh so the renderer drives draw calls via ECS data.
+                            ECS::Entity l_Entity = l_Registry.CreateEntity();
+                            // Start with an identity transform; editor tools can adjust this later.
+                            l_Registry.AddComponent<Transform>(l_Entity, Transform{});
+                            MeshComponent& l_MeshComponent = l_Registry.AddComponent<MeshComponent>(l_Entity);
+                            l_MeshComponent.m_MeshIndex = l_NewMeshIndex;
+                            l_MeshComponent.m_MaterialIndex = l_Scene.Meshes.back().MaterialIndex;
                         }
 
                         l_Scene.Materials.insert(

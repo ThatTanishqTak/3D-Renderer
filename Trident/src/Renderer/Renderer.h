@@ -16,6 +16,7 @@
 #include "Loader/TextureLoader.h"
 
 #include "ECS/Entity.h"
+#include "ECS/Components/MeshComponent.h"
 #include "ECS/Components/SpriteComponent.h"
 #include "ECS/Components/TransformComponent.h"
 #include "Camera/Camera.h"
@@ -127,6 +128,21 @@ namespace Trident
         bool m_Shutdown = false;
 
     private:
+        struct MeshDrawInfo
+        {
+            uint32_t m_FirstIndex = 0;            ///< First index in the shared buffer for the mesh.
+            uint32_t m_IndexCount = 0;            ///< Number of indices the draw call should submit.
+            int32_t m_BaseVertex = 0;             ///< Base vertex offset applied during drawing.
+            int32_t m_MaterialIndex = -1;         ///< Material resolved at upload time.
+        };
+
+        struct MeshDrawCommand
+        {
+            glm::mat4 m_ModelMatrix{ 1.0f };      ///< Cached transform ready for the GPU.
+            const MeshComponent* m_Component = nullptr; ///< Source component describing the draw parameters.
+            ECS::Entity m_Entity = 0;             ///< Owning entity for debugging and picking hooks.
+        };
+
         struct SpriteDrawCommand
         {
             glm::mat4 m_ModelMatrix{ 1.0f };        ///< Cached transform ready for GPU submission.
@@ -144,6 +160,7 @@ namespace Trident
         };
 
         CameraSnapshot ResolveViewportCamera() const;
+        void GatherMeshDraws();
         void BuildSpriteGeometry();
         void DestroySpriteGeometry();
         void GatherSpriteDraws();
@@ -185,6 +202,8 @@ namespace Trident
         VkBuffer m_SpriteIndexBuffer = VK_NULL_HANDLE;       ///< Index buffer referencing the shared quad.
         VkDeviceMemory m_SpriteIndexMemory = VK_NULL_HANDLE; ///< Memory backing the sprite index buffer.
         uint32_t m_SpriteIndexCount = 0;                    ///< Number of indices issued per sprite draw.
+        std::vector<MeshDrawInfo> m_MeshDrawInfo;           ///< Cached draw metadata for each uploaded mesh.
+        std::vector<MeshDrawCommand> m_MeshDrawCommands;    ///< Mesh draw list gathered per-frame from the ECS registry.
 
         struct OffscreenTarget
         {

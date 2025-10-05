@@ -1,0 +1,33 @@
+#pragma once
+
+#include <cstdint>
+#include <limits>
+
+namespace Trident
+{
+    /**
+     * @brief Describes how an entity references GPU mesh data inside the renderer.
+     *
+     * Each mesh entity stores its source mesh index, the resolved material assignment,
+     * and cached draw offsets. The renderer fills the offsets when geometry is uploaded
+     * so future frames can issue draw calls without re-evaluating CPU state. The
+     * component intentionally remains lightweight to make duplication and instancing
+     * inexpensive. Future improvements might track per-instance buffers or material
+     * overrides to support streaming systems.
+     */
+    struct MeshComponent
+    {
+        /// Index into the renderer's mesh table that owns the vertex/index data.
+        size_t m_MeshIndex{ std::numeric_limits<size_t>::max() };
+        /// Material slot resolved during scene import; -1 when unassigned.
+        int32_t m_MaterialIndex{ -1 };
+        /// First index within the shared index buffer used when drawing this mesh.
+        uint32_t m_FirstIndex{ 0 };
+        /// Number of indices to submit for this mesh draw call.
+        uint32_t m_IndexCount{ 0 };
+        /// Base vertex offset applied so indices address the correct vertex range.
+        int32_t m_BaseVertex{ 0 };
+        /// Quick toggle that allows tooling to hide meshes without removing components.
+        bool m_Visible{ true };
+    };
+}

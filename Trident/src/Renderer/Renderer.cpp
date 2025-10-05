@@ -304,12 +304,60 @@ namespace Trident
         std::vector<Vertex> l_AllVertices(m_StagingVertices.get(), m_StagingVertices.get() + l_VertexCount);
         std::vector<uint32_t> l_AllIndices(m_StagingIndices.get(), m_StagingIndices.get() + l_IndexCount);
 
-        // Upload the combined geometry once per load so every mesh in the scene shares a single draw call.
+        // Upload the combined geometry once per load so every mesh can share the same GPU buffers.
         m_Buffers.CreateVertexBuffer(l_AllVertices, m_Commands.GetOneTimePool(), m_VertexBuffer, m_VertexBufferMemory);
         m_Buffers.CreateIndexBuffer(l_AllIndices, m_Commands.GetOneTimePool(), m_IndexBuffer, m_IndexBufferMemory, m_IndexCount);
 
         // Record the uploaded index count so the command buffer draw guard can validate pending draws.
         m_IndexCount = static_cast<uint32_t>(l_IndexCount);
+
+        // Cache draw metadata for each mesh so render submissions can address shared buffers safely.
+        m_MeshDrawInfo.clear();
+        m_MeshDrawInfo.reserve(meshes.size());
+
+        uint32_t l_FirstIndexCursor = 0;
+        int32_t l_BaseVertexCursor = 0;
+        for (size_t l_MeshIndex = 0; l_MeshIndex < meshes.size(); ++l_MeshIndex)
+        {
+            const auto& l_Mesh = meshes[l_MeshIndex];
+            MeshDrawInfo l_DrawInfo{};
+            l_DrawInfo.m_FirstIndex = l_FirstIndexCursor;
+            l_DrawInfo.m_IndexCount = static_cast<uint32_t>(l_Mesh.Indices.size());
+            l_DrawInfo.m_BaseVertex = l_BaseVertexCursor;
+            l_DrawInfo.m_MaterialIndex = l_Mesh.MaterialIndex;
+
+            m_MeshDrawInfo.push_back(l_DrawInfo);
+
+            l_FirstIndexCursor += l_DrawInfo.m_IndexCount;
+            l_BaseVertexCursor += static_cast<int32_t>(l_Mesh.Vertices.size());
+        }
+
+        // Clear any cached draw list so the next frame rebuilds commands using the fresh offsets.
+        m_MeshDrawCommands.clear();
+
+        if (m_Registry)
+        {
+            const auto& l_Entities = m_Registry->GetEntities();
+            for (ECS::Entity it_Entity : l_Entities)
+            {
+                if (!m_Registry->HasComponent<MeshComponent>(it_Entity))
+                {
+                    continue;
+                }
+
+                MeshComponent& l_Component = m_Registry->GetComponent<MeshComponent>(it_Entity);
+                if (l_Component.m_MeshIndex >= m_MeshDrawInfo.size())
+                {
+                    continue;
+                }
+
+                const MeshDrawInfo& l_DrawInfo = m_MeshDrawInfo[l_Component.m_MeshIndex];
+                l_Component.m_FirstIndex = l_DrawInfo.m_FirstIndex;
+                l_Component.m_IndexCount = l_DrawInfo.m_IndexCount;
+                l_Component.m_BaseVertex = l_DrawInfo.m_BaseVertex;
+                l_Component.m_MaterialIndex = l_DrawInfo.m_MaterialIndex;
+            }
+        }
 
         m_ModelCount = meshes.size();
         m_TriangleCount = l_IndexCount / 3;
@@ -674,6 +722,59 @@ namespace Trident
             m_SpriteIndexBuffer = VK_NULL_HANDLE;
             m_SpriteIndexMemory = VK_NULL_HANDLE;
             m_SpriteIndexCount = 0;
+        }
+    }
+
+    void Renderer::GatherMeshDraws()
+    {
+        m_MeshDrawCommands.clear();
+
+        if (!m_Registry)
+        {
+            return;
+        }
+
+        const auto& l_Entities = m_Registry->GetEntities();
+        // Reserve upfront so dynamic scenes with many meshes avoid repeated allocations.
+        m_MeshDrawCommands.reserve(l_Entities.size());
+
+        for (ECS::Entity it_Entity : l_Entities)
+        {
+            if (!m_Registry->HasComponent<MeshComponent>(it_Entity))
+            {
+                continue;
+            }
+
+            MeshComponent& l_MeshComponent = m_Registry->GetComponent<MeshComponent>(it_Entity);
+            if (!l_MeshComponent.m_Visible)
+            {
+                continue;
+            }
+
+            if (l_MeshComponent.m_MeshIndex >= m_MeshDrawInfo.size())
+            {
+                // The component references geometry that has not been uploaded yet. Future streaming
+                // work can patch this once asynchronous loading lands.
+                continue;
+            }
+
+            const MeshDrawInfo& l_DrawInfo = m_MeshDrawInfo[l_MeshComponent.m_MeshIndex];
+            if (l_DrawInfo.m_IndexCount == 0)
+            {
+                continue;
+            }
+
+            glm::mat4 l_ModelMatrix{ 1.0f };
+            if (m_Registry->HasComponent<Transform>(it_Entity))
+            {
+                l_ModelMatrix = ComposeTransform(m_Registry->GetComponent<Transform>(it_Entity));
+            }
+
+            MeshDrawCommand l_Command{};
+            l_Command.m_ModelMatrix = l_ModelMatrix;
+            l_Command.m_Component = &l_MeshComponent;
+            l_Command.m_Entity = it_Entity;
+            m_MeshDrawCommands.push_back(l_Command);
         }
     }
 
@@ -1661,17 +1762,41 @@ namespace Trident
                 vkCmdBindDescriptorSets(l_CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline.GetPipelineLayout(), 0, 1, &m_DescriptorSets[imageIndex], 0, nullptr);
             }
 
-            if (m_VertexBuffer != VK_NULL_HANDLE && m_IndexBuffer != VK_NULL_HANDLE && m_IndexCount > 0 && l_HasDescriptorSet)
+            GatherMeshDraws();
+
+            if (m_VertexBuffer != VK_NULL_HANDLE && m_IndexBuffer != VK_NULL_HANDLE && !m_MeshDrawInfo.empty() && !m_MeshDrawCommands.empty() && l_HasDescriptorSet)
             {
                 VkBuffer l_VertexBuffers[] = { m_VertexBuffer };
                 VkDeviceSize l_Offsets[] = { 0 };
                 vkCmdBindVertexBuffers(l_CommandBuffer, 0, 1, l_VertexBuffers, l_Offsets);
                 vkCmdBindIndexBuffer(l_CommandBuffer, m_IndexBuffer, 0, VK_INDEX_TYPE_UINT32);
-                RenderablePushConstant l_PushConstant{};
-                l_PushConstant.m_ModelMatrix = ComposeTransform(m_Registry->GetComponent<Transform>(m_Entity));
-                vkCmdPushConstants(l_CommandBuffer, m_Pipeline.GetPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(RenderablePushConstant), &l_PushConstant);
 
-                vkCmdDrawIndexed(l_CommandBuffer, m_IndexCount, 1, 0, 0, 0);
+                for (const MeshDrawCommand& l_Command : m_MeshDrawCommands)
+                {
+                    if (!l_Command.m_Component)
+                    {
+                        continue;
+                    }
+
+                    const MeshComponent& l_Component = *l_Command.m_Component;
+                    if (l_Component.m_MeshIndex >= m_MeshDrawInfo.size())
+                    {
+                        continue;
+                    }
+
+                    const MeshDrawInfo& l_DrawInfo = m_MeshDrawInfo[l_Component.m_MeshIndex];
+                    if (l_DrawInfo.m_IndexCount == 0)
+                    {
+                        continue;
+                    }
+
+                    RenderablePushConstant l_PushConstant{};
+                    l_PushConstant.m_ModelMatrix = l_Command.m_ModelMatrix;
+                    l_PushConstant.m_TextureIndex = l_Component.m_MaterialIndex;
+                    vkCmdPushConstants(l_CommandBuffer, m_Pipeline.GetPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(RenderablePushConstant), &l_PushConstant);
+
+                    vkCmdDrawIndexed(l_CommandBuffer, l_DrawInfo.m_IndexCount, 1, l_DrawInfo.m_FirstIndex, l_DrawInfo.m_BaseVertex, 0);
+                }
             }
 
             if (l_HasDescriptorSet)
@@ -1929,17 +2054,41 @@ namespace Trident
                 vkCmdBindDescriptorSets(l_CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline.GetPipelineLayout(), 0, 1, &m_DescriptorSets[imageIndex], 0, nullptr);
             }
 
-            if (m_VertexBuffer != VK_NULL_HANDLE && m_IndexBuffer != VK_NULL_HANDLE && m_IndexCount > 0 && l_HasDescriptorSet)
+            GatherMeshDraws();
+
+            if (m_VertexBuffer != VK_NULL_HANDLE && m_IndexBuffer != VK_NULL_HANDLE && !m_MeshDrawInfo.empty() && !m_MeshDrawCommands.empty() && l_HasDescriptorSet)
             {
                 VkBuffer l_VertexBuffers[] = { m_VertexBuffer };
                 VkDeviceSize l_Offsets[] = { 0 };
                 vkCmdBindVertexBuffers(l_CommandBuffer, 0, 1, l_VertexBuffers, l_Offsets);
                 vkCmdBindIndexBuffer(l_CommandBuffer, m_IndexBuffer, 0, VK_INDEX_TYPE_UINT32);
-                RenderablePushConstant l_PushConstant{};
-                l_PushConstant.m_ModelMatrix = ComposeTransform(m_Registry->GetComponent<Transform>(m_Entity));
-                vkCmdPushConstants(l_CommandBuffer, m_Pipeline.GetPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(RenderablePushConstant), &l_PushConstant);
 
-                vkCmdDrawIndexed(l_CommandBuffer, m_IndexCount, 1, 0, 0, 0);
+                for (const MeshDrawCommand& l_Command : m_MeshDrawCommands)
+                {
+                    if (!l_Command.m_Component)
+                    {
+                        continue;
+                    }
+
+                    const MeshComponent& l_Component = *l_Command.m_Component;
+                    if (l_Component.m_MeshIndex >= m_MeshDrawInfo.size())
+                    {
+                        continue;
+                    }
+
+                    const MeshDrawInfo& l_DrawInfo = m_MeshDrawInfo[l_Component.m_MeshIndex];
+                    if (l_DrawInfo.m_IndexCount == 0)
+                    {
+                        continue;
+                    }
+
+                    RenderablePushConstant l_PushConstant{};
+                    l_PushConstant.m_ModelMatrix = l_Command.m_ModelMatrix;
+                    l_PushConstant.m_TextureIndex = l_Component.m_MaterialIndex;
+                    vkCmdPushConstants(l_CommandBuffer, m_Pipeline.GetPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(RenderablePushConstant), &l_PushConstant);
+
+                    vkCmdDrawIndexed(l_CommandBuffer, l_DrawInfo.m_IndexCount, 1, l_DrawInfo.m_FirstIndex, l_DrawInfo.m_BaseVertex, 0);
+                }
             }
 
             if (l_HasDescriptorSet)
