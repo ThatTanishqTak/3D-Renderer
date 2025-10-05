@@ -24,6 +24,7 @@ namespace Trident
             VkDescriptorPool m_DescriptorPool = VK_NULL_HANDLE;
             VkDevice m_Device = VK_NULL_HANDLE;
             VkQueue m_Queue = VK_NULL_HANDLE;
+            bool m_DockspaceInitialized = false;
         };
     }
 }
