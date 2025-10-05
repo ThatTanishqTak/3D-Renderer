@@ -2313,11 +2313,78 @@ namespace Trident
         l_Global.Projection[1][1] *= -1.0f; // Flip Y for Vulkan's clip space
 
         l_Global.CameraPosition = glm::vec4(l_CameraSnapshot.Position, 1.0f);
-
-        glm::vec3 l_LightDirection = glm::normalize(m_MainLight.Direction);
-        l_Global.LightDirection = glm::vec4(l_LightDirection, 0.0f);
-        l_Global.LightColorIntensity = glm::vec4(m_MainLight.Color, m_MainLight.Intensity);
         l_Global.AmbientColorIntensity = glm::vec4(m_AmbientColor, m_AmbientIntensity);
+
+        // Prepare defaults so lighting behaves identically when no explicit components exist.
+        glm::vec3 l_DirectionalDirection = glm::normalize(s_DefaultDirectionalDirection);
+        glm::vec3 l_DirectionalColor = s_DefaultDirectionalColor;
+        float l_DirectionalIntensity = s_DefaultDirectionalIntensity;
+        uint32_t l_DirectionalCount = 0;
+        uint32_t l_PointLightWriteCount = 0;
+
+        if (m_Registry)
+        {
+            const std::vector<ECS::Entity>& l_Entities = m_Registry->GetEntities();
+            for (ECS::Entity it_Entity : l_Entities)
+            {
+                if (!m_Registry->HasComponent<LightComponent>(it_Entity))
+                {
+                    continue;
+                }
+
+                const LightComponent& l_LightComponent = m_Registry->GetComponent<LightComponent>(it_Entity);
+                if (!l_LightComponent.m_Enabled)
+                {
+                    continue; // Allow designers to mute lights without deleting them.
+                }
+
+                if (l_LightComponent.m_Type == LightComponent::Type::Directional)
+                {
+                    if (l_DirectionalCount == 0)
+                    {
+                        // Consume the first directional light as the primary sun source for the forward pass.
+                        const float l_LengthSquared = glm::dot(l_LightComponent.m_Direction, l_LightComponent.m_Direction);
+                        if (l_LengthSquared > 0.0001f)
+                        {
+                            l_DirectionalDirection = glm::normalize(l_LightComponent.m_Direction);
+                        }
+                        l_DirectionalColor = l_LightComponent.m_Color;
+                        l_DirectionalIntensity = std::max(l_LightComponent.m_Intensity, 0.0f);
+                    }
+                    ++l_DirectionalCount;
+                    continue;
+                }
+
+                if (l_LightComponent.m_Type == LightComponent::Type::Point)
+                {
+                    if (l_PointLightWriteCount < s_MaxPointLights)
+                    {
+                        // Copy as many point lights as the forward shader budget allows; clustered lighting can lift this cap later.
+                        glm::vec3 l_Position{ 0.0f };
+                        if (m_Registry->HasComponent<Transform>(it_Entity))
+                        {
+                            l_Position = m_Registry->GetComponent<Transform>(it_Entity).Position;
+                        }
+
+                        const float l_Range = std::max(l_LightComponent.m_Range, 0.0f);
+                        const float l_Intensity = std::max(l_LightComponent.m_Intensity, 0.0f);
+
+                        l_Global.PointLights[l_PointLightWriteCount].PositionRange = glm::vec4(l_Position, l_Range);
+                        l_Global.PointLights[l_PointLightWriteCount].ColorIntensity = glm::vec4(l_LightComponent.m_Color, l_Intensity);
+                        ++l_PointLightWriteCount;
+                    }
+                    continue;
+                }
+            }
+        }
+
+        // Preserve the legacy sunlight when the scene has no explicit lighting yet so existing demos remain lit.
+        const bool l_ShouldUseFallbackDirectional = (l_DirectionalCount == 0 && l_PointLightWriteCount == 0);
+        const uint32_t l_DirectionalUsed = (l_DirectionalCount > 0 || l_ShouldUseFallbackDirectional) ? 1u : 0u;
+
+        l_Global.DirectionalLightDirection = glm::vec4(l_DirectionalDirection, 0.0f);
+        l_Global.DirectionalLightColor = glm::vec4(l_DirectionalColor, l_DirectionalIntensity);
+        l_Global.LightCounts = glm::uvec4(l_DirectionalUsed, l_PointLightWriteCount, 0u, 0u);
 
         MaterialUniformBuffer l_Material{};
         if (!m_Materials.empty())

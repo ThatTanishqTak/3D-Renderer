@@ -19,6 +19,7 @@
 #include "ECS/Components/MeshComponent.h"
 #include "ECS/Components/SpriteComponent.h"
 #include "ECS/Components/TransformComponent.h"
+#include "ECS/Components/LightComponent.h"
 #include "Camera/Camera.h"
 #include "Camera/CameraComponent.h"
 
@@ -44,15 +45,6 @@ namespace Trident
         glm::vec2 Position{ 0.0f };
         glm::vec2 Size{ 0.0f };
     };
-
-    struct DirectionalLight
-    {
-        glm::vec3 Direction{ -0.5f, -1.0f, -0.3f }; // Default sun direction
-        float Intensity{ 5.0f };                     // Scalar intensity multiplier
-        glm::vec3 Color{ 1.0f, 0.98f, 0.92f };       // Slightly warm white light
-        float Padding{ 0.0f };                       // Padding to keep std140 alignment stable
-    };
-
 
     class Renderer
     {
@@ -248,7 +240,10 @@ namespace Trident
         size_t m_ModelCount = 0;
         size_t m_TriangleCount = 0;
 
-        DirectionalLight m_MainLight{};      // Simple directional light driving direct illumination
+        static constexpr uint32_t s_MaxPointLights = kMaxPointLights; ///< Mirror uniform buffer light budget.
+        static constexpr glm::vec3 s_DefaultDirectionalDirection{ -0.5f, -1.0f, -0.3f }; ///< Fallback sun direction.
+        static constexpr glm::vec3 s_DefaultDirectionalColor{ 1.0f, 0.98f, 0.92f }; ///< Warm sunlight tint.
+        static constexpr float s_DefaultDirectionalIntensity = 5.0f; ///< Brightness used when no lights exist.
         glm::vec3 m_AmbientColor{ 0.03f };  // Ambient tint simulating image-based lighting
         float m_AmbientIntensity = 1.0f;     // Scalar multiplier for ambient contribution
         glm::vec4 m_ClearColor{ 0.0f, 0.0f, 0.0f, 1.0f }; // Default background colour used for both offscreen and swapchain clears

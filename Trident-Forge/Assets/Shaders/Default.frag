@@ -9,14 +9,22 @@ layout(location = 5) in vec3 inVertexColor;
 
 layout(location = 0) out vec4 outColor;
 
+struct PointLightUniform
+{
+    vec4 PositionRange;   // xyz = position, w = radius
+    vec4 ColorIntensity;  // rgb = colour, w = intensity multiplier
+};
+
 layout(set = 0, binding = 0) uniform GlobalUniformBuffer
 {
     mat4 View;
     mat4 Projection;
     vec4 CameraPosition;
-    vec4 LightDirection;
-    vec4 LightColorIntensity;
     vec4 AmbientColorIntensity;
+    vec4 DirectionalLightDirection;
+    vec4 DirectionalLightColor;
+    uvec4 LightCounts;
+    PointLightUniform PointLights[8];
 } g_Global;
 
 layout(set = 0, binding = 1) uniform MaterialUniformBuffer
@@ -64,26 +72,9 @@ vec3 FresnelSchlick(float cosTheta, vec3 F0)
     return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
 }
 
-void main()
+vec3 EvaluatePBRLighting(vec3 lightDirection, vec3 radiance, vec3 shadingNormal, vec3 viewDirection, vec3 albedo, float metallic, float roughness, vec3 F0)
 {
-    // Transform the default tangent-space normal into world space.
-    vec3 T = normalize(inTangent);
-    vec3 B = normalize(inBitangent);
-    vec3 N = normalize(inNormal);
-    mat3 TBN = mat3(T, B, N);
-    vec3 shadingNormal = normalize(TBN * vec3(0.0, 0.0, 1.0));
-
-    vec3 viewDirection = normalize(g_Global.CameraPosition.xyz - inWorldPosition);
-    vec3 lightDirection = normalize(-g_Global.LightDirection.xyz);
     vec3 halfVector = normalize(viewDirection + lightDirection);
-
-    vec4 sampledColor = texture(BaseColorSampler, inTexCoord);
-    vec3 albedo = sampledColor.rgb * g_Material.BaseColorFactor.rgb * inVertexColor;
-    float metallic = clamp(g_Material.MaterialFactors.x, 0.0, 1.0);
-    float roughness = clamp(g_Material.MaterialFactors.y, 0.045, 1.0);
-    float ambientStrength = clamp(g_Material.MaterialFactors.z, 0.0, 1.0);
-
-    vec3 F0 = mix(vec3(0.04), albedo, metallic);
 
     float NDF = DistributionGGX(shadingNormal, halfVector, roughness);
     float geometry = GeometrySmith(shadingNormal, viewDirection, lightDirection, roughness);
@@ -95,11 +86,60 @@ void main()
 
     vec3 kS = fresnel;
     vec3 kD = (vec3(1.0) - kS) * (1.0 - metallic);
-
     float NdotL = max(dot(shadingNormal, lightDirection), 0.0);
-    vec3 radiance = g_Global.LightColorIntensity.rgb * g_Global.LightColorIntensity.w;
 
-    vec3 direct = (kD * albedo / PI + specular) * radiance * NdotL;
+    return (kD * albedo / PI + specular) * radiance * NdotL;
+}
+
+void main()
+{
+    // Transform the default tangent-space normal into world space.
+    vec3 T = normalize(inTangent);
+    vec3 B = normalize(inBitangent);
+    vec3 N = normalize(inNormal);
+    mat3 TBN = mat3(T, B, N);
+    vec3 shadingNormal = normalize(TBN * vec3(0.0, 0.0, 1.0));
+
+    vec3 viewDirection = normalize(g_Global.CameraPosition.xyz - inWorldPosition);
+
+    vec4 sampledColor = texture(BaseColorSampler, inTexCoord);
+    vec3 albedo = sampledColor.rgb * g_Material.BaseColorFactor.rgb * inVertexColor;
+    float metallic = clamp(g_Material.MaterialFactors.x, 0.0, 1.0);
+    float roughness = clamp(g_Material.MaterialFactors.y, 0.045, 1.0);
+    float ambientStrength = clamp(g_Material.MaterialFactors.z, 0.0, 1.0);
+
+    vec3 F0 = mix(vec3(0.04), albedo, metallic);
+
+    vec3 direct = vec3(0.0);
+
+    if (g_Global.LightCounts.x > 0u)
+    {
+        vec3 lightDirection = normalize(-g_Global.DirectionalLightDirection.xyz);
+        vec3 radiance = g_Global.DirectionalLightColor.rgb * g_Global.DirectionalLightColor.w;
+        direct += EvaluatePBRLighting(lightDirection, radiance, shadingNormal, viewDirection, albedo, metallic, roughness, F0);
+    }
+
+    uint pointCount = min(g_Global.LightCounts.y, uint(8));
+    for (uint i = 0u; i < pointCount; ++i)
+    {
+        PointLightUniform light = g_Global.PointLights[i];
+        vec3 toLight = light.PositionRange.xyz - inWorldPosition;
+        float distanceToLight = length(toLight);
+        if (distanceToLight <= 1e-4)
+        {
+            continue;
+        }
+
+        vec3 lightDirection = toLight / distanceToLight;
+        float radius = max(light.PositionRange.w, 1e-4);
+        float normalizedDistance = clamp(distanceToLight / radius, 0.0, 1.0);
+        float attenuation = 1.0 - normalizedDistance;
+        attenuation *= attenuation; // Smooth roll-off toward the light's edge.
+
+        vec3 radiance = light.ColorIntensity.rgb * light.ColorIntensity.w * attenuation;
+        direct += EvaluatePBRLighting(lightDirection, radiance, shadingNormal, viewDirection, albedo, metallic, roughness, F0);
+    }
+
     vec3 ambient = g_Global.AmbientColorIntensity.rgb * g_Global.AmbientColorIntensity.w * albedo * ambientStrength;
 
     vec3 color = ambient + direct;

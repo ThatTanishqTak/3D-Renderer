@@ -26,6 +26,7 @@
 #include "Renderer/Renderer.h"
 #include "ECS/Components/TransformComponent.h"
 #include "ECS/Components/SpriteComponent.h"
+#include "ECS/Components/LightComponent.h"
 
 namespace
 {
@@ -500,6 +501,39 @@ void ApplicationLayer::DrawWorldOutlinerPanel()
         }
     }
 
+    ImGui::Separator();
+    ImGui::TextUnformatted("Create Light Entity");
+
+    if (ImGui::Button("Directional Light"))
+    {
+        // Spawn a fresh entity configured as a sun light so the renderer can immediately consume it.
+        Trident::ECS::Entity l_NewEntity = l_Registry.CreateEntity();
+        Trident::Transform& l_Transform = l_Registry.AddComponent<Trident::Transform>(l_NewEntity);
+        l_Transform.Position = { 0.0f, 5.0f, 0.0f };
+
+        Trident::LightComponent& l_Light = l_Registry.AddComponent<Trident::LightComponent>(l_NewEntity);
+        l_Light.m_Type = Trident::LightComponent::Type::Directional;
+        l_Light.m_Direction = glm::normalize(glm::vec3(-0.5f, -1.0f, -0.3f));
+        l_Light.m_Intensity = 5.0f;
+
+        s_SelectedEntity = l_NewEntity;
+    }
+
+    if (ImGui::Button("Point Light"))
+    {
+        // Instantiate a point light with a practical radius so scene authors can tweak it immediately.
+        Trident::ECS::Entity l_NewEntity = l_Registry.CreateEntity();
+        Trident::Transform& l_Transform = l_Registry.AddComponent<Trident::Transform>(l_NewEntity);
+        l_Transform.Position = { 0.0f, 2.0f, 0.0f };
+
+        Trident::LightComponent& l_Light = l_Registry.AddComponent<Trident::LightComponent>(l_NewEntity);
+        l_Light.m_Type = Trident::LightComponent::Type::Point;
+        l_Light.m_Range = 10.0f;
+        l_Light.m_Intensity = 25.0f;
+
+        s_SelectedEntity = l_NewEntity;
+    }
+
     // Placeholder: integrate search filters or layer visibility toggles alongside the hierarchy in later passes.
 
     ImGui::End();
@@ -652,6 +686,64 @@ void ApplicationLayer::DrawDetailsPanel()
             {
                 l_Registry.AddComponent<Trident::SpriteComponent>(s_SelectedEntity);
                 s_SpriteCacheEntity = s_InvalidEntity;
+            }
+        }
+
+        if (l_Registry.HasComponent<Trident::LightComponent>(s_SelectedEntity))
+        {
+            Trident::LightComponent& l_LightComponent = l_Registry.GetComponent<Trident::LightComponent>(s_SelectedEntity);
+            if (ImGui::CollapsingHeader("Light", ImGuiTreeNodeFlags_DefaultOpen))
+            {
+                // Surface common light properties with clear labelling for artists.
+                int l_SelectedType = static_cast<int>(l_LightComponent.m_Type);
+                const char* l_TypeLabels[] = { "Directional", "Point" };
+                if (ImGui::Combo("Type", &l_SelectedType, l_TypeLabels, IM_ARRAYSIZE(l_TypeLabels)))
+                {
+                    l_LightComponent.m_Type = static_cast<Trident::LightComponent::Type>(l_SelectedType);
+                }
+
+                ImGui::Checkbox("Enabled", &l_LightComponent.m_Enabled);
+                ImGui::ColorEdit3("Colour", glm::value_ptr(l_LightComponent.m_Color));
+                ImGui::DragFloat("Intensity", &l_LightComponent.m_Intensity, 0.1f, 0.0f, 1000.0f, "%.2f");
+
+                if (l_LightComponent.m_Type == Trident::LightComponent::Type::Directional)
+                {
+                    glm::vec3 l_Direction = l_LightComponent.m_Direction;
+                    if (ImGui::DragFloat3("Direction", glm::value_ptr(l_Direction), 0.01f, -1.0f, 1.0f))
+                    {
+                        if (glm::length(l_Direction) > 0.0001f)
+                        {
+                            l_LightComponent.m_Direction = glm::normalize(l_Direction);
+                        }
+                    }
+
+                    ImGui::TextUnformatted("Shadow controls will land here in a future milestone.");
+                }
+                else if (l_LightComponent.m_Type == Trident::LightComponent::Type::Point)
+                {
+                    if (ImGui::DragFloat("Range", &l_LightComponent.m_Range, 0.1f, 0.0f, 500.0f, "%.2f"))
+                    {
+                        l_LightComponent.m_Range = std::max(0.0f, l_LightComponent.m_Range);
+                    }
+
+                    ImGui::TextUnformatted("Clustered lighting parameters can be exposed here later.");
+                }
+
+                ImGui::Separator();
+                ImGui::BeginDisabled(true);
+                ImGui::Checkbox("Cast Shadows", &l_LightComponent.m_ShadowCaster);
+                ImGui::EndDisabled();
+                ImGui::TextUnformatted("Shadow toggles are placeholder UI for upcoming passes.");
+            }
+        }
+        else
+        {
+            if (ImGui::Button("Add Light Component"))
+            {
+                // Default to a point light so new lights immediately influence the scene.
+                Trident::LightComponent& l_Light = l_Registry.AddComponent<Trident::LightComponent>(s_SelectedEntity);
+                l_Light.m_Type = Trident::LightComponent::Type::Point;
+                l_Light.m_Range = 10.0f;
             }
         }
     }
