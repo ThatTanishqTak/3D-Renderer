@@ -7,6 +7,8 @@
 #include <vector>
 #include <limits>
 #include <algorithm>
+#include <array>
+#include <cstring>
 
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -23,6 +25,7 @@
 #include "Renderer/RenderCommand.h"
 #include "Renderer/Renderer.h"
 #include "ECS/Components/TransformComponent.h"
+#include "ECS/Components/SpriteComponent.h"
 
 namespace
 {
@@ -75,6 +78,13 @@ namespace
     Trident::ECS::Entity s_SelectedViewportCamera = s_InvalidEntity;
     // Remember the combo-box selection index so the UI remains sticky across frames.
     int s_SelectedCameraIndex = 0;
+
+    // Sprite inspector caches to keep text fields responsive while editing asset paths.
+    std::array<char, 512> s_SpriteTextureBuffer{};
+    std::array<char, 256> s_SpriteMaterialBuffer{};
+    std::string s_SpriteTexturePath{};
+    bool s_OpenSpriteTextureDialog = false;
+    Trident::ECS::Entity s_SpriteCacheEntity = s_InvalidEntity;
 
     // Console window configuration toggles stored across frames for a consistent user experience.
     bool s_ShowConsoleErrors = true;
@@ -544,6 +554,105 @@ void ApplicationLayer::DrawDetailsPanel()
         else
         {
             ImGui::TextUnformatted("Transform component not present.");
+        }
+
+        // Sprite inspector exposed after transform editing so spatial adjustments happen first.
+        if (l_Registry.HasComponent<Trident::SpriteComponent>(s_SelectedEntity))
+        {
+            Trident::SpriteComponent& l_Sprite = l_Registry.GetComponent<Trident::SpriteComponent>(s_SelectedEntity);
+
+            if (s_SpriteCacheEntity != s_SelectedEntity)
+            {
+                std::fill(s_SpriteTextureBuffer.begin(), s_SpriteTextureBuffer.end(), '\0');
+                std::fill(s_SpriteMaterialBuffer.begin(), s_SpriteMaterialBuffer.end(), '\0');
+                if (!l_Sprite.m_TextureId.empty())
+                {
+                    std::strncpy(s_SpriteTextureBuffer.data(), l_Sprite.m_TextureId.c_str(), s_SpriteTextureBuffer.size() - 1);
+                }
+                if (!l_Sprite.m_MaterialOverrideId.empty())
+                {
+                    std::strncpy(s_SpriteMaterialBuffer.data(), l_Sprite.m_MaterialOverrideId.c_str(), s_SpriteMaterialBuffer.size() - 1);
+                }
+                s_SpriteTexturePath = l_Sprite.m_TextureId;
+                s_OpenSpriteTextureDialog = false;
+                s_SpriteCacheEntity = s_SelectedEntity;
+            }
+
+            if (ImGui::CollapsingHeader("Sprite", ImGuiTreeNodeFlags_DefaultOpen))
+            {
+                ImGui::Checkbox("Visible", &l_Sprite.m_Visible);
+
+                if (ImGui::InputText("Texture Asset", s_SpriteTextureBuffer.data(), s_SpriteTextureBuffer.size()))
+                {
+                    l_Sprite.m_TextureId = s_SpriteTextureBuffer.data();
+                    s_SpriteTexturePath = l_Sprite.m_TextureId;
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Browse##SpriteTexture"))
+                {
+                    s_OpenSpriteTextureDialog = true;
+                    s_SpriteTexturePath = l_Sprite.m_TextureId;
+                    ImGui::OpenPopup("SpriteTextureDialog");
+                }
+
+                if (s_OpenSpriteTextureDialog)
+                {
+                    if (Trident::UI::FileDialog::Open("SpriteTextureDialog", s_SpriteTexturePath))
+                    {
+                        l_Sprite.m_TextureId = s_SpriteTexturePath;
+                        std::fill(s_SpriteTextureBuffer.begin(), s_SpriteTextureBuffer.end(), '\0');
+                        std::strncpy(s_SpriteTextureBuffer.data(), l_Sprite.m_TextureId.c_str(), s_SpriteTextureBuffer.size() - 1);
+                        s_OpenSpriteTextureDialog = false;
+                    }
+
+                    if (!ImGui::IsPopupOpen("SpriteTextureDialog"))
+                    {
+                        s_OpenSpriteTextureDialog = false;
+                    }
+                }
+
+                ImGui::ColorEdit4("Tint", glm::value_ptr(l_Sprite.m_TintColor));
+                ImGui::DragFloat("Tiling Factor", &l_Sprite.m_TilingFactor, 0.01f, 0.0f, 100.0f);
+                ImGui::DragFloat2("UV Scale", glm::value_ptr(l_Sprite.m_UVScale), 0.01f, 0.0f, 16.0f);
+                ImGui::DragFloat2("UV Offset", glm::value_ptr(l_Sprite.m_UVOffset), 0.01f, -16.0f, 16.0f);
+                ImGui::DragFloat("Sort Bias", &l_Sprite.m_SortOffset, 0.001f, -10.0f, 10.0f);
+
+                if (ImGui::Checkbox("Override Material", &l_Sprite.m_UseMaterialOverride))
+                {
+                    // Checkbox toggles override usage; field below is conditionally exposed.
+                }
+
+                if (l_Sprite.m_UseMaterialOverride)
+                {
+                    if (ImGui::InputText("Material ID", s_SpriteMaterialBuffer.data(), s_SpriteMaterialBuffer.size()))
+                    {
+                        l_Sprite.m_MaterialOverrideId = s_SpriteMaterialBuffer.data();
+                    }
+                }
+
+                if (ImGui::DragInt2("Atlas Tiles", glm::value_ptr(l_Sprite.m_AtlasTiles), 1.0f, 1, 256))
+                {
+                    l_Sprite.m_AtlasTiles.x = std::max(1, l_Sprite.m_AtlasTiles.x);
+                    l_Sprite.m_AtlasTiles.y = std::max(1, l_Sprite.m_AtlasTiles.y);
+                }
+
+                if (ImGui::InputInt("Atlas Index", &l_Sprite.m_AtlasIndex))
+                {
+                    l_Sprite.m_AtlasIndex = std::max(0, l_Sprite.m_AtlasIndex);
+                }
+
+                ImGui::DragFloat("Animation FPS", &l_Sprite.m_AnimationSpeed, 0.1f, 0.0f, 240.0f);
+                ImGui::TextUnformatted("Future work: expose flipbook preview and per-frame events.");
+            }
+        }
+        else
+        {
+            s_SpriteCacheEntity = s_InvalidEntity;
+            if (ImGui::Button("Add Sprite Component"))
+            {
+                l_Registry.AddComponent<Trident::SpriteComponent>(s_SelectedEntity);
+                s_SpriteCacheEntity = s_InvalidEntity;
+            }
         }
     }
     else

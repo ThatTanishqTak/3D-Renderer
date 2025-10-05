@@ -2,6 +2,8 @@
 
 #include "Renderer.h"
 
+#include "ECS/Components/TransformComponent.h"
+
 namespace Trident
 {
     class RenderCommand

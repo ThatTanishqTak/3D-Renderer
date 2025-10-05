@@ -2,6 +2,7 @@
 
 #include "Core/Utilities.h"
 
+#include "Renderer/RenderData.h"
 #include "Renderer/Vertex.h"
 #include "Renderer/UniformBuffer.h"
 #include "Renderer/Swapchain.h"
@@ -15,6 +16,8 @@
 #include "Loader/TextureLoader.h"
 
 #include "ECS/Entity.h"
+#include "ECS/Components/SpriteComponent.h"
+#include "ECS/Components/TransformComponent.h"
 #include "Camera/Camera.h"
 #include "Camera/CameraComponent.h"
 
@@ -124,6 +127,13 @@ namespace Trident
         bool m_Shutdown = false;
 
     private:
+        struct SpriteDrawCommand
+        {
+            glm::mat4 m_ModelMatrix{ 1.0f };        ///< Cached transform ready for GPU submission.
+            const SpriteComponent* m_Component = nullptr; ///< Pointer into ECS storage for sprite properties.
+            ECS::Entity m_Entity = 0;               ///< Owning entity for debugging and future sorting.
+        };
+
         struct CameraSnapshot
         {
             glm::mat4 View{ 1.0f };
@@ -134,6 +144,10 @@ namespace Trident
         };
 
         CameraSnapshot ResolveViewportCamera() const;
+        void BuildSpriteGeometry();
+        void DestroySpriteGeometry();
+        void GatherSpriteDraws();
+        void DrawSprites(VkCommandBuffer commandBuffer, uint32_t imageIndex);
 
         // Swapchain
         Swapchain m_Swapchain;
@@ -166,6 +180,11 @@ namespace Trident
         VkDeviceMemory m_TextureImageMemory = VK_NULL_HANDLE;
         VkImageView m_TextureImageView = VK_NULL_HANDLE;
         VkSampler m_TextureSampler = VK_NULL_HANDLE;
+        VkBuffer m_SpriteVertexBuffer = VK_NULL_HANDLE;      ///< Shared quad geometry for batched sprites.
+        VkDeviceMemory m_SpriteVertexMemory = VK_NULL_HANDLE;///< Memory backing the sprite vertex buffer.
+        VkBuffer m_SpriteIndexBuffer = VK_NULL_HANDLE;       ///< Index buffer referencing the shared quad.
+        VkDeviceMemory m_SpriteIndexMemory = VK_NULL_HANDLE; ///< Memory backing the sprite index buffer.
+        uint32_t m_SpriteIndexCount = 0;                    ///< Number of indices issued per sprite draw.
 
         struct OffscreenTarget
         {
@@ -196,6 +215,7 @@ namespace Trident
         std::unique_ptr<Vertex[]> m_StagingVertices;
         std::unique_ptr<uint32_t[]> m_StagingIndices;
         std::vector<Geometry::Material> m_Materials; // CPU copy of the material table used during shading
+        std::vector<SpriteDrawCommand> m_SpriteDrawList;    ///< Cached list of sprites visible for the current frame.
 
         ECS::Entity m_Entity = 0;
         ECS::Registry* m_Registry = nullptr;

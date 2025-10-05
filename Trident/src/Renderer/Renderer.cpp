@@ -95,6 +95,9 @@ namespace Trident
         CreateDefaultSkybox();
         CreateDescriptorSets();
 
+        // Prepare shared quad geometry so every sprite draw can reference the same GPU buffers.
+        BuildSpriteGeometry();
+
         m_Camera = Camera(Application::GetWindow().GetNativeWindow());
 
         m_Viewport.Position = { 0.0f, 0.0f };
@@ -120,6 +123,9 @@ namespace Trident
 
         // Tear down any editor viewport resources before the core pipeline disappears.
         DestroyAllOffscreenResources();
+
+        // Release shared sprite geometry before the buffer allocator clears tracked allocations.
+        DestroySpriteGeometry();
 
         if (m_DescriptorPool != VK_NULL_HANDLE)
         {
@@ -612,6 +618,132 @@ namespace Trident
         l_Snapshot.FarClip = l_CameraComponent.FarClip;
 
         return l_Snapshot;
+    }
+
+    void Renderer::BuildSpriteGeometry()
+    {
+        // Ensure any previous allocation is cleared before creating a new quad.
+        DestroySpriteGeometry();
+
+        std::array<Vertex, 4> l_Vertices{};
+        // Define a unit quad facing the camera so transforms can scale it to the desired size.
+        l_Vertices[0].Position = { -0.5f, -0.5f, 0.0f };
+        l_Vertices[1].Position = { 0.5f, -0.5f, 0.0f };
+        l_Vertices[2].Position = { 0.5f, 0.5f, 0.0f };
+        l_Vertices[3].Position = { -0.5f, 0.5f, 0.0f };
+
+        for (Vertex& it_Vertex : l_Vertices)
+        {
+            it_Vertex.Normal = { 0.0f, 0.0f, -1.0f };   // Point towards the default camera direction.
+            it_Vertex.Tangent = { 1.0f, 0.0f, 0.0f };  // Tangent aligned with X for normal mapping compatibility.
+            it_Vertex.Bitangent = { 0.0f, 1.0f, 0.0f }; // Bitangent aligned with Y.
+            it_Vertex.Color = { 1.0f, 1.0f, 1.0f };     // White default so tinting works consistently.
+        }
+
+        l_Vertices[0].TexCoord = { 0.0f, 0.0f };
+        l_Vertices[1].TexCoord = { 1.0f, 0.0f };
+        l_Vertices[2].TexCoord = { 1.0f, 1.0f };
+        l_Vertices[3].TexCoord = { 0.0f, 1.0f };
+
+        const std::array<uint32_t, 6> l_Indices{ 0, 2, 1, 0, 3, 2 };
+
+        std::vector<Vertex> l_VertexData(l_Vertices.begin(), l_Vertices.end());
+        std::vector<uint32_t> l_IndexData(l_Indices.begin(), l_Indices.end());
+
+        m_Buffers.CreateVertexBuffer(l_VertexData, m_Commands.GetOneTimePool(), m_SpriteVertexBuffer, m_SpriteVertexMemory);
+        m_Buffers.CreateIndexBuffer(l_IndexData, m_Commands.GetOneTimePool(), m_SpriteIndexBuffer, m_SpriteIndexMemory, m_SpriteIndexCount);
+
+        if (m_SpriteIndexCount == 0)
+        {
+            m_SpriteIndexCount = static_cast<uint32_t>(l_Indices.size());
+        }
+    }
+
+    void Renderer::DestroySpriteGeometry()
+    {
+        if (m_SpriteVertexBuffer != VK_NULL_HANDLE || m_SpriteVertexMemory != VK_NULL_HANDLE)
+        {
+            m_Buffers.DestroyBuffer(m_SpriteVertexBuffer, m_SpriteVertexMemory);
+            m_SpriteVertexBuffer = VK_NULL_HANDLE;
+            m_SpriteVertexMemory = VK_NULL_HANDLE;
+        }
+
+        if (m_SpriteIndexBuffer != VK_NULL_HANDLE || m_SpriteIndexMemory != VK_NULL_HANDLE)
+        {
+            m_Buffers.DestroyBuffer(m_SpriteIndexBuffer, m_SpriteIndexMemory);
+            m_SpriteIndexBuffer = VK_NULL_HANDLE;
+            m_SpriteIndexMemory = VK_NULL_HANDLE;
+            m_SpriteIndexCount = 0;
+        }
+    }
+
+    void Renderer::GatherSpriteDraws()
+    {
+        m_SpriteDrawList.clear();
+
+        if (!m_Registry)
+        {
+            return;
+        }
+
+        const auto& l_Entities = m_Registry->GetEntities();
+        m_SpriteDrawList.reserve(l_Entities.size());
+
+        for (ECS::Entity it_Entity : l_Entities)
+        {
+            if (!m_Registry->HasComponent<Transform>(it_Entity) || !m_Registry->HasComponent<SpriteComponent>(it_Entity))
+            {
+                continue;
+            }
+
+            SpriteComponent& l_Sprite = m_Registry->GetComponent<SpriteComponent>(it_Entity);
+            if (!l_Sprite.m_Visible)
+            {
+                continue;
+            }
+
+            SpriteDrawCommand l_Command{};
+            l_Command.m_ModelMatrix = ComposeTransform(m_Registry->GetComponent<Transform>(it_Entity));
+            l_Command.m_Component = &l_Sprite;
+            l_Command.m_Entity = it_Entity;
+
+            m_SpriteDrawList.push_back(l_Command);
+        }
+    }
+
+    void Renderer::DrawSprites(VkCommandBuffer commandBuffer, uint32_t imageIndex)
+    {
+        (void)imageIndex; // Reserved for future per-swapchain sprite atlas selection.
+
+        if (m_SpriteDrawList.empty() || m_SpriteVertexBuffer == VK_NULL_HANDLE || m_SpriteIndexBuffer == VK_NULL_HANDLE)
+        {
+            return;
+        }
+
+        VkBuffer l_VertexBuffers[] = { m_SpriteVertexBuffer };
+        VkDeviceSize l_Offsets[] = { 0 };
+        vkCmdBindVertexBuffers(commandBuffer, 0, 1, l_VertexBuffers, l_Offsets);
+        vkCmdBindIndexBuffer(commandBuffer, m_SpriteIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
+
+        for (const SpriteDrawCommand& it_Command : m_SpriteDrawList)
+        {
+            if (it_Command.m_Component == nullptr)
+            {
+                continue;
+            }
+
+            RenderablePushConstant l_PushConstant{};
+            l_PushConstant.m_ModelMatrix = it_Command.m_ModelMatrix;
+            l_PushConstant.m_TintColor = it_Command.m_Component->m_TintColor;
+            l_PushConstant.m_TextureScale = it_Command.m_Component->m_UVScale;
+            l_PushConstant.m_TextureOffset = it_Command.m_Component->m_UVOffset;
+            l_PushConstant.m_TilingFactor = it_Command.m_Component->m_TilingFactor;
+            l_PushConstant.m_UseMaterialOverride = it_Command.m_Component->m_UseMaterialOverride ? 1 : 0;
+            l_PushConstant.m_SortBias = it_Command.m_Component->m_SortOffset;
+
+            vkCmdPushConstants(commandBuffer, m_Pipeline.GetPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(RenderablePushConstant), &l_PushConstant);
+            vkCmdDrawIndexed(commandBuffer, m_SpriteIndexCount, 1, 0, 0, 0);
+        }
     }
 
     void Renderer::RecreateSwapchain()
@@ -1382,6 +1514,9 @@ namespace Trident
 
     bool Renderer::RecordCommandBuffer(uint32_t imageIndex)
     {
+        // Collect sprite draw requests up front so the render pass can submit them without additional ECS lookups.
+        GatherSpriteDraws();
+
         VkCommandBuffer l_CommandBuffer = m_Commands.GetCommandBuffer(imageIndex);
 
         VkCommandBufferBeginInfo l_BeginInfo{ VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
@@ -1520,18 +1655,28 @@ namespace Trident
             vkCmdBindPipeline(l_CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline.GetPipeline());
             m_Skybox.Record(l_CommandBuffer, m_Pipeline.GetPipelineLayout(), m_DescriptorSets.data(), imageIndex);
 
-            if (m_VertexBuffer != VK_NULL_HANDLE && m_IndexBuffer != VK_NULL_HANDLE && m_IndexCount > 0)
+            const bool l_HasDescriptorSet = imageIndex < m_DescriptorSets.size();
+            if (l_HasDescriptorSet)
+            {
+                vkCmdBindDescriptorSets(l_CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline.GetPipelineLayout(), 0, 1, &m_DescriptorSets[imageIndex], 0, nullptr);
+            }
+
+            if (m_VertexBuffer != VK_NULL_HANDLE && m_IndexBuffer != VK_NULL_HANDLE && m_IndexCount > 0 && l_HasDescriptorSet)
             {
                 VkBuffer l_VertexBuffers[] = { m_VertexBuffer };
                 VkDeviceSize l_Offsets[] = { 0 };
                 vkCmdBindVertexBuffers(l_CommandBuffer, 0, 1, l_VertexBuffers, l_Offsets);
                 vkCmdBindIndexBuffer(l_CommandBuffer, m_IndexBuffer, 0, VK_INDEX_TYPE_UINT32);
-                vkCmdBindDescriptorSets(l_CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline.GetPipelineLayout(), 0, 1, &m_DescriptorSets[imageIndex], 0, nullptr);
-
-                glm::mat4 l_Transform = ComposeTransform(m_Registry->GetComponent<Transform>(m_Entity));
-                vkCmdPushConstants(l_CommandBuffer, m_Pipeline.GetPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &l_Transform);
+                RenderablePushConstant l_PushConstant{};
+                l_PushConstant.m_ModelMatrix = ComposeTransform(m_Registry->GetComponent<Transform>(m_Entity));
+                vkCmdPushConstants(l_CommandBuffer, m_Pipeline.GetPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(RenderablePushConstant), &l_PushConstant);
 
                 vkCmdDrawIndexed(l_CommandBuffer, m_IndexCount, 1, 0, 0, 0);
+            }
+
+            if (l_HasDescriptorSet)
+            {
+                DrawSprites(l_CommandBuffer, imageIndex);
             }
 
             vkCmdEndRenderPass(l_CommandBuffer);
@@ -1778,18 +1923,28 @@ namespace Trident
             vkCmdBindPipeline(l_CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline.GetPipeline());
             m_Skybox.Record(l_CommandBuffer, m_Pipeline.GetPipelineLayout(), m_DescriptorSets.data(), imageIndex);
 
-            if (m_VertexBuffer != VK_NULL_HANDLE && m_IndexBuffer != VK_NULL_HANDLE && m_IndexCount > 0)
+            const bool l_HasDescriptorSet = imageIndex < m_DescriptorSets.size();
+            if (l_HasDescriptorSet)
+            {
+                vkCmdBindDescriptorSets(l_CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline.GetPipelineLayout(), 0, 1, &m_DescriptorSets[imageIndex], 0, nullptr);
+            }
+
+            if (m_VertexBuffer != VK_NULL_HANDLE && m_IndexBuffer != VK_NULL_HANDLE && m_IndexCount > 0 && l_HasDescriptorSet)
             {
                 VkBuffer l_VertexBuffers[] = { m_VertexBuffer };
                 VkDeviceSize l_Offsets[] = { 0 };
                 vkCmdBindVertexBuffers(l_CommandBuffer, 0, 1, l_VertexBuffers, l_Offsets);
                 vkCmdBindIndexBuffer(l_CommandBuffer, m_IndexBuffer, 0, VK_INDEX_TYPE_UINT32);
-                vkCmdBindDescriptorSets(l_CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline.GetPipelineLayout(), 0, 1, &m_DescriptorSets[imageIndex], 0, nullptr);
-
-                glm::mat4 l_Transform = ComposeTransform(m_Registry->GetComponent<Transform>(m_Entity));
-                vkCmdPushConstants(l_CommandBuffer, m_Pipeline.GetPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &l_Transform);
+                RenderablePushConstant l_PushConstant{};
+                l_PushConstant.m_ModelMatrix = ComposeTransform(m_Registry->GetComponent<Transform>(m_Entity));
+                vkCmdPushConstants(l_CommandBuffer, m_Pipeline.GetPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(RenderablePushConstant), &l_PushConstant);
 
                 vkCmdDrawIndexed(l_CommandBuffer, m_IndexCount, 1, 0, 0, 0);
+            }
+
+            if (l_HasDescriptorSet)
+            {
+                DrawSprites(l_CommandBuffer, imageIndex);
             }
         }
         else

@@ -1,6 +1,7 @@
 #include "Renderer/Pipeline.h"
 #include "Renderer/Swapchain.h"
 #include "Renderer/Vertex.h"
+#include "Renderer/RenderData.h"
 
 #include "Application.h"
 
@@ -552,7 +553,7 @@ namespace Trident
         VkPushConstantRange l_PushConstant{};
         l_PushConstant.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
         l_PushConstant.offset = 0;
-        l_PushConstant.size = sizeof(glm::mat4);
+        l_PushConstant.size = sizeof(RenderablePushConstant);
 
         VkPipelineLayoutCreateInfo l_PipelineLayoutInfo{ VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO };
         l_PipelineLayoutInfo.setLayoutCount = 1;
