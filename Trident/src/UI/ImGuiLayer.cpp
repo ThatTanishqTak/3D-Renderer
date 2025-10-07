@@ -99,8 +99,8 @@ namespace Trident
             ImGui::StyleColorsDark();
 
             // Persist layout customisation to a renderer-scoped file so editor and runtime do not conflict.
-            const std::filesystem::path l_LayoutDirectory{ "Assets/Layouts" };
-            const std::filesystem::path l_LayoutFile = l_LayoutDirectory / "DefaultLayout.ini";
+            const std::filesystem::path l_LayoutDirectory{ "Assets/Layouts/" };
+            const std::filesystem::path l_LayoutFile = "DefaultLayout.ini";
             m_LayoutIniFilePath = l_LayoutFile.string();
             io.IniFilename = m_LayoutIniFilePath.c_str();
 
@@ -156,7 +156,6 @@ namespace Trident
 
             ScopedCommandBuffer fontCmd{ device, commandPool, queue };
             ImGui_ImplVulkan_CreateFontsTexture();
-            ImGui_ImplVulkan_DestroyFontsTexture();
 
             TR_CORE_INFO("-------IMGUI INITIALIZED-------");
 

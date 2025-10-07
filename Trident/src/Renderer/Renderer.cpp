@@ -642,6 +642,9 @@ namespace Trident
         l_Snapshot.FieldOfView = m_Camera.GetFOV();
         l_Snapshot.NearClip = m_Camera.GetNearClip();
         l_Snapshot.FarClip = m_Camera.GetFarClip();
+        l_Snapshot.Projection = ProjectionType::Perspective;
+        l_Snapshot.OverrideAspectRatio = false;
+        l_Snapshot.UseCustomProjection = false;
 
         if (m_ViewportCamera == std::numeric_limits<ECS::Entity>::max() || m_Registry == nullptr)
         {
@@ -664,6 +667,12 @@ namespace Trident
         l_Snapshot.FieldOfView = l_CameraComponent.FieldOfView;
         l_Snapshot.NearClip = l_CameraComponent.NearClip;
         l_Snapshot.FarClip = l_CameraComponent.FarClip;
+        l_Snapshot.Projection = l_CameraComponent.Projection;
+        l_Snapshot.OrthographicSize = l_CameraComponent.OrthographicSize;
+        l_Snapshot.OverrideAspectRatio = l_CameraComponent.OverrideAspectRatio;
+        l_Snapshot.AspectRatio = l_CameraComponent.AspectRatio;
+        l_Snapshot.UseCustomProjection = l_CameraComponent.UseCustomProjection;
+        l_Snapshot.CustomProjection = l_CameraComponent.CustomProjection;
 
         return l_Snapshot;
     }
@@ -1212,6 +1221,8 @@ namespace Trident
 
         VkDevice l_Device = Application::GetDevice();
         OffscreenTarget& l_Target = it_Target->second;
+
+        vkDeviceWaitIdle(l_Device);
 
         // The renderer owns these handles; releasing them here avoids dangling ImGui descriptors or image memory leaks.
         if (l_Target.m_TextureID != VK_NULL_HANDLE)
@@ -2308,9 +2319,29 @@ namespace Trident
 
         l_Global.View = l_CameraSnapshot.View;
 
-        float l_AspectRatio = static_cast<float>(m_Swapchain.GetExtent().width) / static_cast<float>(m_Swapchain.GetExtent().height);
-        l_Global.Projection = glm::perspective(glm::radians(l_CameraSnapshot.FieldOfView), l_AspectRatio, l_CameraSnapshot.NearClip, l_CameraSnapshot.FarClip);
-        l_Global.Projection[1][1] *= -1.0f; // Flip Y for Vulkan's clip space
+        float l_DefaultAspectRatio = static_cast<float>(m_Swapchain.GetExtent().width) / static_cast<float>(m_Swapchain.GetExtent().height);
+        float l_TargetAspectRatio = l_CameraSnapshot.OverrideAspectRatio ? l_CameraSnapshot.AspectRatio : l_DefaultAspectRatio;
+        l_TargetAspectRatio = std::max(l_TargetAspectRatio, 0.0001f);
+
+        if (l_CameraSnapshot.UseCustomProjection)
+        {
+            // Honor the bespoke projection without modification so advanced tools can inject specialised matrices.
+            l_Global.Projection = l_CameraSnapshot.CustomProjection;
+        }
+        else if (l_CameraSnapshot.Projection == ProjectionType::Orthographic)
+        {
+            // Build an orthographic volume using the vertical size as the primary control to match common DCC packages.
+            const float l_HalfHeight = l_CameraSnapshot.OrthographicSize * 0.5f;
+            const float l_HalfWidth = l_HalfHeight * l_TargetAspectRatio;
+            l_Global.Projection = glm::ortho(-l_HalfWidth, l_HalfWidth, -l_HalfHeight, l_HalfHeight, l_CameraSnapshot.NearClip, l_CameraSnapshot.FarClip);
+            l_Global.Projection[1][1] *= -1.0f; // Flip Y for Vulkan's clip space
+        }
+        else
+        {
+            // Default to the familiar perspective frustum for the editor and runtime cameras.
+            l_Global.Projection = glm::perspective(glm::radians(l_CameraSnapshot.FieldOfView), l_TargetAspectRatio, l_CameraSnapshot.NearClip, l_CameraSnapshot.FarClip);
+            l_Global.Projection[1][1] *= -1.0f; // Flip Y for Vulkan's clip space
+        }
 
         l_Global.CameraPosition = glm::vec4(l_CameraSnapshot.Position, 1.0f);
         l_Global.AmbientColorIntensity = glm::vec4(m_AmbientColor, m_AmbientIntensity);

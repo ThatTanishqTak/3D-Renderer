@@ -66,6 +66,35 @@ namespace
         return l_Result;
     }
 
+    // Produce a projection matrix based on the camera component settings and desired viewport aspect ratio.
+    glm::mat4 BuildCameraProjectionMatrix(const Trident::CameraComponent& cameraComponent, float viewportAspect)
+    {
+        float l_Aspect = cameraComponent.OverrideAspectRatio ? cameraComponent.AspectRatio : viewportAspect;
+        l_Aspect = std::max(l_Aspect, 0.0001f);
+
+        if (cameraComponent.UseCustomProjection)
+        {
+            // Advanced users can inject a bespoke matrix; the editor relays it without modification.
+            return cameraComponent.CustomProjection;
+        }
+
+        if (cameraComponent.Projection == Trident::ProjectionType::Orthographic)
+        {
+            // Orthographic size represents the vertical span; derive width from the resolved aspect ratio.
+            const float l_HalfHeight = cameraComponent.OrthographicSize * 0.5f;
+            const float l_HalfWidth = l_HalfHeight * l_Aspect;
+            glm::mat4 l_Projection = glm::ortho(-l_HalfWidth, l_HalfWidth, -l_HalfHeight, l_HalfHeight, cameraComponent.NearClip, cameraComponent.FarClip);
+            l_Projection[1][1] *= -1.0f;
+            
+            return l_Projection;
+        }
+
+        glm::mat4 l_Projection = glm::perspective(glm::radians(cameraComponent.FieldOfView), l_Aspect, cameraComponent.NearClip, cameraComponent.FarClip);
+        l_Projection[1][1] *= -1.0f;
+        
+        return l_Projection;
+    }
+
     // Editor-wide gizmo state stored at TU scope so every panel references the same configuration.
     ImGuizmo::OPERATION s_GizmoOperation = ImGuizmo::TRANSLATE;
     ImGuizmo::MODE s_GizmoMode = ImGuizmo::LOCAL;
@@ -79,6 +108,9 @@ namespace
     Trident::ECS::Entity s_SelectedViewportCamera = s_InvalidEntity;
     // Remember the combo-box selection index so the UI remains sticky across frames.
     int s_SelectedCameraIndex = 0;
+    // Camera inspector caches to keep text fields responsive while editing labels.
+    std::array<char, 128> s_CameraNameBuffer{};
+    Trident::ECS::Entity s_CameraCacheEntity = s_InvalidEntity;
 
     // Sprite inspector caches to keep text fields responsive while editing asset paths.
     std::array<char, 512> s_SpriteTextureBuffer{};
@@ -221,6 +253,7 @@ void ApplicationLayer::Run()
             ImGui::EndMainMenuBar();
         }
 
+        m_ContentBrowserPanel.Render();
 
         DrawViewportPanel();
         DrawWorldOutlinerPanel();
@@ -337,9 +370,7 @@ void ApplicationLayer::DrawViewportPanel()
         const ImVec2 l_ImageExtent{ l_ImageMax.x - l_ImageMin.x, l_ImageMax.y - l_ImageMin.y };
 
         glm::mat4 l_ViewMatrix{ 1.0f };
-        float l_FieldOfViewDegrees = 45.0f;
-        float l_NearClipDistance = 0.1f;
-        float l_FarClipDistance = 100.0f;
+        glm::mat4 l_ProjectionMatrix{ 1.0f };
 
         if (s_SelectedViewportCamera != s_InvalidEntity && l_Registry.HasComponent<Trident::CameraComponent>(s_SelectedViewportCamera)
             && l_Registry.HasComponent<Trident::Transform>(s_SelectedViewportCamera))
@@ -349,22 +380,17 @@ void ApplicationLayer::DrawViewportPanel()
 
             const glm::mat4 l_ModelMatrix = ComposeTransform(l_CameraTransform);
             l_ViewMatrix = glm::inverse(l_ModelMatrix);
-            l_FieldOfViewDegrees = l_CameraComponent.FieldOfView;
-            l_NearClipDistance = l_CameraComponent.NearClip;
-            l_FarClipDistance = l_CameraComponent.FarClip;
+            const float l_AspectRatio = l_ImageExtent.y > 0.0f ? l_ImageExtent.x / l_ImageExtent.y : 1.0f;
+            l_ProjectionMatrix = BuildCameraProjectionMatrix(l_CameraComponent, l_AspectRatio);
         }
         else
         {
             Trident::Camera& l_EditorCamera = Trident::Application::GetRenderer().GetCamera();
             l_ViewMatrix = l_EditorCamera.GetViewMatrix();
-            l_FieldOfViewDegrees = l_EditorCamera.GetFOV();
-            l_NearClipDistance = l_EditorCamera.GetNearClip();
-            l_FarClipDistance = l_EditorCamera.GetFarClip();
+            const float l_AspectRatio = l_ImageExtent.y > 0.0f ? l_ImageExtent.x / l_ImageExtent.y : 1.0f;
+            l_ProjectionMatrix = glm::perspective(glm::radians(l_EditorCamera.GetFOV()), l_AspectRatio, l_EditorCamera.GetNearClip(), l_EditorCamera.GetFarClip());
+            l_ProjectionMatrix[1][1] *= -1.0f;
         }
-
-        const float l_AspectRatio = l_ImageExtent.y > 0.0f ? l_ImageExtent.x / l_ImageExtent.y : 1.0f;
-        glm::mat4 l_ProjectionMatrix = glm::perspective(glm::radians(l_FieldOfViewDegrees), l_AspectRatio, l_NearClipDistance, l_FarClipDistance);
-        l_ProjectionMatrix[1][1] *= -1.0f;
 
         struct ViewportOverlayPrimitive
         {
@@ -508,8 +534,8 @@ void ApplicationLayer::DrawWorldOutlinerPanel()
     {
         // Spawn a fresh entity configured as a sun light so the renderer can immediately consume it.
         Trident::ECS::Entity l_NewEntity = l_Registry.CreateEntity();
-        Trident::Transform& l_Transform = l_Registry.AddComponent<Trident::Transform>(l_NewEntity);
-        l_Transform.Position = { 0.0f, 5.0f, 0.0f };
+        Trident::Transform& l_EntityTransform = l_Registry.AddComponent<Trident::Transform>(l_NewEntity);
+        l_EntityTransform.Position = { 0.0f, 5.0f, 0.0f };
 
         Trident::LightComponent& l_Light = l_Registry.AddComponent<Trident::LightComponent>(l_NewEntity);
         l_Light.m_Type = Trident::LightComponent::Type::Directional;
@@ -523,8 +549,8 @@ void ApplicationLayer::DrawWorldOutlinerPanel()
     {
         // Instantiate a point light with a practical radius so scene authors can tweak it immediately.
         Trident::ECS::Entity l_NewEntity = l_Registry.CreateEntity();
-        Trident::Transform& l_Transform = l_Registry.AddComponent<Trident::Transform>(l_NewEntity);
-        l_Transform.Position = { 0.0f, 2.0f, 0.0f };
+        Trident::Transform& l_EntityTransform = l_Registry.AddComponent<Trident::Transform>(l_NewEntity);
+        l_EntityTransform.Position = { 0.0f, 2.0f, 0.0f };
 
         Trident::LightComponent& l_Light = l_Registry.AddComponent<Trident::LightComponent>(l_NewEntity);
         l_Light.m_Type = Trident::LightComponent::Type::Point;
@@ -556,38 +582,145 @@ void ApplicationLayer::DrawDetailsPanel()
 
         if (l_Registry.HasComponent<Trident::Transform>(s_SelectedEntity))
         {
-            Trident::Transform& l_Transform = l_Registry.GetComponent<Trident::Transform>(s_SelectedEntity);
+            Trident::Transform& l_EntityTransform = l_Registry.GetComponent<Trident::Transform>(s_SelectedEntity);
             bool l_TransformChanged = false;
 
-            glm::vec3 l_Position = l_Transform.Position;
+            glm::vec3 l_Position = l_EntityTransform.Position;
             if (ImGui::DragFloat3("Position", glm::value_ptr(l_Position), 0.1f))
             {
-                l_Transform.Position = l_Position;
+                l_EntityTransform.Position = l_Position;
                 l_TransformChanged = true;
             }
 
-            glm::vec3 l_Rotation = l_Transform.Rotation;
+            glm::vec3 l_Rotation = l_EntityTransform.Rotation;
             if (ImGui::DragFloat3("Rotation", glm::value_ptr(l_Rotation), 0.1f))
             {
-                l_Transform.Rotation = l_Rotation;
+                l_EntityTransform.Rotation = l_Rotation;
                 l_TransformChanged = true;
             }
 
-            glm::vec3 l_Scale = l_Transform.Scale;
+            glm::vec3 l_Scale = l_EntityTransform.Scale;
             if (ImGui::DragFloat3("Scale", glm::value_ptr(l_Scale), 0.01f, 0.01f, 100.0f))
             {
-                l_Transform.Scale = l_Scale;
+                l_EntityTransform.Scale = l_Scale;
                 l_TransformChanged = true;
             }
 
             if (l_TransformChanged)
             {
-                Trident::Application::GetRenderer().SetTransform(l_Transform);
+                Trident::Application::GetRenderer().SetTransform(l_EntityTransform);
             }
         }
         else
         {
             ImGui::TextUnformatted("Transform component not present.");
+        }
+
+        if (l_Registry.HasComponent<Trident::CameraComponent>(s_SelectedEntity))
+        {
+            Trident::CameraComponent& l_CameraComponent = l_Registry.GetComponent<Trident::CameraComponent>(s_SelectedEntity);
+
+            if (s_CameraCacheEntity != s_SelectedEntity)
+            {
+                std::fill(s_CameraNameBuffer.begin(), s_CameraNameBuffer.end(), '\0');
+                std::strncpy(s_CameraNameBuffer.data(), l_CameraComponent.Name.c_str(), s_CameraNameBuffer.size() - 1);
+                s_CameraCacheEntity = s_SelectedEntity;
+            }
+
+            if (ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen))
+            {
+                if (ImGui::InputText("Label", s_CameraNameBuffer.data(), s_CameraNameBuffer.size()))
+                {
+                    l_CameraComponent.Name = s_CameraNameBuffer.data();
+                }
+
+                int l_SelectedProjection = static_cast<int>(l_CameraComponent.Projection);
+                const char* l_ProjectionLabels[] = { "Perspective", "Orthographic" };
+                if (ImGui::Combo("Projection Type", &l_SelectedProjection, l_ProjectionLabels, IM_ARRAYSIZE(l_ProjectionLabels)))
+                {
+                    l_CameraComponent.Projection = static_cast<Trident::ProjectionType>(l_SelectedProjection);
+                }
+
+                if (l_CameraComponent.Projection == Trident::ProjectionType::Perspective || l_CameraComponent.UseCustomProjection)
+                {
+                    float l_FieldOfView = l_CameraComponent.FieldOfView;
+                    if (ImGui::SliderFloat("Field of View", &l_FieldOfView, 1.0f, 170.0f, "%.1f"))
+                    {
+                        l_CameraComponent.FieldOfView = l_FieldOfView;
+                    }
+                }
+
+                if (l_CameraComponent.Projection == Trident::ProjectionType::Orthographic && !l_CameraComponent.UseCustomProjection)
+                {
+                    float l_OrthoSize = l_CameraComponent.OrthographicSize;
+                    if (ImGui::DragFloat("Ortho Size", &l_OrthoSize, 0.1f, 0.01f, 1000.0f, "%.2f"))
+                    {
+                        l_CameraComponent.OrthographicSize = std::max(0.01f, l_OrthoSize);
+                    }
+                }
+
+                float l_NearClip = l_CameraComponent.NearClip;
+                if (ImGui::DragFloat("Near Clip", &l_NearClip, 0.01f, 0.001f, l_CameraComponent.FarClip - 0.01f, "%.3f"))
+                {
+                    l_CameraComponent.NearClip = std::max(0.001f, std::min(l_NearClip, l_CameraComponent.FarClip - 0.01f));
+                }
+
+                float l_MinFarClip = l_CameraComponent.NearClip + 0.01f;
+                float l_FarClip = l_CameraComponent.FarClip;
+                if (ImGui::DragFloat("Far Clip", &l_FarClip, 1.0f, l_MinFarClip, 20000.0f, "%.2f"))
+                {
+                    l_CameraComponent.FarClip = std::max(l_MinFarClip, l_FarClip);
+                }
+
+                if (ImGui::Checkbox("Override Aspect Ratio", &l_CameraComponent.OverrideAspectRatio))
+                {
+                    // Toggle allows the next section to appear or hide dynamically.
+                }
+                if (l_CameraComponent.OverrideAspectRatio)
+                {
+                    float l_AspectRatio = l_CameraComponent.AspectRatio;
+                    if (ImGui::DragFloat("Aspect Ratio", &l_AspectRatio, 0.01f, 0.10f, 10.0f, "%.2f"))
+                    {
+                        l_CameraComponent.AspectRatio = std::max(0.10f, l_AspectRatio);
+                    }
+                }
+
+                if (ImGui::Checkbox("Use Custom Projection", &l_CameraComponent.UseCustomProjection))
+                {
+                    // Future: add presets that populate the matrix for common cinematic looks.
+                }
+                if (l_CameraComponent.UseCustomProjection)
+                {
+                    ImGui::TextUnformatted("Custom Projection Matrix");
+                    ImGui::PushID("CustomProjectionMatrix");
+                    float* l_MatrixData = glm::value_ptr(l_CameraComponent.CustomProjection);
+                    for (int it_Row = 0; it_Row < 4; ++it_Row)
+                    {
+                        ImGui::PushID(it_Row);
+                        ImGui::InputFloat4("##Row", l_MatrixData + (it_Row * 4));
+                        ImGui::PopID();
+                    }
+                    ImGui::PopID();
+                    ImGui::TextWrapped("Note: Custom matrices bypass the automatic Vulkan clip-space adjustments.");
+                }
+
+                ImGui::Separator();
+                ImGui::TextUnformatted("Future Camera Effects");
+                ImGui::TextUnformatted("Exposure, depth of field, and motion blur controls will be introduced in later updates.");
+            }
+        }
+        else
+        {
+            if (s_CameraCacheEntity == s_SelectedEntity)
+            {
+                s_CameraCacheEntity = s_InvalidEntity;
+            }
+
+            if (ImGui::Button("Add Camera Component"))
+            {
+                l_Registry.AddComponent<Trident::CameraComponent>(s_SelectedEntity);
+                s_CameraCacheEntity = s_InvalidEntity;
+            }
         }
 
         // Sprite inspector exposed after transform editing so spatial adjustments happen first.
@@ -1212,9 +1345,8 @@ void ApplicationLayer::DrawTransformGizmo(Trident::ECS::Entity a_SelectedEntity)
 
     // Mirror the Scene panel camera selection logic so the gizmo uses whichever camera the user targeted.
     glm::mat4 l_ViewMatrix{ 1.0f };
-    float l_FieldOfViewDegrees = 45.0f;
-    float l_NearClipDistance = 0.1f;
-    float l_FarClipDistance = 100.0f;
+    glm::mat4 l_ProjectionMatrix{ 1.0f };
+    bool l_UseOrthographicGizmo = false;
 
     if (s_SelectedViewportCamera != s_InvalidEntity
         && l_Registry.HasComponent<Trident::CameraComponent>(s_SelectedViewportCamera)
@@ -1226,37 +1358,34 @@ void ApplicationLayer::DrawTransformGizmo(Trident::ECS::Entity a_SelectedEntity)
 
         const glm::mat4 l_ModelMatrix = ComposeTransform(l_CameraTransform);
         l_ViewMatrix = glm::inverse(l_ModelMatrix);
-        l_FieldOfViewDegrees = l_CameraComponent.FieldOfView;
-        l_NearClipDistance = l_CameraComponent.NearClip;
-        l_FarClipDistance = l_CameraComponent.FarClip;
+        const float l_AspectRatio = l_RectSize.y > 0.0f ? l_RectSize.x / l_RectSize.y : 1.0f;
+        l_ProjectionMatrix = BuildCameraProjectionMatrix(l_CameraComponent, l_AspectRatio);
+        l_UseOrthographicGizmo = !l_CameraComponent.UseCustomProjection && l_CameraComponent.Projection == Trident::ProjectionType::Orthographic;
     }
     else
     {
         // Fall back to the editor camera when no ECS-driven viewport camera is active.
         Trident::Camera& l_Camera = Trident::Application::GetRenderer().GetCamera();
         l_ViewMatrix = l_Camera.GetViewMatrix();
-        l_FieldOfViewDegrees = l_Camera.GetFOV();
-        l_NearClipDistance = l_Camera.GetNearClip();
-        l_FarClipDistance = l_Camera.GetFarClip();
+        const float l_AspectRatio = l_RectSize.y > 0.0f ? l_RectSize.x / l_RectSize.y : 1.0f;
+        l_ProjectionMatrix = glm::perspective(glm::radians(l_Camera.GetFOV()), l_AspectRatio, l_Camera.GetNearClip(), l_Camera.GetFarClip());
+        l_ProjectionMatrix[1][1] *= -1.0f;
+        l_UseOrthographicGizmo = false;
     }
 
-    const float l_AspectRatio = l_RectSize.y > 0.0f ? l_RectSize.x / l_RectSize.y : 1.0f;
-    glm::mat4 l_ProjectionMatrix = glm::perspective(glm::radians(l_FieldOfViewDegrees), l_AspectRatio, l_NearClipDistance, l_FarClipDistance);
-    l_ProjectionMatrix[1][1] *= -1.0f;
+    Trident::Transform& l_EntityTransform = l_Registry.GetComponent<Trident::Transform>(a_SelectedEntity);
+    glm::mat4 l_ModelMatrix = ComposeTransform(l_EntityTransform);
 
-    Trident::Transform& l_Transform = l_Registry.GetComponent<Trident::Transform>(a_SelectedEntity);
-    glm::mat4 l_ModelMatrix = ComposeTransform(l_Transform);
-
-    ImGuizmo::SetOrthographic(false);
+    ImGuizmo::SetOrthographic(l_UseOrthographicGizmo);
     ImGuizmo::SetDrawlist();
     ImGuizmo::SetRect(l_RectPosition.x, l_RectPosition.y, l_RectSize.x, l_RectSize.y);
 
     if (ImGuizmo::Manipulate(glm::value_ptr(l_ViewMatrix), glm::value_ptr(l_ProjectionMatrix), s_GizmoOperation, s_GizmoMode, glm::value_ptr(l_ModelMatrix)))
     {
         // Sync the manipulated matrix back into the ECS so gameplay systems stay authoritative.
-        Trident::Transform l_UpdatedTransform = DecomposeTransform(l_ModelMatrix, l_Transform);
-        l_Transform = l_UpdatedTransform;
-        Trident::Application::GetRenderer().SetTransform(l_Transform);
+        Trident::Transform l_UpdatedTransform = DecomposeTransform(l_ModelMatrix, l_EntityTransform);
+        l_EntityTransform = l_UpdatedTransform;
+        Trident::Application::GetRenderer().SetTransform(l_EntityTransform);
     }
 
     // Potential enhancement: expose snapping increments for translation/rotation/scale so artists can toggle grid alignment.

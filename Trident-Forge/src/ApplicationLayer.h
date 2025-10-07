@@ -8,6 +8,8 @@
 #include "UI/ImGuiLayer.h"
 #include "AI/ONNXRuntime.h"
 
+#include "Panels/ContentBrowserPanel.h"
+
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
@@ -33,6 +35,8 @@ private:
     std::unique_ptr<Trident::Window> m_Window; // OS window wrapper
     std::unique_ptr<Trident::Application> m_Engine; // Core engine instance
     std::unique_ptr<Trident::UI::ImGuiLayer> m_ImGuiLayer; // ImGui interface layer
+    
+    UI::ContentBrowserPanel m_ContentBrowserPanel;
 
     Trident::AI::ONNXRuntime m_ONNX; // Runtime for ONNX models
 };

@@ -149,6 +149,12 @@ namespace Trident
             float FieldOfView = 45.0f;
             float NearClip = 0.1f;
             float FarClip = 100.0f;
+            ProjectionType Projection = ProjectionType::Perspective;
+            float OrthographicSize = 10.0f;
+            bool OverrideAspectRatio = false;
+            float AspectRatio = 16.0f / 9.0f;
+            bool UseCustomProjection = false;
+            glm::mat4 CustomProjection{ 1.0f };
         };
 
         CameraSnapshot ResolveViewportCamera() const;
