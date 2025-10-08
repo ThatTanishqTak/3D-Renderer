@@ -183,6 +183,10 @@ ApplicationLayer::ApplicationLayer()
     // Start the engine
     m_Engine->Init();
 
+    // Wire editor panels to the freshly initialised engine and supporting systems.
+    m_ContentBrowserPanel.SetEngine(m_Engine.get());
+    m_ContentBrowserPanel.SetOnnxRuntime(&m_ONNX);
+
     // Set up the ImGui layer
     m_ImGuiLayer = std::make_unique<Trident::UI::ImGuiLayer>();
     m_ImGuiLayer->Init(m_Window->GetNativeWindow(), Trident::Application::GetInstance(), Trident::Application::GetPhysicalDevice(), Trident::Application::GetDevice(),
@@ -254,7 +258,6 @@ void ApplicationLayer::Run()
 
         DrawWorldOutlinerPanel();
         DrawDetailsPanel();
-        DrawContentBrowserPanel();
         DrawOutputLogPanel();
 
         // Render the gizmo on top of the viewport once all inspector edits are applied.
@@ -866,127 +869,6 @@ void ApplicationLayer::DrawDetailsPanel()
     }
 
     // Placeholder for upcoming tabs such as animation blueprints or sequencer integration.
-
-    ImGui::End();
-}
-
-void ApplicationLayer::DrawContentBrowserPanel()
-{
-    // The content browser consolidates asset importers and placeholder hooks for future folders and filters.
-    if (!ImGui::Begin("Content Browser"))
-    {
-        ImGui::End();
-        return;
-    }
-
-    static std::string s_ModelPath{};
-    static std::string s_TexturePath{};
-    static std::string s_ScenePath{};
-    static std::string s_OnnxPath{};
-    static bool s_OpenModelDialog = false;
-    static bool s_OpenTextureDialog = false;
-    static bool s_OpenSceneDialog = false;
-    static bool s_OpenOnnxDialog = false;
-    static bool s_OnnxLoaded = false;
-
-    ImGui::Text("Model: %s", s_ModelPath.c_str());
-    if (ImGui::Button("Load Model"))
-    {
-        s_OpenModelDialog = true;
-        ImGui::OpenPopup("ModelDialog");
-    }
-
-    if (s_OpenModelDialog)
-    {
-        if (Trident::UI::FileDialog::Open("ModelDialog", s_ModelPath, ".fbx"))
-        {
-            auto a_ModelData = Trident::Loader::ModelLoader::Load(s_ModelPath);
-            Trident::Application::GetRenderer().UploadMesh(a_ModelData.Meshes, a_ModelData.Materials);
-            s_OpenModelDialog = false;
-        }
-
-        if (!ImGui::IsPopupOpen("ModelDialog"))
-        {
-            s_OpenModelDialog = false;
-        }
-    }
-
-    ImGui::Text("Texture: %s", s_TexturePath.c_str());
-    if (ImGui::Button("Load Texture"))
-    {
-        s_OpenTextureDialog = true;
-        ImGui::OpenPopup("TextureDialog");
-    }
-
-    if (s_OpenTextureDialog)
-    {
-        if (Trident::UI::FileDialog::Open("TextureDialog", s_TexturePath))
-        {
-            auto a_Texture = Trident::Loader::TextureLoader::Load(s_TexturePath);
-            Trident::Application::GetRenderer().UploadTexture(a_Texture);
-            s_OpenTextureDialog = false;
-        }
-
-        if (!ImGui::IsPopupOpen("TextureDialog"))
-        {
-            s_OpenTextureDialog = false;
-        }
-    }
-
-    ImGui::Text("Scene: %s", s_ScenePath.c_str());
-    if (ImGui::Button("Load Scene"))
-    {
-        s_OpenSceneDialog = true;
-        ImGui::OpenPopup("SceneDialog");
-    }
-
-    if (s_OpenSceneDialog)
-    {
-        if (Trident::UI::FileDialog::Open("SceneDialog", s_ScenePath, ".scene"))
-        {
-            m_Engine->LoadScene(s_ScenePath);
-            s_OpenSceneDialog = false;
-        }
-
-        if (!ImGui::IsPopupOpen("SceneDialog"))
-        {
-            s_OpenSceneDialog = false;
-        }
-    }
-
-    ImGui::Text("ONNX: %s", s_OnnxPath.c_str());
-    if (ImGui::Button("Load ONNX"))
-    {
-        s_OpenOnnxDialog = true;
-        ImGui::OpenPopup("ONNXDialog");
-    }
-
-    if (s_OpenOnnxDialog)
-    {
-        if (Trident::UI::FileDialog::Open("ONNXDialog", s_OnnxPath, ".onnx"))
-        {
-            s_OnnxLoaded = m_ONNX.LoadModel(s_OnnxPath);
-            s_OpenOnnxDialog = false;
-        }
-
-        if (!ImGui::IsPopupOpen("ONNXDialog"))
-        {
-            s_OpenOnnxDialog = false;
-        }
-    }
-
-    if (s_OnnxLoaded && ImGui::Button("Run Inference"))
-    {
-        std::vector<float> l_Input{ 0.0f };
-        std::vector<int64_t> l_Shape{ 1 };
-        auto a_Output = m_ONNX.Run(l_Input, l_Shape);
-        if (!a_Output.empty())
-        {
-            TR_INFO("Inference result: {}", a_Output[0]);
-        }
-    }
-
-    // TODO: Embed asset thumbnails and breadcrumb navigation similar to Unreal's content drawer.
 
     ImGui::End();
 }

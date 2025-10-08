@@ -2,17 +2,61 @@
 
 #include <string>
 
+namespace Trident
+{
+    class Application;
+
+    namespace AI
+    {
+        class ONNXRuntime;
+    }
+}
+
 namespace UI
 {
-	class ContentBrowserPanel
-	{
-	public:
-		ContentBrowserPanel();
-		~ContentBrowserPanel();
+    /**
+     * @brief Dedicated panel that exposes asset loading and AI workflow utilities.
+     */
+    class ContentBrowserPanel
+    {
+    public:
+        ContentBrowserPanel();
+        ~ContentBrowserPanel();
 
-		void Render();
+        /**
+         * @brief Draw the panel each frame.
+         */
+        void Render();
 
-	private:
-		std::string m_Path;
-	};
+        /**
+         * @brief Provide access to the running engine so scenes can be swapped from the browser.
+         */
+        void SetEngine(Trident::Application* a_Engine);
+
+        /**
+         * @brief Hook up an ONNX runtime to enable model inspection utilities.
+         */
+        void SetOnnxRuntime(Trident::AI::ONNXRuntime* a_OnnxRuntime);
+
+        Trident::AI::ONNXRuntime* m_OnnxRuntime;
+
+    private:
+        void DrawModelSection();
+        void DrawTextureSection();
+        void DrawSceneSection();
+        void DrawOnnxSection();
+
+        Trident::Application* m_Engine;
+
+        std::string m_ModelPath;
+        std::string m_TexturePath;
+        std::string m_ScenePath;
+        std::string m_OnnxPath;
+
+        bool m_OpenModelDialog;
+        bool m_OpenTextureDialog;
+        bool m_OpenSceneDialog;
+        bool m_OpenOnnxDialog;
+        bool m_OnnxLoaded;
+    };
 }
