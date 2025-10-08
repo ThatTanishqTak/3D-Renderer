@@ -9,6 +9,7 @@
 #include "AI/ONNXRuntime.h"
 
 #include "Panels/ContentBrowserPanel.h"
+#include "Panels/ViewportPanel.h"
 
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
@@ -24,7 +25,6 @@ public:
     void Run();
 
 private:
-    void DrawViewportPanel();
     void DrawWorldOutlinerPanel();
     void DrawDetailsPanel();
     void DrawContentBrowserPanel();
@@ -36,6 +36,7 @@ private:
     std::unique_ptr<Trident::Application> m_Engine; // Core engine instance
     std::unique_ptr<Trident::UI::ImGuiLayer> m_ImGuiLayer; // ImGui interface layer
     
+    UI::ViewportPanel m_ViewportPanel; // Scene viewport UI wrapper
     UI::ContentBrowserPanel m_ContentBrowserPanel;
 
     Trident::AI::ONNXRuntime m_ONNX; // Runtime for ONNX models

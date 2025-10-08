@@ -1,17 +1,42 @@
 #pragma once
 
-#include <string>
+#include <limits>
+
+#include "ECS/Entity.h"
 
 namespace UI
 {
-	class ViewportPanel
-	{
-	public:
-		ViewportPanel();
-		~ViewportPanel();
+    /**
+     * @brief Scene viewport wrapper responsible for drawing the rendered output and viewport controls.
+     *
+     * The goal is to gradually lift UI responsibilities out of ApplicationLayer so panels become
+     * self-contained. The viewport starts this effort by owning camera selection and overlay drawing.
+     */
+    class ViewportPanel
+    {
+    public:
+        ViewportPanel();
 
-		void Render();
+        /**
+         * @brief Update the entity highlighted in the viewport overlay.
+         */
+        void SetSelectedEntity(Trident::ECS::Entity selectedEntity);
 
-	private:
-	};
+        /**
+         * @brief Publish the currently assigned viewport camera for downstream systems (e.g. gizmos).
+         */
+        [[nodiscard]] Trident::ECS::Entity GetSelectedCamera() const;
+
+        /**
+         * @brief Draw the viewport panel and its immediate controls.
+         */
+        void Render();
+
+    private:
+        static constexpr Trident::ECS::Entity s_InvalidEntity = std::numeric_limits<Trident::ECS::Entity>::max();
+
+        Trident::ECS::Entity m_SelectedViewportCamera;
+        Trident::ECS::Entity m_SelectedEntity;
+        int m_SelectedCameraIndex;
+    };
 }
