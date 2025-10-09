@@ -9,13 +9,14 @@
 #include "Core/Utilities.h"
 #include "Loader/ModelLoader.h"
 #include "Loader/TextureLoader.h"
+#include "AI/ONNXRuntime.h"
 #include "Renderer/Renderer.h"
 #include "UI/FileDialog.h"
 
 namespace UI
 {
-    ContentBrowserPanel::ContentBrowserPanel(): m_Engine(nullptr), m_OnnxRuntime(nullptr), m_ModelPath(), m_TexturePath(), m_ScenePath(), m_OnnxPath(), m_OpenModelDialog(false)
-        ,m_OpenTextureDialog(false), m_OpenSceneDialog(false), m_OpenOnnxDialog(false), m_OnnxLoaded(false)
+    ContentBrowserPanel::ContentBrowserPanel(): m_Engine(nullptr), m_OnnxRuntime(nullptr), m_ModelPath(), m_TexturePath(), m_ScenePath(), m_OnnxPath(), m_OpenModelDialog(false),
+        m_OpenTextureDialog(false), m_OpenSceneDialog(false), m_OpenOnnxDialog(false), m_OnnxLoaded(false)
     {
         // Constructor prepares default state so the panel can lazily bind dependencies.
     }
