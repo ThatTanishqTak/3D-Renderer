@@ -5,6 +5,7 @@
 
 #include "ECS/Registry.h"
 
+#include <imgui.h>
 #include <ImGuizmo.h>
 
 namespace UI
