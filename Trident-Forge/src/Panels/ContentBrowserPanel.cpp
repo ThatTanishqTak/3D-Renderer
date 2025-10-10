@@ -17,7 +17,8 @@
 namespace UI
 {
     ContentBrowserPanel::ContentBrowserPanel(): m_Engine(nullptr), m_OnnxRuntime(nullptr), m_ModelPath(), m_TexturePath(), m_ScenePath(), m_OnnxPath(), m_OpenModelDialog(false),
-        m_OpenTextureDialog(false), m_OpenSceneDialog(false), m_OpenOnnxDialog(false), m_OnnxLoaded(false), m_CurrentDirectory("Assets")
+        m_OpenTextureDialog(false), m_OpenSceneDialog(false), m_OpenOnnxDialog(false), m_OnnxLoaded(false), m_CurrentDirectory("Assets"), m_SelectedPath("Assets"),
+        m_ThumbnailSize(96.0f), m_ThumbnailPadding(16.0f)
     {
         // Constructor prepares default state so the panel can lazily bind dependencies.
         m_AssetsPath = "Assets";
@@ -43,56 +44,63 @@ namespace UI
 
     void ContentBrowserPanel::Render()
     {
-        // The content browser groups asset import controls into logical sections for clarity.
-        //if (!ImGui::Begin("Content Browser"))
-        //{
-        //    ImGui::End();
-        //    return;
-        //}
-
-        //DrawModelSection();
-        //ImGui::Separator();
-
-        //DrawTextureSection();
-        //ImGui::Separator();
-
-        //DrawSceneSection();
-        //ImGui::Separator();
-
-        //DrawOnnxSection();
-
-        // TODO: Integrate a directory tree with thumbnails to more closely mirror AAA editors.
-
+        // The content browser is split into a navigation tree and a thumbnail grid for rapid browsing.
         ImGui::Begin("Content Browser");
 
-        if (m_CurrentDirectory != std::filesystem::path(m_AssetsPath))
+        if (!std::filesystem::exists(m_CurrentDirectory))
         {
-            if (ImGui::Button("<-"))
+            // Maintain a valid browsing context if assets are moved externally.
+            m_CurrentDirectory = m_AssetsPath;
+        }
+
+        const ImVec2 l_TreePanelSize(220.0f, 0.0f);
+        ImGui::BeginChild("DirectoryTree", l_TreePanelSize, true);
+
+        ImGuiTreeNodeFlags l_BaseFlags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanFullWidth;
+        const bool l_IsRootSelected = m_CurrentDirectory == std::filesystem::path(m_AssetsPath);
+
+        ImGuiTreeNodeFlags l_RootFlags = l_BaseFlags | ImGuiTreeNodeFlags_DefaultOpen;
+        if (l_IsRootSelected)
+        {
+            l_RootFlags |= ImGuiTreeNodeFlags_Selected;
+        }
+
+        if (ImGui::TreeNodeEx("Assets", l_RootFlags))
+        {
+            if (ImGui::IsItemClicked())
+            {
+                m_CurrentDirectory = m_AssetsPath;
+                m_SelectedPath = m_CurrentDirectory;
+            }
+
+            DrawDirectoryTree(m_AssetsPath);
+            ImGui::TreePop();
+        }
+
+        ImGui::EndChild();
+
+        ImGui::SameLine();
+
+        ImGui::BeginChild("DirectoryGrid", ImVec2(0.0f, 0.0f), false);
+
+        const std::filesystem::path l_AssetsPath{ m_AssetsPath };
+        if (m_CurrentDirectory != l_AssetsPath)
+        {
+            if (ImGui::Button("Back"))
             {
                 m_CurrentDirectory = m_CurrentDirectory.parent_path();
+                m_SelectedPath = m_CurrentDirectory;
             }
         }
 
-        for (auto& directoryEntry : std::filesystem::directory_iterator(m_CurrentDirectory))
-        {
-            const auto& path = directoryEntry.path();
-            auto relativePath = std::filesystem::relative(path, m_AssetsPath);
-            std::string filenameString = relativePath.filename().string();
-            if (directoryEntry.is_directory())
-            {
-                if (ImGui::Button(filenameString.c_str()))
-                {
-                    m_CurrentDirectory /= path.filename();
-                }
-            }
-            else
-            {
-                if (ImGui::Button(filenameString.c_str()))
-                {
+        ImGui::Separator();
 
-                }
-            }
-        }
+        DrawDirectoryGrid(m_CurrentDirectory);
+
+        ImGui::Separator();
+        ImGui::Text("Selected: %s", m_SelectedPath.empty() ? "None" : m_SelectedPath.string().c_str());
+
+        ImGui::EndChild();
 
         ImGui::End();
     }
@@ -247,5 +255,118 @@ namespace UI
         {
             ImGui::TextUnformatted("Load an ONNX model to enable inference testing.");
         }
+    }
+
+    void ContentBrowserPanel::DrawDirectoryTree(const std::filesystem::path& directory)
+    {
+        // Traverse directories recursively so nested content remains accessible.
+        if (!std::filesystem::exists(directory))
+        {
+            return;
+        }
+
+        for (const auto& it_Entry : std::filesystem::directory_iterator(directory))
+        {
+            if (!it_Entry.is_directory())
+            {
+                continue;
+            }
+
+            const std::filesystem::path& l_Path = it_Entry.path();
+            const std::string l_Name = l_Path.filename().string();
+
+            ImGuiTreeNodeFlags l_Flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanFullWidth;
+            const bool l_IsSelected = m_CurrentDirectory == l_Path;
+            if (l_IsSelected)
+            {
+                l_Flags |= ImGuiTreeNodeFlags_Selected;
+            }
+
+            const bool l_Opened = ImGui::TreeNodeEx(l_Name.c_str(), l_Flags);
+
+            if (ImGui::IsItemClicked())
+            {
+                m_CurrentDirectory = l_Path;
+                m_SelectedPath = l_Path;
+            }
+
+            if (l_Opened)
+            {
+                DrawDirectoryTree(l_Path);
+                ImGui::TreePop();
+            }
+        }
+    }
+
+    void ContentBrowserPanel::DrawDirectoryGrid(const std::filesystem::path& directory)
+    {
+        // Display contents in a responsive thumbnail grid that emulates modern editors.
+        if (!std::filesystem::exists(directory))
+        {
+            return;
+        }
+
+        const float l_CellSize = m_ThumbnailSize + m_ThumbnailPadding;
+        const float l_PanelWidth = ImGui::GetContentRegionAvail().x;
+        int l_ColumnCount = static_cast<int>(l_PanelWidth / l_CellSize);
+        if (l_ColumnCount < 1)
+        {
+            l_ColumnCount = 1;
+        }
+
+        ImGui::Columns(l_ColumnCount, nullptr, false);
+
+        for (const auto& it_Entry : std::filesystem::directory_iterator(directory))
+        {
+            const std::filesystem::path& l_Path = it_Entry.path();
+            const std::string l_Filename = l_Path.filename().string();
+            const bool l_IsDirectory = it_Entry.is_directory();
+
+            ImGui::PushID(l_Filename.c_str());
+
+            const bool l_IsSelected = m_SelectedPath == l_Path;
+            const ImVec4 l_DirectoryColor = ImVec4(0.25f, 0.30f, 0.60f, 1.0f);
+            const ImVec4 l_FileColor = ImVec4(0.30f, 0.30f, 0.30f, 1.0f);
+            const ImVec4 l_SelectedColor = ImVec4(0.80f, 0.45f, 0.15f, 1.0f);
+
+            const ImVec4 l_ButtonColor = l_IsSelected ? l_SelectedColor : (l_IsDirectory ? l_DirectoryColor : l_FileColor);
+
+            ImGui::PushStyleColor(ImGuiCol_Button, l_ButtonColor);
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, l_ButtonColor);
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, l_ButtonColor);
+
+            // Placeholder buttons act as thumbnails until GPU-backed icons are introduced.
+            ImGui::Button("", ImVec2(m_ThumbnailSize, m_ThumbnailSize));
+
+            ImGui::PopStyleColor(3);
+
+            if (ImGui::IsItemClicked())
+            {
+                m_SelectedPath = l_Path;
+            }
+
+            if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+            {
+                if (l_IsDirectory)
+                {
+                    m_CurrentDirectory = l_Path;
+                    m_SelectedPath = l_Path;
+                }
+                else
+                {
+                    m_SelectedPath = l_Path;
+                    // Future improvement: trigger context-aware asset previews or imports here.
+                }
+            }
+
+            ImGui::TextWrapped("%s", l_Filename.c_str());
+
+            ImGui::NextColumn();
+            ImGui::PopID();
+        }
+
+        ImGui::Columns(1);
+
+        // Future improvement: convert loaded icons into ImGui descriptor sets for real thumbnails.
     }
 }

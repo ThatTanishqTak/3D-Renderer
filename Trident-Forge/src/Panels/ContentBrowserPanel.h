@@ -48,6 +48,9 @@ namespace UI
         void DrawSceneSection();
         void DrawOnnxSection();
 
+        void DrawDirectoryTree(const std::filesystem::path& directory);
+        void DrawDirectoryGrid(const std::filesystem::path& directory);
+
     private:
         Trident::Application* m_Engine;
 
@@ -58,6 +61,10 @@ namespace UI
 
         std::string m_AssetsPath;
         std::filesystem::path m_CurrentDirectory;
+        std::filesystem::path m_SelectedPath;
+
+        float m_ThumbnailSize;
+        float m_ThumbnailPadding;
 
         bool m_OpenModelDialog;
         bool m_OpenTextureDialog;
