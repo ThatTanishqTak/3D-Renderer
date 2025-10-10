@@ -17,7 +17,7 @@ namespace UI
         /**
          * @brief Configure which entity is currently highlighted in the hierarchy.
          */
-        void SetSelectedEntity(Trident::ECS::Entity a_SelectedEntity);
+        void SetSelectedEntity(Trident::ECS::Entity selectedEntity);
 
         /**
          * @brief Retrieve the entity that is selected after the latest frame.
@@ -30,8 +30,8 @@ namespace UI
         void Render();
 
     private:
-        void DrawEntityList(Trident::ECS::Registry& a_Registry);
-        void DrawLightCreationButtons(Trident::ECS::Registry& a_Registry);
+        void DrawEntityList(Trident::ECS::Registry& registry);
+        void DrawLightCreationButtons(Trident::ECS::Registry& registry);
 
         Trident::ECS::Entity m_SelectedEntity;
     };

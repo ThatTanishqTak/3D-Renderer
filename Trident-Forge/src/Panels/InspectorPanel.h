@@ -21,12 +21,12 @@ namespace UI
         /**
          * @brief Update which entity's details should be displayed.
          */
-        void SetSelectedEntity(Trident::ECS::Entity a_SelectedEntity);
+        void SetSelectedEntity(Trident::ECS::Entity selectedEntity);
 
         /**
          * @brief Provide access to the gizmo state so the inspector can drive ImGuizmo controls.
          */
-        void SetGizmoState(ImGuizmo::OPERATION* a_Operation, ImGuizmo::MODE* a_Mode);
+        void SetGizmoState(ImGuizmo::OPERATION* operation, ImGuizmo::MODE* mode);
 
         /**
          * @brief Draw all component editors and helper dialogs.
@@ -34,17 +34,17 @@ namespace UI
         void Render();
 
     private:
-        void DrawTransformSection(Trident::ECS::Registry& a_Registry);
-        void DrawCameraSection(Trident::ECS::Registry& a_Registry);
-        void DrawSpriteSection(Trident::ECS::Registry& a_Registry);
-        void DrawLightSection(Trident::ECS::Registry& a_Registry);
+        void DrawTransformSection(Trident::ECS::Registry& registry);
+        void DrawCameraSection(Trident::ECS::Registry& registry);
+        void DrawSpriteSection(Trident::ECS::Registry& registry);
+        void DrawLightSection(Trident::ECS::Registry& registry);
         void DrawGizmoControls();
         void DrawEditorCameraSection();
         void DrawMaterialsSection();
         void DrawLiveReloadSection();
 
-        void ResetCameraCacheIfNeeded(Trident::ECS::Entity a_SelectedEntity, Trident::ECS::Registry& a_Registry);
-        void ResetSpriteCacheIfNeeded(Trident::ECS::Entity a_SelectedEntity, Trident::ECS::Registry& a_Registry);
+        void ResetCameraCacheIfNeeded(Trident::ECS::Entity selectedEntity, Trident::ECS::Registry& registry);
+        void ResetSpriteCacheIfNeeded(Trident::ECS::Entity selectedEntity, Trident::ECS::Registry& registry);
 
         Trident::ECS::Entity m_SelectedEntity;
 

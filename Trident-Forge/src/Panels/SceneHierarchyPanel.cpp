@@ -1,6 +1,7 @@
 #include "SceneHierarchyPanel.h"
 
 #include <imgui.h>
+#include <glm/glm.hpp>
 
 #include <string>
 #include <vector>
@@ -9,7 +10,6 @@
 #include "Application.h"
 #include "ECS/Components/TransformComponent.h"
 #include "ECS/Components/LightComponent.h"
-#include <glm/glm.hpp>
 
 namespace UI
 {
@@ -23,9 +23,9 @@ namespace UI
         // Default the panel to no selection until the user interacts with the hierarchy.
     }
 
-    void SceneHierarchyPanel::SetSelectedEntity(Trident::ECS::Entity a_SelectedEntity)
+    void SceneHierarchyPanel::SetSelectedEntity(Trident::ECS::Entity selectedEntity)
     {
-        m_SelectedEntity = a_SelectedEntity;
+        m_SelectedEntity = selectedEntity;
     }
 
     Trident::ECS::Entity SceneHierarchyPanel::GetSelectedEntity() const
@@ -38,6 +38,7 @@ namespace UI
         if (!ImGui::Begin("World Outliner"))
         {
             ImGui::End();
+
             return;
         }
 
@@ -48,14 +49,15 @@ namespace UI
         ImGui::End();
     }
 
-    void SceneHierarchyPanel::DrawEntityList(Trident::ECS::Registry& a_Registry)
+    void SceneHierarchyPanel::DrawEntityList(Trident::ECS::Registry& registry)
     {
-        const std::vector<Trident::ECS::Entity>& l_Entities = a_Registry.GetEntities();
+        const std::vector<Trident::ECS::Entity>& l_Entities = registry.GetEntities();
 
         if (l_Entities.empty())
         {
             ImGui::TextUnformatted("No entities in the active scene.");
             m_SelectedEntity = s_InvalidEntity;
+
             return;
         }
 
@@ -83,15 +85,15 @@ namespace UI
         ImGui::TextUnformatted("Create Light Entity");
     }
 
-    void SceneHierarchyPanel::DrawLightCreationButtons(Trident::ECS::Registry& a_Registry)
+    void SceneHierarchyPanel::DrawLightCreationButtons(Trident::ECS::Registry& registry)
     {
         if (ImGui::Button("Directional Light"))
         {
-            Trident::ECS::Entity l_NewEntity = a_Registry.CreateEntity();
-            Trident::Transform& l_EntityTransform = a_Registry.AddComponent<Trident::Transform>(l_NewEntity);
+            Trident::ECS::Entity l_NewEntity = registry.CreateEntity();
+            Trident::Transform& l_EntityTransform = registry.AddComponent<Trident::Transform>(l_NewEntity);
             l_EntityTransform.Position = { 0.0f, 5.0f, 0.0f };
 
-            Trident::LightComponent& l_Light = a_Registry.AddComponent<Trident::LightComponent>(l_NewEntity);
+            Trident::LightComponent& l_Light = registry.AddComponent<Trident::LightComponent>(l_NewEntity);
             l_Light.m_Type = Trident::LightComponent::Type::Directional;
             l_Light.m_Direction = glm::normalize(glm::vec3(-0.5f, -1.0f, -0.3f));
             l_Light.m_Intensity = 5.0f;
@@ -101,11 +103,11 @@ namespace UI
 
         if (ImGui::Button("Point Light"))
         {
-            Trident::ECS::Entity l_NewEntity = a_Registry.CreateEntity();
-            Trident::Transform& l_EntityTransform = a_Registry.AddComponent<Trident::Transform>(l_NewEntity);
+            Trident::ECS::Entity l_NewEntity = registry.CreateEntity();
+            Trident::Transform& l_EntityTransform = registry.AddComponent<Trident::Transform>(l_NewEntity);
             l_EntityTransform.Position = { 0.0f, 2.0f, 0.0f };
 
-            Trident::LightComponent& l_Light = a_Registry.AddComponent<Trident::LightComponent>(l_NewEntity);
+            Trident::LightComponent& l_Light = registry.AddComponent<Trident::LightComponent>(l_NewEntity);
             l_Light.m_Type = Trident::LightComponent::Type::Point;
             l_Light.m_Range = 10.0f;
             l_Light.m_Intensity = 25.0f;
