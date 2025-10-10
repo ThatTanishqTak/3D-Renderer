@@ -78,6 +78,25 @@ namespace Trident
         void UploadTexture(const Loader::TextureData& texture);
         void SetImGuiLayer(UI::ImGuiLayer* layer);
 
+        // Lightweight wrapper describing an ImGui-ready texture along with the Vulkan
+        // resources required to keep it alive for the duration of the renderer.
+        struct ImGuiTexture
+        {
+            VkImage m_Image = VK_NULL_HANDLE;              ///< GPU image storing the texels.
+            VkDeviceMemory m_ImageMemory = VK_NULL_HANDLE; ///< Device memory bound to the image.
+            VkImageView m_ImageView = VK_NULL_HANDLE;      ///< View consumed by ImGui shaders.
+            VkSampler m_Sampler = VK_NULL_HANDLE;          ///< Sampler describing filtering and addressing.
+            ImTextureID m_Descriptor = 0;                  ///< Descriptor passed directly to ImGui::Image.
+            VkExtent2D m_Extent{ 0, 0 };                   ///< Dimensions used for sizing the widget.
+        };
+
+        // Creates a texture that can be consumed by ImGui widgets. The renderer keeps
+        // ownership of the Vulkan resources so UI code can focus on presentation.
+        ImGuiTexture* CreateImGuiTexture(const Loader::TextureData& texture);
+        // Releases a previously created ImGui texture. UI systems rarely need to call
+        // this directly because the renderer clears any registered textures on shutdown.
+        void DestroyImGuiTexture(ImGuiTexture& texture);
+
         // Allow external systems to adjust the render target clear colour while keeping editor and runtime in sync.
         void SetClearColor(const glm::vec4& color);
         // Returns the colour applied when clearing render targets so UI layers can present the current state.
@@ -202,6 +221,10 @@ namespace Trident
         uint32_t m_SpriteIndexCount = 0;                    ///< Number of indices issued per sprite draw.
         std::vector<MeshDrawInfo> m_MeshDrawInfo;           ///< Cached draw metadata for each uploaded mesh.
         std::vector<MeshDrawCommand> m_MeshDrawCommands;    ///< Mesh draw list gathered per-frame from the ECS registry.
+
+        // Storage for ImGui textures (such as file icons) so their Vulkan resources
+        // remain valid until the renderer explicitly destroys them.
+        std::vector<std::unique_ptr<ImGuiTexture>> m_ImGuiTexturePool;
 
         struct OffscreenTarget
         {
