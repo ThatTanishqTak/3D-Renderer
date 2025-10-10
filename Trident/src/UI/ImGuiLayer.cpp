@@ -1,5 +1,6 @@
 #include "UI/ImGuiLayer.h"
 
+#include "Application.h"
 #include "Core/Utilities.h"
 
 #include <imgui.h>
@@ -197,6 +198,8 @@ namespace Trident
         void ImGuiLayer::Dockspace()
         {
             const ImGuiID l_DockspaceID = ImGui::DockSpaceOverViewport();
+
+            vkDeviceWaitIdle(Application::GetDevice());
 
             if (m_DockspaceInitialized)
             {
