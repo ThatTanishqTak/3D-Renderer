@@ -1,6 +1,8 @@
 #pragma once
 
 #include <string>
+#include <filesystem>
+#include "Loader/TextureLoader.h"
 
 namespace Trident
 {
@@ -46,6 +48,7 @@ namespace UI
         void DrawSceneSection();
         void DrawOnnxSection();
 
+    private:
         Trident::Application* m_Engine;
 
         std::string m_ModelPath;
@@ -53,10 +56,15 @@ namespace UI
         std::string m_ScenePath;
         std::string m_OnnxPath;
 
+        std::string m_AssetsPath;
+        std::filesystem::path m_CurrentDirectory;
+
         bool m_OpenModelDialog;
         bool m_OpenTextureDialog;
         bool m_OpenSceneDialog;
         bool m_OpenOnnxDialog;
         bool m_OnnxLoaded;
+
+        Trident::Loader::TextureData m_FileIcon;
     };
 }

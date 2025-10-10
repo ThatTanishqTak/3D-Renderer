@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <vector>
+#include <filesystem>
 
 #include "Application.h"
 #include "Core/Utilities.h"
@@ -16,9 +17,11 @@
 namespace UI
 {
     ContentBrowserPanel::ContentBrowserPanel(): m_Engine(nullptr), m_OnnxRuntime(nullptr), m_ModelPath(), m_TexturePath(), m_ScenePath(), m_OnnxPath(), m_OpenModelDialog(false),
-        m_OpenTextureDialog(false), m_OpenSceneDialog(false), m_OpenOnnxDialog(false), m_OnnxLoaded(false)
+        m_OpenTextureDialog(false), m_OpenSceneDialog(false), m_OpenOnnxDialog(false), m_OnnxLoaded(false), m_CurrentDirectory("Assets")
     {
         // Constructor prepares default state so the panel can lazily bind dependencies.
+        m_AssetsPath = "Assets";
+        m_FileIcon = Trident::Loader::TextureLoader::Load("Assets/Icons/folder.png");
     }
 
     ContentBrowserPanel::~ContentBrowserPanel()
@@ -26,39 +29,70 @@ namespace UI
         // Destructor intentionally left blank; panel does not own external resources.
     }
 
-    void ContentBrowserPanel::SetEngine(Trident::Application* a_Engine)
+    void ContentBrowserPanel::SetEngine(Trident::Application* engine)
     {
         // Cache the engine pointer so we can trigger scene loads from the browser.
-        m_Engine = a_Engine;
+        m_Engine = engine;
     }
 
-    void ContentBrowserPanel::SetOnnxRuntime(Trident::AI::ONNXRuntime* a_OnnxRuntime)
+    void ContentBrowserPanel::SetOnnxRuntime(Trident::AI::ONNXRuntime* onnxRuntime)
     {
         // Store the ONNX runtime so inference controls are aware of availability.
-        m_OnnxRuntime = a_OnnxRuntime;
+        m_OnnxRuntime = onnxRuntime;
     }
 
     void ContentBrowserPanel::Render()
     {
         // The content browser groups asset import controls into logical sections for clarity.
-        if (!ImGui::Begin("Content Browser"))
-        {
-            ImGui::End();
-            return;
-        }
+        //if (!ImGui::Begin("Content Browser"))
+        //{
+        //    ImGui::End();
+        //    return;
+        //}
 
-        DrawModelSection();
-        ImGui::Separator();
+        //DrawModelSection();
+        //ImGui::Separator();
 
-        DrawTextureSection();
-        ImGui::Separator();
+        //DrawTextureSection();
+        //ImGui::Separator();
 
-        DrawSceneSection();
-        ImGui::Separator();
+        //DrawSceneSection();
+        //ImGui::Separator();
 
-        DrawOnnxSection();
+        //DrawOnnxSection();
 
         // TODO: Integrate a directory tree with thumbnails to more closely mirror AAA editors.
+
+        ImGui::Begin("Content Browser");
+
+        if (m_CurrentDirectory != std::filesystem::path(m_AssetsPath))
+        {
+            if (ImGui::Button("<-"))
+            {
+                m_CurrentDirectory = m_CurrentDirectory.parent_path();
+            }
+        }
+
+        for (auto& directoryEntry : std::filesystem::directory_iterator(m_CurrentDirectory))
+        {
+            const auto& path = directoryEntry.path();
+            auto relativePath = std::filesystem::relative(path, m_AssetsPath);
+            std::string filenameString = relativePath.filename().string();
+            if (directoryEntry.is_directory())
+            {
+                if (ImGui::Button(filenameString.c_str()))
+                {
+                    m_CurrentDirectory /= path.filename();
+                }
+            }
+            else
+            {
+                if (ImGui::Button(filenameString.c_str()))
+                {
+
+                }
+            }
+        }
 
         ImGui::End();
     }
