@@ -1224,13 +1224,14 @@ namespace Trident
 
         vkDeviceWaitIdle(l_Device);
 
-        // The renderer owns these handles; releasing them here avoids dangling ImGui descriptors or image memory leaks.
-        if (l_Target.m_TextureID != VK_NULL_HANDLE)
-        {
-            ImGui_ImplVulkan_RemoveTexture(l_Target.m_TextureID);
-            l_Target.m_TextureID = VK_NULL_HANDLE;
-        }
+        // TODO: LOOK INTO RAII TO HANDLE ALL THIS RESOURCE
+        //if (l_Target.m_TextureID != VK_NULL_HANDLE)
+        //{
+        //    ImGui_ImplVulkan_RemoveTexture(l_Target.m_TextureID);
+        //    l_Target.m_TextureID = VK_NULL_HANDLE;
+        //}
 
+        // The renderer owns these handles; releasing them here avoids dangling ImGui descriptors or image memory leaks. 
         if (l_Target.m_Framebuffer != VK_NULL_HANDLE)
         {
             vkDestroyFramebuffer(l_Device, l_Target.m_Framebuffer, nullptr);
