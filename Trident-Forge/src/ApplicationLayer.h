@@ -12,6 +12,7 @@
 #include "Panels/ViewportPanel.h"
 #include "Panels/SceneHierarchyPanel.h"
 #include "Panels/InspectorPanel.h"
+#include "Panels/OutputPanel.h"
 
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
@@ -29,7 +30,6 @@ public:
     void Run();
 
 private:
-    void DrawOutputLogPanel();
     void DrawTransformGizmo(Trident::ECS::Entity selectedEntity);
 
 private:
@@ -41,6 +41,7 @@ private:
     UI::ContentBrowserPanel m_ContentBrowserPanel; // Content browser panel
     UI::SceneHierarchyPanel m_SceneHierarchyPanel; // Scene hierarchy browser
     UI::InspectorPanel m_InspectorPanel; // Inspector for entity components
+    UI::OutputPanel m_OutputPanel; // Log output panel
 
     Trident::ECS::Entity m_SelectedEntity; // Currently highlighted entity in the editor
     ImGuizmo::OPERATION m_GizmoOperation; // Current gizmo operation mode

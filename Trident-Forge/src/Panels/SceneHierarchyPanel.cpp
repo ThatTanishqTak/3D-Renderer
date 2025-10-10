@@ -35,7 +35,7 @@ namespace UI
 
     void SceneHierarchyPanel::Render()
     {
-        if (!ImGui::Begin("World Outliner"))
+        if (!ImGui::Begin("Scene Hierarchy"))
         {
             ImGui::End();
 
@@ -62,7 +62,7 @@ namespace UI
         }
 
         ImGui::Text("Entities (%zu)", l_Entities.size());
-        if (ImGui::BeginListBox("##WorldOutlinerList"))
+        if (ImGui::BeginListBox("##SceneHierarchyList"))
         {
             for (Trident::ECS::Entity it_Entity : l_Entities)
             {

@@ -91,63 +91,6 @@ namespace
 
     // Dedicated sentinel used when no entity is highlighted inside the inspector.
     constexpr Trident::ECS::Entity s_InvalidEntity = std::numeric_limits<Trident::ECS::Entity>::max();
-
-    // Console window configuration toggles stored across frames for a consistent user experience.
-    bool s_ShowConsoleErrors = true;
-    bool s_ShowConsoleWarnings = true;
-    bool s_ShowConsoleLogs = true;
-    bool s_ConsoleAutoScroll = true;
-    size_t s_LastConsoleEntryCount = 0;
-
-    // Convert a timestamp to a human readable clock string that fits in the console.
-    std::string FormatConsoleTimestamp(const std::chrono::system_clock::time_point& a_TimePoint)
-    {
-        std::time_t l_TimeT = std::chrono::system_clock::to_time_t(a_TimePoint);
-        std::tm l_LocalTime{};
-
-#if defined(_MSC_VER)
-        localtime_s(&l_LocalTime, &l_TimeT);
-#else
-        localtime_r(&l_TimeT, &l_LocalTime);
-#endif
-
-        std::ostringstream l_Stream;
-        l_Stream << std::put_time(&l_LocalTime, "%H:%M:%S");
-        return l_Stream.str();
-    }
-
-    // Decide whether an entry should be shown given the active severity toggles.
-    bool ShouldDisplayConsoleEntry(spdlog::level::level_enum a_Level)
-    {
-        switch (a_Level)
-        {
-        case spdlog::level::critical:
-        case spdlog::level::err:
-            return s_ShowConsoleErrors;
-        case spdlog::level::warn:
-            return s_ShowConsoleWarnings;
-        default:
-            return s_ShowConsoleLogs;
-        }
-    }
-
-    // Pick a colour for a log entry so important events stand out while browsing history.
-    ImVec4 GetConsoleColour(spdlog::level::level_enum a_Level)
-    {
-        switch (a_Level)
-        {
-        case spdlog::level::critical:
-        case spdlog::level::err:
-            return { 0.94f, 0.33f, 0.33f, 1.0f };
-        case spdlog::level::warn:
-            return { 0.97f, 0.78f, 0.26f, 1.0f };
-        case spdlog::level::debug:
-        case spdlog::level::trace:
-            return { 0.60f, 0.80f, 0.98f, 1.0f };
-        default:
-            return { 0.85f, 0.85f, 0.85f, 1.0f };
-        }
-    }
 }
 
 ApplicationLayer::ApplicationLayer()
@@ -238,6 +181,7 @@ void ApplicationLayer::Run()
         }
 
         m_ContentBrowserPanel.Render();
+
         m_SceneHierarchyPanel.SetSelectedEntity(m_SelectedEntity);
         m_SceneHierarchyPanel.Render();
         m_SelectedEntity = m_SceneHierarchyPanel.GetSelectedEntity();
@@ -247,7 +191,8 @@ void ApplicationLayer::Run()
 
         m_InspectorPanel.SetSelectedEntity(m_SelectedEntity);
         m_InspectorPanel.Render();
-        DrawOutputLogPanel();
+
+        m_OutputPanel.Render();
 
         // Render the gizmo on top of the viewport once all inspector edits are applied.
         DrawTransformGizmo(m_SelectedEntity);
@@ -255,100 +200,6 @@ void ApplicationLayer::Run()
         m_ImGuiLayer->EndFrame();
         m_Engine->RenderScene();
     }
-}
-
-void ApplicationLayer::DrawOutputLogPanel()
-{
-    // The output log combines frame statistics with filtered logging controls for a single dockable surface.
-    if (!ImGui::Begin("Output Log"))
-    {
-        ImGui::End();
-        return;
-    }
-
-    ImGui::TextUnformatted("Frame Statistics");
-    ImGui::Text("FPS: %.2f", Trident::Utilities::Time::GetFPS());
-    ImGui::Text("Allocations: %zu", Trident::Application::GetRenderer().GetLastFrameAllocationCount());
-    ImGui::Text("Models: %zu", Trident::Application::GetRenderer().GetModelCount());
-    ImGui::Text("Triangles: %zu", Trident::Application::GetRenderer().GetTriangleCount());
-
-    const Trident::Renderer::FrameTimingStats& l_PerfStats = Trident::Application::GetRenderer().GetFrameTimingStats();
-    const size_t l_PerfCount = Trident::Application::GetRenderer().GetFrameTimingHistoryCount();
-    if (l_PerfCount > 0)
-    {
-        ImGui::Text("Frame Avg: %.3f ms", l_PerfStats.AverageMilliseconds);
-        ImGui::Text("Frame Min: %.3f ms", l_PerfStats.MinimumMilliseconds);
-        ImGui::Text("Frame Max: %.3f ms", l_PerfStats.MaximumMilliseconds);
-        ImGui::Text("Average FPS: %.2f", l_PerfStats.AverageFPS);
-    }
-    else
-    {
-        ImGui::TextUnformatted("Collecting frame metrics...");
-    }
-
-    bool l_PerformanceCapture = Trident::Application::GetRenderer().IsPerformanceCaptureEnabled();
-    if (ImGui::Checkbox("Capture Performance", &l_PerformanceCapture))
-    {
-        Trident::Application::GetRenderer().SetPerformanceCaptureEnabled(l_PerformanceCapture);
-    }
-
-    if (Trident::Application::GetRenderer().IsPerformanceCaptureEnabled())
-    {
-        ImGui::Text("Captured Samples: %zu", Trident::Application::GetRenderer().GetPerformanceCaptureSampleCount());
-    }
-
-    ImGui::Separator();
-
-    std::vector<Trident::Utilities::ConsoleLog::Entry> l_LogEntries = Trident::Utilities::ConsoleLog::GetSnapshot();
-
-    if (ImGui::Button("Clear"))
-    {
-        Trident::Utilities::ConsoleLog::Clear();
-        s_LastConsoleEntryCount = 0;
-    }
-
-    ImGui::SameLine();
-    ImGui::Checkbox("Auto-scroll", &s_ConsoleAutoScroll);
-
-    ImGui::Separator();
-
-    ImGui::Checkbox("Errors", &s_ShowConsoleErrors);
-    ImGui::SameLine();
-    ImGui::Checkbox("Warnings", &s_ShowConsoleWarnings);
-    ImGui::SameLine();
-    ImGui::Checkbox("Logs", &s_ShowConsoleLogs);
-
-    ImGui::Separator();
-
-    ImGui::BeginChild("OutputLogScroll", ImVec2(0.0f, 0.0f), false, ImGuiWindowFlags_HorizontalScrollbar);
-
-    for (const Trident::Utilities::ConsoleLog::Entry& it_Entry : l_LogEntries)
-    {
-        if (!ShouldDisplayConsoleEntry(it_Entry.Level))
-        {
-            continue;
-        }
-
-        const std::string l_Timestamp = FormatConsoleTimestamp(it_Entry.Timestamp);
-        const ImVec4 l_Colour = GetConsoleColour(it_Entry.Level);
-
-        ImGui::PushStyleColor(ImGuiCol_Text, l_Colour);
-        ImGui::Text("[%s] %s", l_Timestamp.c_str(), it_Entry.Message.c_str());
-        ImGui::PopStyleColor();
-    }
-
-    if (s_ConsoleAutoScroll && !l_LogEntries.empty() && l_LogEntries.size() != s_LastConsoleEntryCount)
-    {
-        ImGui::SetScrollHereY(1.0f);
-    }
-
-    ImGui::EndChild();
-
-    s_LastConsoleEntryCount = l_LogEntries.size();
-
-    // Future addition: surface shader compiler errors and asset validation summaries alongside runtime logs.
-
-    ImGui::End();
 }
 
 void ApplicationLayer::DrawTransformGizmo(Trident::ECS::Entity a_SelectedEntity)
