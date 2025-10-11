@@ -80,16 +80,14 @@ namespace
             // Orthographic size represents the vertical span; derive width from the resolved aspect ratio.
             const float l_HalfHeight = a_CameraComponent.OrthographicSize * 0.5f;
             const float l_HalfWidth = l_HalfHeight * l_Aspect;
-            glm::mat4 l_Projection = glm::ortho(-l_HalfWidth, l_HalfWidth, -l_HalfHeight, l_HalfHeight, a_CameraComponent.NearClip, a_CameraComponent.FarClip);
-            l_Projection[1][1] *= -1.0f;
 
-            return l_Projection;
+            // ImGuizmo expects a projection defined in the conventional OpenGL-style clip space. Avoid the Vulkan Y flip that
+            // the renderer performs so the gizmo aligns with the rendered geometry regardless of camera motion.
+            return glm::ortho(-l_HalfWidth, l_HalfWidth, -l_HalfHeight, l_HalfHeight, a_CameraComponent.NearClip, a_CameraComponent.FarClip);
         }
 
-        glm::mat4 l_Projection = glm::perspective(glm::radians(a_CameraComponent.FieldOfView), l_Aspect, a_CameraComponent.NearClip, a_CameraComponent.FarClip);
-        l_Projection[1][1] *= -1.0f;
-
-        return l_Projection;
+        // Use the same convention for perspective projections—omit the Vulkan Y flip so ImGuizmo receives a consistent matrix.
+        return glm::perspective(glm::radians(a_CameraComponent.FieldOfView), l_Aspect, a_CameraComponent.NearClip, a_CameraComponent.FarClip);
     }
 
     /**
@@ -174,7 +172,6 @@ void ImGuizmoLayer::Render(Trident::ECS::Entity a_SelectedEntity, UI::ViewportPa
         l_ViewMatrix = l_Camera.GetViewMatrix();
         const float l_AspectRatio = l_RectSize.y > 0.0f ? l_RectSize.x / l_RectSize.y : 1.0f;
         l_ProjectionMatrix = glm::perspective(glm::radians(l_Camera.GetFOV()), l_AspectRatio, l_Camera.GetNearClip(), l_Camera.GetFarClip());
-        l_ProjectionMatrix[1][1] *= -1.0f;
         l_UseOrthographicGizmo = false;
     }
 
