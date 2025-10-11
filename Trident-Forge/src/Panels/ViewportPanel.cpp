@@ -4,6 +4,8 @@
 #include <cmath>
 #include <string>
 #include <vector>
+#include <filesystem>
+#include <cctype>
 
 #include <imgui.h>
 #include <ImGuizmo.h>
@@ -19,6 +21,7 @@
 #include "ECS/Registry.h"
 #include "Renderer/RenderCommand.h"
 #include "Renderer/Renderer.h"
+#include "Loader/AssimpExtensions.h"
 
 namespace
 {
@@ -196,6 +199,26 @@ namespace UI
                 }
             }
 
+            if (ImGui::BeginDragDropTarget())
+            {
+                if (const ImGuiPayload* a_Payload = ImGui::AcceptDragDropPayload("TRIDENT_CONTENT_BROWSER_PATH"))
+                {
+                    std::string l_PathString;
+                    if (a_Payload != nullptr && a_Payload->Data != nullptr && a_Payload->DataSize > 0)
+                    {
+                        const char* l_Data = static_cast<const char*>(a_Payload->Data);
+                        l_PathString.assign(l_Data, l_Data + a_Payload->DataSize);
+                        if (!l_PathString.empty() && l_PathString.back() == '\0')
+                        {
+                            l_PathString.pop_back();
+                        }
+                    }
+
+                    HandleAssetDrop(l_PathString);
+                }
+                ImGui::EndDragDropTarget();
+            }
+
             const ImVec2 l_ImageMin = ImGui::GetItemRectMin();
             const ImVec2 l_ImageMax = ImGui::GetItemRectMax();
             const ImVec2 l_ImageExtent{ l_ImageMax.x - l_ImageMin.x, l_ImageMax.y - l_ImageMin.y };
@@ -316,5 +339,44 @@ namespace UI
         }
 
         ImGui::End();
+    }
+
+    void ViewportPanel::HandleAssetDrop(const std::string& path)
+    {
+        if (path.empty())
+        {
+            TR_CORE_WARN("Received an empty drag-and-drop payload; ignoring import.");
+            return;
+        }
+
+        const std::filesystem::path l_Path{ path };
+        if (!std::filesystem::exists(l_Path))
+        {
+            TR_CORE_WARN("Drag-and-drop target '{}' does not exist on disk.", path);
+            return;
+        }
+
+        std::string l_Extension = l_Path.extension().string();
+        std::transform(l_Extension.begin(), l_Extension.end(), l_Extension.begin(), [](unsigned char a_Character)
+            {
+                return static_cast<char>(std::tolower(a_Character));
+            });
+
+        const std::vector<std::string>& l_SupportedExtensions = Trident::Loader::AssimpExtensions::GetNormalizedExtensions();
+        const bool l_IsSupported = std::find(l_SupportedExtensions.begin(), l_SupportedExtensions.end(), l_Extension) != l_SupportedExtensions.end();
+        if (!l_IsSupported)
+        {
+            TR_CORE_WARN("Drag-and-drop currently supports only mesh assets; '{}' will be ignored.", path);
+            return;
+        }
+
+        Trident::ECS::Entity l_NewEntity = Trident::Application::Get().ImportModelAsset(path);
+        if (l_NewEntity != s_InvalidEntity)
+        {
+            // Focus the new asset so follow-up gizmo interactions target the fresh entity.
+            m_SelectedEntity = l_NewEntity;
+        }
+
+        // Future improvement: surface toast-style feedback when imports succeed to aid discoverability.
     }
 }

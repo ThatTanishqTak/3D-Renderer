@@ -1,5 +1,6 @@
 #pragma once
 
+#include <string>
 #include <limits>
 
 #include "ECS/Entity.h"
@@ -37,6 +38,9 @@ namespace UI
          * @brief Draw the viewport panel and its immediate controls.
          */
         void Render();
+
+    private:
+        void HandleAssetDrop(const std::string& path);
 
     private:
         static constexpr Trident::ECS::Entity s_InvalidEntity = std::numeric_limits<Trident::ECS::Entity>::max();

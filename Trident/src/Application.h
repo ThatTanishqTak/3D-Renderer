@@ -6,6 +6,9 @@
 
 #include "Renderer/Renderer.h"
 
+#include "Geometry/Mesh.h"
+#include "Geometry/Material.h"
+
 #include "ECS/Registry.h"
 
 #include <vulkan/vulkan.h>
@@ -36,6 +39,7 @@ namespace Trident
         void Update();
 
         void LoadScene(const std::string& path);
+        ECS::Entity ImportModelAsset(const std::string& path);
         void RenderScene();
 
         void Shutdown();
@@ -66,6 +70,9 @@ namespace Trident
 
         std::unique_ptr<Renderer> m_Renderer;
         ECS::Registry m_Registry;
+
+        std::vector<Geometry::Mesh> m_LoadedMeshes;
+        std::vector<Geometry::Material> m_LoadedMaterials;
 
         static Application* s_Instance;
 

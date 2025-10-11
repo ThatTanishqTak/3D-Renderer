@@ -3,8 +3,15 @@
 #include "Renderer/RenderCommand.h"
 
 #include "Loader/SceneLoader.h"
+#include "Loader/ModelLoader.h"
+
+#include "ECS/Components/MeshComponent.h"
+#include "ECS/Components/TransformComponent.h"
 
 #include <string>
+#include <limits>
+#include <utility>
+#include <cstdint>
 
 namespace Trident
 {
@@ -44,11 +51,87 @@ namespace Trident
 
     void Application::LoadScene(const std::string& path)
     {
-        auto l_Scene = Loader::SceneLoader::Load(path);
-        if (!l_Scene.Meshes.empty())
+        Loader::SceneData l_Scene = Loader::SceneLoader::Load(path);
+        const bool l_HasMeshes = !l_Scene.Meshes.empty();
+
+        if (!l_HasMeshes)
         {
-            m_Renderer->UploadMesh(l_Scene.Meshes, l_Scene.Materials);
+            // Clear cached geometry when the scene is empty so stale data is not reused.
+            m_LoadedMeshes.clear();
+            m_LoadedMaterials.clear();
+            TR_CORE_WARN("Scene '{}' contained no meshes to upload.", path);
+            return;
         }
+
+        // Cache the imported geometry so future drag-and-drop additions can append seamlessly.
+        m_LoadedMeshes = std::move(l_Scene.Meshes);
+        m_LoadedMaterials = std::move(l_Scene.Materials);
+
+        if (m_Renderer)
+        {
+            m_Renderer->UploadMesh(m_LoadedMeshes, m_LoadedMaterials);
+        }
+    }
+
+    ECS::Entity Application::ImportModelAsset(const std::string& path)
+    {
+        const ECS::Entity l_InvalidEntity = std::numeric_limits<ECS::Entity>::max();
+
+        auto a_ModelData = Loader::ModelLoader::Load(path);
+        if (a_ModelData.Meshes.empty())
+        {
+            TR_CORE_WARN("Drag-and-drop import skipped because '{}' produced no meshes.", path);
+            return l_InvalidEntity;
+        }
+
+        // Remember where the new data will land so component indices remain stable.
+        const size_t l_MaterialOffset = m_LoadedMaterials.size();
+        const size_t l_MeshOffset = m_LoadedMeshes.size();
+
+        // Append new materials while preserving existing assignments. Future improvement: de-duplicate shared materials.
+        m_LoadedMaterials.reserve(m_LoadedMaterials.size() + a_ModelData.Materials.size());
+        for (auto& it_Material : a_ModelData.Materials)
+        {
+            m_LoadedMaterials.push_back(std::move(it_Material));
+        }
+
+        // Merge meshes into the cache and remap material indices so the renderer sees a contiguous table.
+        m_LoadedMeshes.reserve(m_LoadedMeshes.size() + a_ModelData.Meshes.size());
+        for (auto& it_Mesh : a_ModelData.Meshes)
+        {
+            if (it_Mesh.MaterialIndex >= 0)
+            {
+                it_Mesh.MaterialIndex += static_cast<int32_t>(l_MaterialOffset);
+            }
+            m_LoadedMeshes.push_back(std::move(it_Mesh));
+        }
+
+        ECS::Entity l_FirstEntity = l_InvalidEntity;
+        for (size_t it_MeshIndex = 0; it_MeshIndex < a_ModelData.Meshes.size(); ++it_MeshIndex)
+        {
+            ECS::Entity l_Entity = m_Registry.CreateEntity();
+            if (l_FirstEntity == l_InvalidEntity)
+            {
+                l_FirstEntity = l_Entity;
+            }
+
+            // Default transform keeps new assets at the origin until gizmos reposition them.
+            m_Registry.AddComponent<Transform>(l_Entity, Transform{});
+
+            MeshComponent& l_MeshComponent = m_Registry.AddComponent<MeshComponent>(l_Entity);
+            l_MeshComponent.m_MeshIndex = l_MeshOffset + it_MeshIndex;
+            const Geometry::Mesh& l_SourceMesh = m_LoadedMeshes[l_MeshComponent.m_MeshIndex];
+            l_MeshComponent.m_MaterialIndex = l_SourceMesh.MaterialIndex;
+        }
+
+        if (m_Renderer)
+        {
+            m_Renderer->UploadMesh(m_LoadedMeshes, m_LoadedMaterials);
+        }
+
+        TR_CORE_INFO("Imported '{}' via viewport drag-and-drop ({} meshes).", path, a_ModelData.Meshes.size());
+
+        return l_FirstEntity;
     }
 
     void Application::Shutdown()
