@@ -189,6 +189,9 @@ void ApplicationLayer::Run()
         m_ViewportPanel.SetSelectedEntity(m_SelectedEntity);
         m_ViewportPanel.Render();
 
+        // Sync the viewport's selection state so downstream panels (e.g., inspector) respect viewport-driven deselection.
+        m_SelectedEntity = m_ViewportPanel.GetSelectedEntity();
+
         m_InspectorPanel.SetSelectedEntity(m_SelectedEntity);
         m_InspectorPanel.Render();
 

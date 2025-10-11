@@ -6,6 +6,7 @@
 #include <vector>
 
 #include <imgui.h>
+#include <ImGuizmo.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_inverse.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -76,6 +77,11 @@ namespace UI
     void ViewportPanel::SetSelectedEntity(Trident::ECS::Entity selectedEntity)
     {
         m_SelectedEntity = selectedEntity;
+    }
+
+    Trident::ECS::Entity ViewportPanel::GetSelectedEntity() const
+    {
+        return m_SelectedEntity;
     }
 
     Trident::ECS::Entity ViewportPanel::GetSelectedCamera() const
@@ -178,6 +184,16 @@ namespace UI
         if (l_ViewportTexture != VK_NULL_HANDLE && l_ImageSize.x > 0.0f && l_ImageSize.y > 0.0f)
         {
             ImGui::Image(reinterpret_cast<ImTextureID>(l_ViewportTexture), l_ImageSize);
+
+            // Clearing the selection when the user clicks empty space keeps the editor behavior consistent with other DCC tools.
+            if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+            {
+                // Avoid clearing while a gizmo drag is active so transform edits are not interrupted mid-manipulation.
+                if (!ImGuizmo::IsUsing())
+                {
+                    m_SelectedEntity = s_InvalidEntity;
+                }
+            }
 
             const ImVec2 l_ImageMin = ImGui::GetItemRectMin();
             const ImVec2 l_ImageMax = ImGui::GetItemRectMax();

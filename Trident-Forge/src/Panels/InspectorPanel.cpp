@@ -76,7 +76,7 @@ namespace UI
         ImGui::Separator();
 
         DrawGizmoControls();
-        DrawEditorCameraSection();
+        //DrawEditorCameraSection();
         DrawMaterialsSection();
         DrawLiveReloadSection();
 

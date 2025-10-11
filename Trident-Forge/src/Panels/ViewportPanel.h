@@ -23,6 +23,12 @@ namespace UI
         void SetSelectedEntity(Trident::ECS::Entity selectedEntity);
 
         /**
+         * @brief Publish the entity currently highlighted by the viewport so other panels can mirror the state.
+         */
+        [[nodiscard]] Trident::ECS::Entity GetSelectedEntity() const;
+
+
+        /**
          * @brief Publish the currently assigned viewport camera for downstream systems (e.g. gizmos).
          */
         [[nodiscard]] Trident::ECS::Entity GetSelectedCamera() const;
