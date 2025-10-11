@@ -123,6 +123,13 @@ void ApplicationLayer::Run()
         m_ViewportPanel.SetSelectedEntity(m_SelectedEntity);
         m_ViewportPanel.Render();
 
+        // Draw the gizmo after the viewport so it aligns with the freshly submitted viewport rect.
+        m_ImGuizmoLayer.Render(m_SelectedEntity, m_ViewportPanel);
+
+        // Evaluate gizmo interaction state before applying pending deselection requests from the viewport.
+        const ImGuizmoInteractionState l_GizmoInteractionState = m_ImGuizmoLayer.GetInteractionState();
+        m_ViewportPanel.ResolvePendingSelection(l_GizmoInteractionState);
+
         // Sync the viewport's selection state so downstream panels (e.g., inspector) respect viewport-driven deselection.
         m_SelectedEntity = m_ViewportPanel.GetSelectedEntity();
 
@@ -130,9 +137,6 @@ void ApplicationLayer::Run()
         m_InspectorPanel.Render();
 
         m_OutputPanel.Render();
-
-        // Render the gizmo on top of the viewport once all inspector edits are applied.
-        m_ImGuizmoLayer.Render(m_SelectedEntity, m_ViewportPanel);
 
         m_ImGuiLayer->EndFrame();
         m_Engine->RenderScene();

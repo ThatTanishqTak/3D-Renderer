@@ -33,21 +33,16 @@ namespace UI
         /**
          * @brief Provide access to the running engine so scenes can be swapped from the browser.
          */
-        void SetEngine(Trident::Application* a_Engine);
+        void SetEngine(Trident::Application* engine);
 
         /**
          * @brief Hook up an ONNX runtime to enable model inspection utilities.
          */
-        void SetOnnxRuntime(Trident::AI::ONNXRuntime* a_OnnxRuntime);
+        void SetOnnxRuntime(Trident::AI::ONNXRuntime* onnxRuntime);
 
         Trident::AI::ONNXRuntime* m_OnnxRuntime;
 
     private:
-        void DrawModelSection();
-        void DrawTextureSection();
-        void DrawSceneSection();
-        void DrawOnnxSection();
-
         void DrawDirectoryTree(const std::filesystem::path& directory);
         void DrawDirectoryGrid(const std::filesystem::path& directory);
 

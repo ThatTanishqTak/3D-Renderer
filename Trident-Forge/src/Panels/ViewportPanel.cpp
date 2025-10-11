@@ -22,20 +22,21 @@
 #include "Renderer/RenderCommand.h"
 #include "Renderer/Renderer.h"
 #include "Loader/AssimpExtensions.h"
+#include "../ImGuizmoLayer.h"
 
 namespace
 {
     /**
      * @brief Build a transform matrix from a Trident transform component.
      */
-    glm::mat4 ComposeTransform(const Trident::Transform& a_Transform)
+    glm::mat4 ComposeTransform(const Trident::Transform& transform)
     {
         glm::mat4 l_ModelMatrix{ 1.0f };
-        l_ModelMatrix = glm::translate(l_ModelMatrix, a_Transform.Position);
-        l_ModelMatrix = glm::rotate(l_ModelMatrix, glm::radians(a_Transform.Rotation.x), glm::vec3{ 1.0f, 0.0f, 0.0f });
-        l_ModelMatrix = glm::rotate(l_ModelMatrix, glm::radians(a_Transform.Rotation.y), glm::vec3{ 0.0f, 1.0f, 0.0f });
-        l_ModelMatrix = glm::rotate(l_ModelMatrix, glm::radians(a_Transform.Rotation.z), glm::vec3{ 0.0f, 0.0f, 1.0f });
-        l_ModelMatrix = glm::scale(l_ModelMatrix, a_Transform.Scale);
+        l_ModelMatrix = glm::translate(l_ModelMatrix, transform.Position);
+        l_ModelMatrix = glm::rotate(l_ModelMatrix, glm::radians(transform.Rotation.x), glm::vec3{ 1.0f, 0.0f, 0.0f });
+        l_ModelMatrix = glm::rotate(l_ModelMatrix, glm::radians(transform.Rotation.y), glm::vec3{ 0.0f, 1.0f, 0.0f });
+        l_ModelMatrix = glm::rotate(l_ModelMatrix, glm::radians(transform.Rotation.z), glm::vec3{ 0.0f, 0.0f, 1.0f });
+        l_ModelMatrix = glm::scale(l_ModelMatrix, transform.Scale);
 
         return l_ModelMatrix;
     }
@@ -43,26 +44,26 @@ namespace
     /**
      * @brief Construct a projection matrix matching the supplied camera component.
      */
-    glm::mat4 BuildCameraProjectionMatrix(const Trident::CameraComponent& a_CameraComponent, float a_ViewportAspect)
+    glm::mat4 BuildCameraProjectionMatrix(const Trident::CameraComponent& cameraComponent, float viewportAspect)
     {
-        float l_Aspect = a_CameraComponent.OverrideAspectRatio ? a_CameraComponent.AspectRatio : a_ViewportAspect;
+        float l_Aspect = cameraComponent.OverrideAspectRatio ? cameraComponent.AspectRatio : viewportAspect;
         l_Aspect = std::max(l_Aspect, 0.0001f);
 
-        if (a_CameraComponent.UseCustomProjection)
+        if (cameraComponent.UseCustomProjection)
         {
-            return a_CameraComponent.CustomProjection;
+            return cameraComponent.CustomProjection;
         }
 
-        if (a_CameraComponent.Projection == Trident::ProjectionType::Orthographic)
+        if (cameraComponent.Projection == Trident::ProjectionType::Orthographic)
         {
-            const float l_HalfHeight = a_CameraComponent.OrthographicSize * 0.5f;
+            const float l_HalfHeight = cameraComponent.OrthographicSize * 0.5f;
             const float l_HalfWidth = l_HalfHeight * l_Aspect;
-            glm::mat4 l_Projection = glm::ortho(-l_HalfWidth, l_HalfWidth, -l_HalfHeight, l_HalfHeight, a_CameraComponent.NearClip, a_CameraComponent.FarClip);
+            glm::mat4 l_Projection = glm::ortho(-l_HalfWidth, l_HalfWidth, -l_HalfHeight, l_HalfHeight, cameraComponent.NearClip, cameraComponent.FarClip);
             l_Projection[1][1] *= -1.0f;
             return l_Projection;
         }
 
-        glm::mat4 l_Projection = glm::perspective(glm::radians(a_CameraComponent.FieldOfView), l_Aspect, a_CameraComponent.NearClip, a_CameraComponent.FarClip);
+        glm::mat4 l_Projection = glm::perspective(glm::radians(cameraComponent.FieldOfView), l_Aspect, cameraComponent.NearClip, cameraComponent.FarClip);
         l_Projection[1][1] *= -1.0f;
         return l_Projection;
     }
@@ -70,7 +71,7 @@ namespace
 
 namespace UI
 {
-    ViewportPanel::ViewportPanel() : m_SelectedViewportCamera(s_InvalidEntity), m_SelectedEntity(s_InvalidEntity), m_SelectedCameraIndex(0)
+    ViewportPanel::ViewportPanel() : m_SelectedViewportCamera(s_InvalidEntity), m_SelectedEntity(s_InvalidEntity), m_SelectedCameraIndex(0), m_IsDeselectionPending(false)
     {
 
     }
@@ -142,19 +143,20 @@ namespace UI
             m_SelectedCameraIndex = 0;
         }
 
-        const auto a_ItemGetter = [](void* a_UserData, int a_Index, const char** a_OutText) -> bool
+        const auto a_ItemGetter = [](void* userData, int index, const char** outText) -> bool
             {
-                auto* l_Options = static_cast<std::vector<ViewportCameraOption>*>(a_UserData);
-                if (a_Index < 0 || a_Index >= static_cast<int>(l_Options->size()))
+                auto* l_Options = static_cast<std::vector<ViewportCameraOption>*>(userData);
+                if (index < 0 || index >= static_cast<int>(l_Options->size()))
                 {
                     return false;
                 }
 
-                *a_OutText = (*l_Options)[a_Index].Label.c_str();
+                *outText = (*l_Options)[index].Label.c_str();
                 return true;
             };
 
-        const bool l_CameraChanged = ImGui::Combo("Viewport Camera", &m_SelectedCameraIndex, a_ItemGetter, static_cast<void*>(&l_CameraOptions), static_cast<int>(l_CameraOptions.size()));
+        const bool l_CameraChanged = ImGui::Combo("Viewport Camera", &m_SelectedCameraIndex, a_ItemGetter, static_cast<void*>(&l_CameraOptions), 
+            static_cast<int>(l_CameraOptions.size()));
 
         const Trident::ECS::Entity l_CurrentCameraEntity = l_CameraOptions[m_SelectedCameraIndex].Entity;
         if (l_CameraChanged || l_CurrentCameraEntity != m_SelectedViewportCamera)
@@ -196,13 +198,8 @@ namespace UI
             // Clearing the selection when the user clicks empty space keeps the editor behavior consistent with other DCC tools.
             if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
             {
-                // Avoid clearing while a gizmo drag is active so transform edits are not interrupted mid-manipulation.
-                const bool l_GizmoActive = ImGuizmo::IsUsing();
-                const bool l_GizmoHovered = ImGuizmo::IsOver();
-                if (!l_GizmoActive && !l_GizmoHovered)
-                {
-                    m_SelectedEntity = s_InvalidEntity;
-                }
+                // Defer the final deselection decision until the gizmo layer reports its hover/active state for this frame.
+                m_IsDeselectionPending = true;
             }
 
             if (ImGui::BeginDragDropTarget())
@@ -347,6 +344,22 @@ namespace UI
         ImGui::End();
     }
 
+    void ViewportPanel::ResolvePendingSelection(const ImGuizmoInteractionState& gizmoInteractionState)
+    {
+        if (!m_IsDeselectionPending)
+        {
+            return;
+        }
+
+        // Only clear the selection when the gizmo is idle so handle interactions do not inadvertently deselect the target.
+        if (!gizmoInteractionState.Active && !gizmoInteractionState.Hovered)
+        {
+            m_SelectedEntity = s_InvalidEntity;
+        }
+
+        m_IsDeselectionPending = false;
+    }
+
     void ViewportPanel::HandleAssetDrop(const std::string& path)
     {
         if (path.empty())
@@ -363,9 +376,9 @@ namespace UI
         }
 
         std::string l_Extension = l_Path.extension().string();
-        std::transform(l_Extension.begin(), l_Extension.end(), l_Extension.begin(), [](unsigned char a_Character)
+        std::transform(l_Extension.begin(), l_Extension.end(), l_Extension.begin(), [](unsigned char character)
             {
-                return static_cast<char>(std::tolower(a_Character));
+                return static_cast<char>(std::tolower(character));
             });
 
         const std::vector<std::string>& l_SupportedExtensions = Trident::Loader::AssimpExtensions::GetNormalizedExtensions();

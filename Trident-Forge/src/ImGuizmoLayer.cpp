@@ -24,14 +24,14 @@ namespace
     /**
      * @brief Compose a model matrix from a transform component for ImGuizmo.
      */
-    glm::mat4 ComposeTransform(const Trident::Transform& a_Transform)
+    glm::mat4 ComposeTransform(const Trident::Transform& transform)
     {
         glm::mat4 l_ModelMatrix{ 1.0f };
-        l_ModelMatrix = glm::translate(l_ModelMatrix, a_Transform.Position);
-        l_ModelMatrix = glm::rotate(l_ModelMatrix, glm::radians(a_Transform.Rotation.x), glm::vec3{ 1.0f, 0.0f, 0.0f });
-        l_ModelMatrix = glm::rotate(l_ModelMatrix, glm::radians(a_Transform.Rotation.y), glm::vec3{ 0.0f, 1.0f, 0.0f });
-        l_ModelMatrix = glm::rotate(l_ModelMatrix, glm::radians(a_Transform.Rotation.z), glm::vec3{ 0.0f, 0.0f, 1.0f });
-        l_ModelMatrix = glm::scale(l_ModelMatrix, a_Transform.Scale);
+        l_ModelMatrix = glm::translate(l_ModelMatrix, transform.Position);
+        l_ModelMatrix = glm::rotate(l_ModelMatrix, glm::radians(transform.Rotation.x), glm::vec3{ 1.0f, 0.0f, 0.0f });
+        l_ModelMatrix = glm::rotate(l_ModelMatrix, glm::radians(transform.Rotation.y), glm::vec3{ 0.0f, 1.0f, 0.0f });
+        l_ModelMatrix = glm::rotate(l_ModelMatrix, glm::radians(transform.Rotation.z), glm::vec3{ 0.0f, 0.0f, 1.0f });
+        l_ModelMatrix = glm::scale(l_ModelMatrix, transform.Scale);
 
         return l_ModelMatrix;
     }
@@ -39,7 +39,7 @@ namespace
     /**
      * @brief Convert a manipulated model matrix back into the engine transform structure.
      */
-    Trident::Transform DecomposeTransform(const glm::mat4& a_ModelMatrix, const Trident::Transform& a_DefaultTransform)
+    Trident::Transform DecomposeTransform(const glm::mat4& modelMatrix, const Trident::Transform& defaultTransform)
     {
         glm::vec3 l_Scale{};
         glm::quat l_Rotation{};
@@ -47,13 +47,13 @@ namespace
         glm::vec3 l_Skew{};
         glm::vec4 l_Perspective{};
 
-        if (!glm::decompose(a_ModelMatrix, l_Scale, l_Rotation, l_Translation, l_Skew, l_Perspective))
+        if (!glm::decompose(modelMatrix, l_Scale, l_Rotation, l_Translation, l_Skew, l_Perspective))
         {
             // Preserve the previous values if decomposition fails, avoiding sudden jumps.
-            return a_DefaultTransform;
+            return defaultTransform;
         }
 
-        Trident::Transform l_Result = a_DefaultTransform;
+        Trident::Transform l_Result = defaultTransform;
         l_Result.Position = l_Translation;
         l_Result.Scale = l_Scale;
         l_Result.Rotation = glm::degrees(glm::eulerAngles(glm::normalize(l_Rotation)));
@@ -64,30 +64,30 @@ namespace
     /**
      * @brief Build a projection matrix that mirrors the camera used in the viewport.
      */
-    glm::mat4 BuildCameraProjectionMatrix(const Trident::CameraComponent& a_CameraComponent, float a_ViewportAspect)
+    glm::mat4 BuildCameraProjectionMatrix(const Trident::CameraComponent& cameraComponent, float viewportAspect)
     {
-        float l_Aspect = a_CameraComponent.OverrideAspectRatio ? a_CameraComponent.AspectRatio : a_ViewportAspect;
+        float l_Aspect = cameraComponent.OverrideAspectRatio ? cameraComponent.AspectRatio : viewportAspect;
         l_Aspect = std::max(l_Aspect, 0.0001f);
 
-        if (a_CameraComponent.UseCustomProjection)
+        if (cameraComponent.UseCustomProjection)
         {
             // Advanced users can inject a bespoke matrix; the editor relays it without modification.
-            return a_CameraComponent.CustomProjection;
+            return cameraComponent.CustomProjection;
         }
 
-        if (a_CameraComponent.Projection == Trident::ProjectionType::Orthographic)
+        if (cameraComponent.Projection == Trident::ProjectionType::Orthographic)
         {
             // Orthographic size represents the vertical span; derive width from the resolved aspect ratio.
-            const float l_HalfHeight = a_CameraComponent.OrthographicSize * 0.5f;
+            const float l_HalfHeight = cameraComponent.OrthographicSize * 0.5f;
             const float l_HalfWidth = l_HalfHeight * l_Aspect;
 
             // ImGuizmo expects a projection defined in the conventional OpenGL-style clip space. Avoid the Vulkan Y flip that
             // the renderer performs so the gizmo aligns with the rendered geometry regardless of camera motion.
-            return glm::ortho(-l_HalfWidth, l_HalfWidth, -l_HalfHeight, l_HalfHeight, a_CameraComponent.NearClip, a_CameraComponent.FarClip);
+            return glm::ortho(-l_HalfWidth, l_HalfWidth, -l_HalfHeight, l_HalfHeight, cameraComponent.NearClip, cameraComponent.FarClip);
         }
 
         // Use the same convention for perspective projections—omit the Vulkan Y flip so ImGuizmo receives a consistent matrix.
-        return glm::perspective(glm::radians(a_CameraComponent.FieldOfView), l_Aspect, a_CameraComponent.NearClip, a_CameraComponent.FarClip);
+        return glm::perspective(glm::radians(cameraComponent.FieldOfView), l_Aspect, cameraComponent.NearClip, cameraComponent.FarClip);
     }
 
     /**
@@ -96,31 +96,32 @@ namespace
     constexpr Trident::ECS::Entity s_InvalidEntity = std::numeric_limits<Trident::ECS::Entity>::max();
 }
 
-ImGuizmoLayer::ImGuizmoLayer()
-    : m_GizmoOperation(ImGuizmo::TRANSLATE)
-    , m_GizmoMode(ImGuizmo::LOCAL)
+ImGuizmoLayer::ImGuizmoLayer() : m_GizmoOperation(ImGuizmo::TRANSLATE), m_GizmoMode(ImGuizmo::LOCAL), m_InteractionState{}
 {
     // Default to translate/local so the gizmo feels familiar on startup.
 }
 
-void ImGuizmoLayer::Initialize(UI::InspectorPanel& a_InspectorPanel)
+void ImGuizmoLayer::Initialize(UI::InspectorPanel& inspectorPanel)
 {
     // Provide the inspector with live pointers so its radio buttons can update the gizmo mode/state.
-    a_InspectorPanel.SetGizmoState(&m_GizmoOperation, &m_GizmoMode);
+    inspectorPanel.SetGizmoState(&m_GizmoOperation, &m_GizmoMode);
 }
 
-void ImGuizmoLayer::Render(Trident::ECS::Entity a_SelectedEntity, UI::ViewportPanel& a_ViewportPanel)
+void ImGuizmoLayer::Render(Trident::ECS::Entity selectedEntity, UI::ViewportPanel& viewportPanel)
 {
     // Always kick off a frame so ImGuizmo clears stale state even when nothing is selected.
     ImGuizmo::BeginFrame();
 
-    if (a_SelectedEntity == s_InvalidEntity)
+    // Reset the cached interaction flags so downstream consumers never observe stale values.
+    m_InteractionState = {};
+
+    if (selectedEntity == s_InvalidEntity)
     {
         return;
     }
 
     Trident::ECS::Registry& l_Registry = Trident::Application::GetRegistry();
-    if (!l_Registry.HasComponent<Trident::Transform>(a_SelectedEntity))
+    if (!l_Registry.HasComponent<Trident::Transform>(selectedEntity))
     {
         return;
     }
@@ -149,7 +150,7 @@ void ImGuizmoLayer::Render(Trident::ECS::Entity a_SelectedEntity, UI::ViewportPa
     glm::mat4 l_ProjectionMatrix{ 1.0f };
     bool l_UseOrthographicGizmo = false;
 
-    const Trident::ECS::Entity l_SelectedViewportCamera = a_ViewportPanel.GetSelectedCamera();
+    const Trident::ECS::Entity l_SelectedViewportCamera = viewportPanel.GetSelectedCamera();
 
     if (l_SelectedViewportCamera != s_InvalidEntity
         && l_Registry.HasComponent<Trident::CameraComponent>(l_SelectedViewportCamera)
@@ -175,7 +176,7 @@ void ImGuizmoLayer::Render(Trident::ECS::Entity a_SelectedEntity, UI::ViewportPa
         l_UseOrthographicGizmo = false;
     }
 
-    Trident::Transform& l_EntityTransform = l_Registry.GetComponent<Trident::Transform>(a_SelectedEntity);
+    Trident::Transform& l_EntityTransform = l_Registry.GetComponent<Trident::Transform>(selectedEntity);
     glm::mat4 l_ModelMatrix = ComposeTransform(l_EntityTransform);
 
     ImGuizmo::SetOrthographic(l_UseOrthographicGizmo);
@@ -190,5 +191,15 @@ void ImGuizmoLayer::Render(Trident::ECS::Entity a_SelectedEntity, UI::ViewportPa
         Trident::Application::GetRenderer().SetTransform(l_EntityTransform);
     }
 
+    // Record the hover/active state for this frame so other panels can react without querying ImGuizmo directly.
+    m_InteractionState.Hovered = ImGuizmo::IsOver();
+    m_InteractionState.Active = ImGuizmo::IsUsing();
+
     // Future work: expose snapping increments via the inspector so artists can align to grids precisely.
+}
+
+ImGuizmoInteractionState ImGuizmoLayer::GetInteractionState() const
+{
+    // Return a copy so callers can safely cache the information for the remainder of the frame.
+    return m_InteractionState;
 }

@@ -5,6 +5,8 @@
 
 #include "ECS/Entity.h"
 
+struct ImGuizmoInteractionState;
+
 namespace UI
 {
     /**
@@ -39,6 +41,11 @@ namespace UI
          */
         void Render();
 
+        /**
+         * @brief Apply pending selection changes after inspecting gizmo interaction state.
+         */
+        void ResolvePendingSelection(const ImGuizmoInteractionState& gizmoInteractionState);
+
     private:
         void HandleAssetDrop(const std::string& path);
 
@@ -48,5 +55,6 @@ namespace UI
         Trident::ECS::Entity m_SelectedViewportCamera;
         Trident::ECS::Entity m_SelectedEntity;
         int m_SelectedCameraIndex;
+        bool m_IsDeselectionPending;
     };
 }
