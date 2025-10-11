@@ -100,22 +100,12 @@ namespace UI
             return;
         }
 
-        const ImVec2 l_PanelOrigin = ImGui::GetCursorScreenPos();
-        const ImVec2 l_PanelAvailable = ImGui::GetContentRegionAvail();
-
-        Trident::ViewportInfo l_Viewport{};
+        // Cache the viewport ID so it can be pushed alongside the final viewport rect once the UI controls have been laid out.
+        uint32_t l_ViewportID = 0;
         if (const ImGuiViewport* l_WindowViewport = ImGui::GetWindowViewport(); l_WindowViewport != nullptr)
         {
-            l_Viewport.ViewportID = static_cast<uint32_t>(l_WindowViewport->ID);
+            l_ViewportID = static_cast<uint32_t>(l_WindowViewport->ID);
         }
-        l_Viewport.Position = glm::vec2{ l_PanelOrigin.x, l_PanelOrigin.y };
-        l_Viewport.Size = glm::vec2
-        {
-            std::max(l_PanelAvailable.x, 0.0f),
-            std::max(l_PanelAvailable.y, 0.0f)
-        };
-
-        Trident::RenderCommand::SetViewport(l_Viewport);
 
         Trident::ECS::Registry& l_Registry = Trident::Application::GetRegistry();
 
@@ -180,6 +170,22 @@ namespace UI
         {
             Trident::RenderCommand::SetClearColor(l_ClearColor);
         }
+
+        // Determine the on-screen rectangle of the rendered scene after the camera controls so the renderer and gizmo share the same bounds.
+        const ImVec2 l_ImageOrigin = ImGui::GetCursorScreenPos();
+        const ImVec2 l_ImageAvailable = ImGui::GetContentRegionAvail();
+
+        Trident::ViewportInfo l_Viewport{};
+        l_Viewport.ViewportID = l_ViewportID;
+        l_Viewport.Position = glm::vec2{ l_ImageOrigin.x, l_ImageOrigin.y };
+        l_Viewport.Size = glm::vec2
+        {
+            std::max(l_ImageAvailable.x, 0.0f),
+            std::max(l_ImageAvailable.y, 0.0f)
+        };
+
+        // Keep the renderer informed so the swapchain image and ImGuizmo draw commands align perfectly.
+        Trident::RenderCommand::SetViewport(l_Viewport);
 
         const ImVec2 l_ImageSize{ l_Viewport.Size.x, l_Viewport.Size.y };
         const VkDescriptorSet l_ViewportTexture = Trident::RenderCommand::GetViewportTexture();
