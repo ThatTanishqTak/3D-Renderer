@@ -67,11 +67,9 @@ namespace
 
 namespace UI
 {
-    ViewportPanel::ViewportPanel()
-        : m_SelectedViewportCamera(s_InvalidEntity)
-        , m_SelectedEntity(s_InvalidEntity)
-        , m_SelectedCameraIndex(0)
+    ViewportPanel::ViewportPanel() : m_SelectedViewportCamera(s_InvalidEntity), m_SelectedEntity(s_InvalidEntity), m_SelectedCameraIndex(0)
     {
+
     }
 
     void ViewportPanel::SetSelectedEntity(Trident::ECS::Entity selectedEntity)
@@ -95,6 +93,7 @@ namespace UI
         if (!ImGui::Begin("Viewport"))
         {
             ImGui::End();
+
             return;
         }
 

@@ -39,7 +39,6 @@ namespace UI
         void DrawSpriteSection(Trident::ECS::Registry& registry);
         void DrawLightSection(Trident::ECS::Registry& registry);
         void DrawGizmoControls();
-        void DrawEditorCameraSection();
         void DrawMaterialsSection();
         void DrawLiveReloadSection();
 
