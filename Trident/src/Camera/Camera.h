@@ -41,7 +41,7 @@ namespace Trident
 
         glm::vec3 m_Position{ 0.0f, -3.0f, 1.5f };
         float m_Yaw = 90.0f;    // Facing +Y
-        float m_Pitch = 0.0f;
+        float m_Pitch = -25.0f;
 
         glm::vec3 m_Front{ 0.0f, 1.0f, 0.0f };
         glm::vec3 m_Right{ 1.0f, 0.0f, 0.0f };

@@ -15,6 +15,8 @@ namespace Trident
         glfwGetCursorPos(m_Window, &l_X, &l_Y);
         m_LastX = l_X;
         m_LastY = l_Y;
+
+        UpdateVectors();
     }
 
     void Camera::Update(float deltaTime)

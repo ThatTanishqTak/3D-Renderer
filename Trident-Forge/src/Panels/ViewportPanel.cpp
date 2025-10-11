@@ -294,6 +294,7 @@ namespace UI
                         const ImVec2 l_VerticalEnd{ it_Primitive.Position0.x, it_Primitive.Position0.y + it_Primitive.Position1.y };
                         l_DrawList->AddLine(l_HorizontalStart, l_HorizontalEnd, it_Primitive.Color, it_Primitive.Thickness);
                         l_DrawList->AddLine(l_VerticalStart, l_VerticalEnd, it_Primitive.Color, it_Primitive.Thickness);
+
                         break;
                     }
                     case ViewportOverlayPrimitive::Type::Text:
@@ -305,8 +306,7 @@ namespace UI
                 }
             }
 
-            // TODO: Expand overlay collection to include safe-frame guides, grid snapping hints, and gizmo layers for
-            // additional editor polish.
+            // TODO: Expand overlay collection to include safe-frame guides, grid snapping hints, and gizmo layers for additional editor polish.
         }
         else
         {

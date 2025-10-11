@@ -29,8 +29,8 @@ namespace UI
         constexpr Trident::ECS::Entity s_InvalidEntity = std::numeric_limits<Trident::ECS::Entity>::max();
     }
 
-    InspectorPanel::InspectorPanel(): m_SelectedEntity(s_InvalidEntity), m_CameraNameBuffer{}, m_CachedCameraEntity(s_InvalidEntity), m_SpriteTextureBuffer{}, m_SpriteMaterialBuffer{},
-        m_SpriteTexturePath{}, m_OpenSpriteTextureDialog(false), m_CachedSpriteEntity(s_InvalidEntity), m_GizmoOperation(nullptr), m_GizmoMode(nullptr)
+    InspectorPanel::InspectorPanel(): m_SelectedEntity(s_InvalidEntity), m_CameraNameBuffer{}, m_CachedCameraEntity(s_InvalidEntity), m_SpriteTextureBuffer{}, 
+        m_SpriteMaterialBuffer{}, m_SpriteTexturePath{}, m_OpenSpriteTextureDialog(false), m_CachedSpriteEntity(s_InvalidEntity), m_GizmoOperation(nullptr), m_GizmoMode(nullptr)
     {
         // Initialise caches so the panel behaves predictably when selection changes.
     }
@@ -51,6 +51,7 @@ namespace UI
         if (!ImGui::Begin("Details"))
         {
             ImGui::End();
+
             return;
         }
 
@@ -87,6 +88,7 @@ namespace UI
         if (!a_Registry.HasComponent<Trident::Transform>(m_SelectedEntity))
         {
             ImGui::TextUnformatted("Transform component not present.");
+
             return;
         }
 
@@ -416,6 +418,7 @@ namespace UI
         if (!m_GizmoOperation || !m_GizmoMode)
         {
             ImGui::TextUnformatted("Gizmo state unavailable.");
+
             return;
         }
 
@@ -506,9 +509,9 @@ namespace UI
             l_Watcher.EnableAutoReload(l_AutoReload);
         }
 
-        const auto l_StatusToString = [](Trident::Utilities::FileWatcher::ReloadStatus a_Status) -> const char*
+        const auto l_StatusToString = [](Trident::Utilities::FileWatcher::ReloadStatus status) -> const char*
             {
-                switch (a_Status)
+                switch (status)
                 {
                 case Trident::Utilities::FileWatcher::ReloadStatus::Detected: return "Detected";
                 case Trident::Utilities::FileWatcher::ReloadStatus::Queued: return "Queued";
@@ -518,9 +521,9 @@ namespace UI
                 }
             };
 
-        const auto l_TypeToString = [](Trident::Utilities::FileWatcher::WatchType a_Type) -> const char*
+        const auto l_TypeToString = [](Trident::Utilities::FileWatcher::WatchType type) -> const char*
             {
-                switch (a_Type)
+                switch (type)
                 {
                 case Trident::Utilities::FileWatcher::WatchType::Shader: return "Shader";
                 case Trident::Utilities::FileWatcher::WatchType::Model: return "Model";
