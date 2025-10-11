@@ -275,7 +275,7 @@ namespace Trident
         static constexpr float s_DefaultDirectionalIntensity = 5.0f; ///< Brightness used when no lights exist.
         glm::vec3 m_AmbientColor{ 0.03f };  // Ambient tint simulating image-based lighting
         float m_AmbientIntensity = 1.0f;     // Scalar multiplier for ambient contribution
-        glm::vec4 m_ClearColor{ 0.0f, 0.0f, 0.0f, 1.0f }; // Default background colour used for both offscreen and swapchain clears
+        glm::vec4 m_ClearColor{ 0.005f, 0.005f, 0.005f, 1.0f }; // Default background colour used for both offscreen and swapchain clears
 
         // Performance metrics
         static constexpr size_t s_PerformanceHistorySize = 240;

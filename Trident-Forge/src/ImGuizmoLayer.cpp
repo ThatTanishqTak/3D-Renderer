@@ -8,8 +8,6 @@
 #include "ECS/Components/TransformComponent.h"
 #include "Renderer/Renderer.h"
 
-#include <imgui.h>
-
 #include <algorithm>
 #include <limits>
 

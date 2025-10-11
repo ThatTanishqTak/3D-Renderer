@@ -188,7 +188,9 @@ namespace UI
             if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
             {
                 // Avoid clearing while a gizmo drag is active so transform edits are not interrupted mid-manipulation.
-                if (!ImGuizmo::IsUsing())
+                const bool l_GizmoActive = ImGuizmo::IsUsing();
+                const bool l_GizmoHovered = ImGuizmo::IsOver();
+                if (!l_GizmoActive && !l_GizmoHovered)
                 {
                     m_SelectedEntity = s_InvalidEntity;
                 }
