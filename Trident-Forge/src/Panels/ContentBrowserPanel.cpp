@@ -16,9 +16,8 @@
 
 namespace UI
 {
-    ContentBrowserPanel::ContentBrowserPanel(): m_Engine(nullptr), m_OnnxRuntime(nullptr), m_ModelPath(), m_TexturePath(), m_ScenePath(), m_OnnxPath(), m_OpenModelDialog(false),
-        m_OpenTextureDialog(false), m_OpenSceneDialog(false), m_OpenOnnxDialog(false), m_OnnxLoaded(false), m_CurrentDirectory("Assets"), m_SelectedPath("Assets"),
-        m_ThumbnailSize(96.0f), m_ThumbnailPadding(16.0f)
+    ContentBrowserPanel::ContentBrowserPanel(): m_Engine(nullptr), m_OnnxRuntime(nullptr), m_OpenModelDialog(false), m_OpenTextureDialog(false), m_OpenSceneDialog(false), 
+        m_OpenOnnxDialog(false), m_OnnxLoaded(false), m_CurrentDirectory("Assets"), m_SelectedPath("Assets"), m_ThumbnailSize(96.0f), m_ThumbnailPadding(16.0f), m_DragPayloadBuffer()
     {
         // Constructor prepares default state so the panel can lazily bind dependencies.
         m_AssetsPath = "Assets";
@@ -102,157 +101,157 @@ namespace UI
         ImGui::End();
     }
 
-    void ContentBrowserPanel::DrawModelSection()
-    {
-        // Provide an entry point for artists to load geometry assets.
-        ImGui::Text("Model: %s", m_ModelPath.c_str());
-        if (ImGui::Button("Load Model"))
-        {
-            m_OpenModelDialog = true;
-            ImGui::OpenPopup("ModelDialog");
-        }
+    //void ContentBrowserPanel::DrawModelSection()
+    //{
+    //    // Provide an entry point for artists to load geometry assets.
+    //    ImGui::Text("Model: %s", m_ModelPath.c_str());
+    //    if (ImGui::Button("Load Model"))
+    //    {
+    //        m_OpenModelDialog = true;
+    //        ImGui::OpenPopup("ModelDialog");
+    //    }
 
-        if (!m_OpenModelDialog)
-        {
-            return;
-        }
+    //    if (!m_OpenModelDialog)
+    //    {
+    //        return;
+    //    }
 
-        if (Trident::UI::FileDialog::Open("ModelDialog", m_ModelPath, ".fbx"))
-        {
-            auto a_ModelData = Trident::Loader::ModelLoader::Load(m_ModelPath);
-            Trident::Application::GetRenderer().UploadMesh(a_ModelData.Meshes, a_ModelData.Materials);
-            m_OpenModelDialog = false;
-        }
+    //    if (Trident::UI::FileDialog::Open("ModelDialog", m_ModelPath, ".fbx"))
+    //    {
+    //        auto a_ModelData = Trident::Loader::ModelLoader::Load(m_ModelPath);
+    //        Trident::Application::GetRenderer().UploadMesh(a_ModelData.Meshes, a_ModelData.Materials);
+    //        m_OpenModelDialog = false;
+    //    }
 
-        if (!ImGui::IsPopupOpen("ModelDialog"))
-        {
-            m_OpenModelDialog = false;
-        }
-    }
+    //    if (!ImGui::IsPopupOpen("ModelDialog"))
+    //    {
+    //        m_OpenModelDialog = false;
+    //    }
+    //}
 
-    void ContentBrowserPanel::DrawTextureSection()
-    {
-        // Allow users to stage textures for material authoring.
-        ImGui::Text("Texture: %s", m_TexturePath.c_str());
-        if (ImGui::Button("Load Texture"))
-        {
-            m_OpenTextureDialog = true;
-            ImGui::OpenPopup("TextureDialog");
-        }
+    //void ContentBrowserPanel::DrawTextureSection()
+    //{
+    //    // Allow users to stage textures for material authoring.
+    //    ImGui::Text("Texture: %s", m_TexturePath.c_str());
+    //    if (ImGui::Button("Load Texture"))
+    //    {
+    //        m_OpenTextureDialog = true;
+    //        ImGui::OpenPopup("TextureDialog");
+    //    }
 
-        if (!m_OpenTextureDialog)
-        {
-            return;
-        }
+    //    if (!m_OpenTextureDialog)
+    //    {
+    //        return;
+    //    }
 
-        if (Trident::UI::FileDialog::Open("TextureDialog", m_TexturePath))
-        {
-            auto a_Texture = Trident::Loader::TextureLoader::Load(m_TexturePath);
-            Trident::Application::GetRenderer().UploadTexture(a_Texture);
-            m_OpenTextureDialog = false;
-        }
+    //    if (Trident::UI::FileDialog::Open("TextureDialog", m_TexturePath))
+    //    {
+    //        auto a_Texture = Trident::Loader::TextureLoader::Load(m_TexturePath);
+    //        Trident::Application::GetRenderer().UploadTexture(a_Texture);
+    //        m_OpenTextureDialog = false;
+    //    }
 
-        if (!ImGui::IsPopupOpen("TextureDialog"))
-        {
-            m_OpenTextureDialog = false;
-        }
-    }
+    //    if (!ImGui::IsPopupOpen("TextureDialog"))
+    //    {
+    //        m_OpenTextureDialog = false;
+    //    }
+    //}
 
-    void ContentBrowserPanel::DrawSceneSection()
-    {
-        // Gate scene loading through the engine pointer so we avoid dereferencing null.
-        const bool l_HasEngine = m_Engine != nullptr;
+    //void ContentBrowserPanel::DrawSceneSection()
+    //{
+    //    // Gate scene loading through the engine pointer so we avoid dereferencing null.
+    //    const bool l_HasEngine = m_Engine != nullptr;
 
-        ImGui::BeginDisabled(!l_HasEngine);
-        ImGui::Text("Scene: %s", m_ScenePath.c_str());
-        if (ImGui::Button("Load Scene"))
-        {
-            m_OpenSceneDialog = true;
-            ImGui::OpenPopup("SceneDialog");
-        }
-        ImGui::EndDisabled();
+    //    ImGui::BeginDisabled(!l_HasEngine);
+    //    ImGui::Text("Scene: %s", m_ScenePath.c_str());
+    //    if (ImGui::Button("Load Scene"))
+    //    {
+    //        m_OpenSceneDialog = true;
+    //        ImGui::OpenPopup("SceneDialog");
+    //    }
+    //    ImGui::EndDisabled();
 
-        if (m_OpenSceneDialog)
-        {
-            if (Trident::UI::FileDialog::Open("SceneDialog", m_ScenePath, ".scene"))
-            {
-                if (m_Engine != nullptr)
-                {
-                    m_Engine->LoadScene(m_ScenePath);
-                }
-                m_OpenSceneDialog = false;
-            }
+    //    if (m_OpenSceneDialog)
+    //    {
+    //        if (Trident::UI::FileDialog::Open("SceneDialog", m_ScenePath, ".scene"))
+    //        {
+    //            if (m_Engine != nullptr)
+    //            {
+    //                m_Engine->LoadScene(m_ScenePath);
+    //            }
+    //            m_OpenSceneDialog = false;
+    //        }
 
-            if (!ImGui::IsPopupOpen("SceneDialog"))
-            {
-                m_OpenSceneDialog = false;
-            }
-        }
+    //        if (!ImGui::IsPopupOpen("SceneDialog"))
+    //        {
+    //            m_OpenSceneDialog = false;
+    //        }
+    //    }
 
-        if (!l_HasEngine)
-        {
-            ImGui::TextUnformatted("Scene loading is disabled until the engine is initialised.");
-        }
-    }
+    //    if (!l_HasEngine)
+    //    {
+    //        ImGui::TextUnformatted("Scene loading is disabled until the engine is initialised.");
+    //    }
+    //}
 
-    void ContentBrowserPanel::DrawOnnxSection()
-    {
-        // Present AI tooling while ensuring controls remain safe when runtime support is absent.
-        const bool l_HasRuntime = m_OnnxRuntime != nullptr;
+    //void ContentBrowserPanel::DrawOnnxSection()
+    //{
+    //    // Present AI tooling while ensuring controls remain safe when runtime support is absent.
+    //    const bool l_HasRuntime = m_OnnxRuntime != nullptr;
 
-        ImGui::BeginDisabled(!l_HasRuntime);
-        ImGui::Text("ONNX: %s", m_OnnxPath.c_str());
-        if (ImGui::Button("Load ONNX"))
-        {
-            m_OpenOnnxDialog = true;
-            ImGui::OpenPopup("ONNXDialog");
-        }
-        ImGui::EndDisabled();
+    //    ImGui::BeginDisabled(!l_HasRuntime);
+    //    ImGui::Text("ONNX: %s", m_OnnxPath.c_str());
+    //    if (ImGui::Button("Load ONNX"))
+    //    {
+    //        m_OpenOnnxDialog = true;
+    //        ImGui::OpenPopup("ONNXDialog");
+    //    }
+    //    ImGui::EndDisabled();
 
-        if (m_OpenOnnxDialog)
-        {
-            if (Trident::UI::FileDialog::Open("ONNXDialog", m_OnnxPath, ".onnx"))
-            {
-                if (m_OnnxRuntime != nullptr)
-                {
-                    m_OnnxLoaded = m_OnnxRuntime->LoadModel(m_OnnxPath);
-                }
-                m_OpenOnnxDialog = false;
-            }
+    //    if (m_OpenOnnxDialog)
+    //    {
+    //        if (Trident::UI::FileDialog::Open("ONNXDialog", m_OnnxPath, ".onnx"))
+    //        {
+    //            if (m_OnnxRuntime != nullptr)
+    //            {
+    //                m_OnnxLoaded = m_OnnxRuntime->LoadModel(m_OnnxPath);
+    //            }
+    //            m_OpenOnnxDialog = false;
+    //        }
 
-            if (!ImGui::IsPopupOpen("ONNXDialog"))
-            {
-                m_OpenOnnxDialog = false;
-            }
-        }
-        else if (!l_HasRuntime)
-        {
-            ImGui::TextUnformatted("ONNX runtime is unavailable; plug-in support will enable this later.");
-        }
+    //        if (!ImGui::IsPopupOpen("ONNXDialog"))
+    //        {
+    //            m_OpenOnnxDialog = false;
+    //        }
+    //    }
+    //    else if (!l_HasRuntime)
+    //    {
+    //        ImGui::TextUnformatted("ONNX runtime is unavailable; plug-in support will enable this later.");
+    //    }
 
-        if (!l_HasRuntime)
-        {
-            return;
-        }
+    //    if (!l_HasRuntime)
+    //    {
+    //        return;
+    //    }
 
-        if (m_OnnxLoaded)
-        {
-            if (ImGui::Button("Run Inference"))
-            {
-                std::vector<float> l_Input{ 0.0f };
-                std::vector<int64_t> l_Shape{ 1 };
-                auto a_Output = m_OnnxRuntime->Run(l_Input, l_Shape);
-                if (!a_Output.empty())
-                {
-                    TR_INFO("Inference result: {}", a_Output[0]);
-                }
-            }
-        }
-        else
-        {
-            ImGui::TextUnformatted("Load an ONNX model to enable inference testing.");
-        }
-    }
+    //    if (m_OnnxLoaded)
+    //    {
+    //        if (ImGui::Button("Run Inference"))
+    //        {
+    //            std::vector<float> l_Input{ 0.0f };
+    //            std::vector<int64_t> l_Shape{ 1 };
+    //            auto a_Output = m_OnnxRuntime->Run(l_Input, l_Shape);
+    //            if (!a_Output.empty())
+    //            {
+    //                TR_INFO("Inference result: {}", a_Output[0]);
+    //            }
+    //        }
+    //    }
+    //    else
+    //    {
+    //        ImGui::TextUnformatted("Load an ONNX model to enable inference testing.");
+    //    }
+    //}
 
     void ContentBrowserPanel::DrawDirectoryTree(const std::filesystem::path& directory)
     {
@@ -340,6 +339,23 @@ namespace UI
             if (ImGui::IsItemClicked())
             {
                 m_SelectedPath = l_Path;
+            }
+
+            // Promote assets to drag sources so the viewport can accept direct model imports.
+            if (!l_IsDirectory)
+            {
+                if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
+                {
+                    // Cache the absolute path on the panel instance to keep the payload memory valid.
+                    m_DragPayloadBuffer = l_Path.string();
+
+                    const char* l_PayloadData = m_DragPayloadBuffer.c_str();
+                    const size_t l_PayloadSize = (m_DragPayloadBuffer.size() + 1) * sizeof(char);
+                    ImGui::SetDragDropPayload("TRIDENT_CONTENT_BROWSER_PATH", l_PayloadData, l_PayloadSize);
+
+                    ImGui::TextUnformatted(l_Filename.c_str());
+                    ImGui::EndDragDropSource();
+                }
             }
 
             if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))

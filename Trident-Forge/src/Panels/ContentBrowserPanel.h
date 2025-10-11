@@ -54,10 +54,8 @@ namespace UI
     private:
         Trident::Application* m_Engine;
 
-        std::string m_ModelPath;
-        std::string m_TexturePath;
-        std::string m_ScenePath;
-        std::string m_OnnxPath;
+        // Persist the currently dragged asset path so the ImGui payload references stable memory.
+        std::string m_DragPayloadBuffer;
 
         std::string m_AssetsPath;
         std::filesystem::path m_CurrentDirectory;
