@@ -94,6 +94,8 @@ namespace UI
         Trident::Transform& l_EntityTransform = a_Registry.GetComponent<Trident::Transform>(m_SelectedEntity);
         bool l_TransformChanged = false;
 
+        // Use a scoped ID so entity transform controls never collide with editor camera widgets.
+        ImGui::PushID("EntityTransform");
         glm::vec3 l_Position = l_EntityTransform.Position;
         if (ImGui::DragFloat3("Position", glm::value_ptr(l_Position), 0.1f))
         {
@@ -114,6 +116,7 @@ namespace UI
             l_EntityTransform.Scale = l_Scale;
             l_TransformChanged = true;
         }
+        ImGui::PopID();
 
         if (l_TransformChanged)
         {
@@ -157,6 +160,8 @@ namespace UI
 
         if (ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen))
         {
+            // Camera component controls are isolated from editor camera sliders via an ID scope.
+            ImGui::PushID("EntityCameraComponent");
             if (ImGui::InputText("Label", m_CameraNameBuffer.data(), m_CameraNameBuffer.size()))
             {
                 l_CameraComponent.Name = m_CameraNameBuffer.data();
@@ -237,6 +242,7 @@ namespace UI
                 }
                 ImGui::PopID();
             }
+            ImGui::PopID();
         }
     }
 
@@ -449,43 +455,46 @@ namespace UI
 
         Trident::Camera& l_Camera = Trident::Application::GetRenderer().GetCamera();
 
+        // Editor camera controls gain their own ID namespace to prevent conflicts with entity controls.
+        ImGui::PushID("EditorCamera");
         glm::vec3 l_CameraPosition = l_Camera.GetPosition();
-        if (ImGui::DragFloat3("Position", glm::value_ptr(l_CameraPosition), 0.1f))
+        if (ImGui::DragFloat3("Position##EditorCamera", glm::value_ptr(l_CameraPosition), 0.1f))
         {
             l_Camera.SetPosition(l_CameraPosition);
         }
 
         float l_YawDegrees = l_Camera.GetYaw();
-        if (ImGui::DragFloat("Yaw", &l_YawDegrees, 0.1f, -360.0f, 360.0f))
+        if (ImGui::DragFloat("Yaw##EditorCamera", &l_YawDegrees, 0.1f, -360.0f, 360.0f))
         {
             l_Camera.SetYaw(l_YawDegrees);
         }
 
         float l_PitchDegrees = l_Camera.GetPitch();
-        if (ImGui::DragFloat("Pitch", &l_PitchDegrees, 0.1f, -89.0f, 89.0f))
+        if (ImGui::DragFloat("Pitch##EditorCamera", &l_PitchDegrees, 0.1f, -89.0f, 89.0f))
         {
             l_Camera.SetPitch(l_PitchDegrees);
         }
 
         float l_FieldOfView = l_Camera.GetFOV();
-        if (ImGui::SliderFloat("Field of View", &l_FieldOfView, 1.0f, 120.0f))
+        if (ImGui::SliderFloat("Field of View##EditorCamera", &l_FieldOfView, 1.0f, 120.0f))
         {
             l_Camera.SetFOV(l_FieldOfView);
         }
 
         float l_FarClipValue = l_Camera.GetFarClip();
         float l_NearClipValue = l_Camera.GetNearClip();
-        if (ImGui::DragFloat("Near Clip", &l_NearClipValue, 0.01f, 0.001f, l_FarClipValue - 0.01f))
+        if (ImGui::DragFloat("Near Clip##EditorCamera", &l_NearClipValue, 0.01f, 0.001f, l_FarClipValue - 0.01f))
         {
             l_Camera.SetNearClip(l_NearClipValue);
             l_FarClipValue = l_Camera.GetFarClip();
         }
 
         const float l_MinFarClip = l_Camera.GetNearClip() + 0.01f;
-        if (ImGui::DragFloat("Far Clip", &l_FarClipValue, 1.0f, l_MinFarClip, 20000.0f))
+        if (ImGui::DragFloat("Far Clip##EditorCamera", &l_FarClipValue, 1.0f, l_MinFarClip, 20000.0f))
         {
             l_Camera.SetFarClip(l_FarClipValue);
         }
+        ImGui::PopID();
     }
 
     void InspectorPanel::DrawMaterialsSection()

@@ -97,9 +97,6 @@ namespace UI
 
         DrawDirectoryGrid(m_CurrentDirectory);
 
-        ImGui::Separator();
-        ImGui::Text("Selected: %s", m_SelectedPath.empty() ? "None" : m_SelectedPath.string().c_str());
-
         ImGui::EndChild();
 
         ImGui::End();
