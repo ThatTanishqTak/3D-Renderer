@@ -5,6 +5,7 @@
 #include "Loader/SceneLoader.h"
 #include "Loader/ModelLoader.h"
 
+#include "ECS/Scene.h"
 #include "ECS/Components/MeshComponent.h"
 #include "ECS/Components/TransformComponent.h"
 
@@ -12,6 +13,7 @@
 #include <limits>
 #include <utility>
 #include <cstdint>
+#include <filesystem>
 
 namespace Trident
 {
@@ -20,6 +22,7 @@ namespace Trident
     Application::Application(Window& window) : m_Window(window)
     {
         s_Instance = this;
+        m_Scene = std::make_unique<Scene>(m_Registry);
     }
 
     void Application::Init()
@@ -42,6 +45,12 @@ namespace Trident
 
         // Poll the file watcher after window events so any edits get reflected in the next frame.
         Utilities::FileWatcher::Get().Poll();
+
+        // Allow scene scripts and animations to advance even when no rendering occurs.
+        if (m_Scene)
+        {
+            m_Scene->Update(Utilities::Time::GetDeltaTime());
+        }
     }
 
     void Application::RenderScene()
@@ -51,6 +60,24 @@ namespace Trident
 
     void Application::LoadScene(const std::string& path)
     {
+        const std::filesystem::path l_Path(path);
+        // The custom .trident format stores registry state; load through the Scene runtime.
+        if (l_Path.extension() == ".trident")
+        {
+            if (!m_Scene)
+            {
+                m_Scene = std::make_unique<Scene>(m_Registry);
+            }
+
+            const bool l_Loaded = m_Scene->Load(path);
+            if (!l_Loaded)
+            {
+                TR_CORE_ERROR("Unable to load .trident scene '{}'", path);
+            }
+            return;
+        }
+
+        // Fallback to the legacy folder-based loader for raw asset imports.
         Loader::SceneData l_Scene = Loader::SceneLoader::Load(path);
         const bool l_HasMeshes = !l_Scene.Meshes.empty();
 
@@ -72,6 +99,46 @@ namespace Trident
         {
             m_Renderer->UploadMesh(m_LoadedMeshes, m_LoadedMaterials);
         }
+    }
+
+    void Application::SaveScene(const std::string& path) const
+    {
+        if (!m_Scene)
+        {
+            TR_CORE_WARN("SaveScene skipped because no scene instance exists");
+            return;
+        }
+
+        // Persist the registry to disk so sessions can be resumed later.
+        m_Scene->Save(path);
+    }
+
+    void Application::PlayScene()
+    {
+        if (m_Scene)
+        {
+            // Enter play mode so scripts and animations begin updating each frame.
+            m_Scene->Play();
+        }
+    }
+
+    void Application::StopScene()
+    {
+        if (m_Scene)
+        {
+            // Return to edit mode and pause any running scripts.
+            m_Scene->Stop();
+        }
+    }
+
+    bool Application::IsScenePlaying() const
+    {
+        if (!m_Scene)
+        {
+            return false;
+        }
+
+        return m_Scene->IsPlaying();
     }
 
     ECS::Entity Application::ImportModelAsset(const std::string& path)

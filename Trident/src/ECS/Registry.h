@@ -19,6 +19,7 @@ namespace Trident
         public:
             virtual ~IComponentStorage() = default;
             virtual void Remove(Entity entity) = 0;
+            virtual void Clear() = 0;
         };
 
         template<typename T>
@@ -46,6 +47,11 @@ namespace Trident
                 m_Components.erase(entity);
             }
 
+            void Clear() override
+            {
+                m_Components.clear();
+            }
+
         private:
             std::unordered_map<Entity, T> m_Components;
         };
@@ -63,9 +69,9 @@ namespace Trident
 
             void DestroyEntity(Entity entity)
             {
-                for (auto& [type, storage] : m_Storages)
+                for (auto& it_Pair : m_Storages)
                 {
-                    storage->Remove(entity);
+                    it_Pair.second->Remove(entity);
                 }
 
                 auto l_It = std::remove(m_ActiveEntities.begin(), m_ActiveEntities.end(), entity);
@@ -73,6 +79,17 @@ namespace Trident
                 {
                     m_ActiveEntities.erase(l_It, m_ActiveEntities.end());
                 }
+            }
+
+            void Clear()
+            {
+                for (auto& it_Pair : m_Storages)
+                {
+                    it_Pair.second->Clear();
+                }
+
+                m_ActiveEntities.clear();
+                m_NextEntity = 0;
             }
 
             template<typename T, typename... Args>

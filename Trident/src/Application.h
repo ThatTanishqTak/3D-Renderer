@@ -10,6 +10,7 @@
 #include "Geometry/Material.h"
 
 #include "ECS/Registry.h"
+#include "ECS/Scene.h"
 
 #include <vulkan/vulkan.h>
 #include <GLFW/glfw3.h>
@@ -39,6 +40,10 @@ namespace Trident
         void Update();
 
         void LoadScene(const std::string& path);
+        void SaveScene(const std::string& path) const;
+        void PlayScene();
+        void StopScene();
+        [[nodiscard]] bool IsScenePlaying() const;
         ECS::Entity ImportModelAsset(const std::string& path);
         void RenderScene();
 
@@ -55,6 +60,7 @@ namespace Trident
         static Window& GetWindow() { return Get().m_Window; }
         static Renderer& GetRenderer() { return *Get().m_Renderer; }
         static ECS::Registry& GetRegistry() { return Get().m_Registry; }
+        static Scene& GetScene() { return *Get().m_Scene; }
         bool IsDeviceSuitable(VkPhysicalDevice device);
 
     private:
@@ -70,6 +76,7 @@ namespace Trident
 
         std::unique_ptr<Renderer> m_Renderer;
         ECS::Registry m_Registry;
+        std::unique_ptr<Scene> m_Scene;
 
         std::vector<Geometry::Mesh> m_LoadedMeshes;
         std::vector<Geometry::Material> m_LoadedMaterials;
