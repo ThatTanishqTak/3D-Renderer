@@ -1,0 +1,28 @@
+name: build
+on:
+  push:
+    branches: [ main ]
+  pull_request: {}
+
+jobs:
+  cmake:
+    strategy:
+      matrix:
+        # Cover both supported host OS environments and build configurations.
+        os: [ubuntu-latest, windows-latest]
+        build_type: [Release, Debug]
+    runs-on: ${{ matrix.os }}
+    steps:
+      # Ensure the repository and its submodules are available for the build.
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      # Provide a consistent, fast multi-platform generator.
+      - name: Set up Ninja
+        uses: seanmiddleditch/gha-setup-ninja@v4
+      # Generate the build system with the selected configuration.
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+      # Compile the project in parallel to minimize CI time.
+      - name: Build
+        run: cmake --build build --config ${{ matrix.build_type }} --parallel
