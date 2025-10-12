@@ -21,18 +21,6 @@ set_target_properties(Vulkan::Vulkan PROPERTIES
   INTERFACE_INCLUDE_DIRECTORIES "${VULKAN_INCLUDE_DIR}"
 )
 
-set(GLFW_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/vendor/glfw")
-if(WIN32)
-  add_library(glfw3 STATIC IMPORTED GLOBAL)
-  set_target_properties(glfw3 PROPERTIES
-    IMPORTED_LOCATION "${GLFW_ROOT}/lib-vc2022/glfw3.lib"
-    INTERFACE_INCLUDE_DIRECTORIES "${GLFW_ROOT}/include"
-  )
-else()
-  add_subdirectory(${GLFW_ROOT} glfw_build)
-  add_library(glfw3 ALIAS glfw)
-endif()
-
 add_library(glm INTERFACE)
 target_include_directories(glm INTERFACE
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/vendor/glm>
@@ -65,19 +53,6 @@ FetchContent_Declare(assimp
 )
 FetchContent_MakeAvailable(assimp)
 
-set(IMGUI_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/vendor/imgui")
-file(GLOB IMGUI_SOURCES
-  ${IMGUI_ROOT}/*.cpp
-  ${IMGUI_ROOT}/backends/imgui_impl_glfw.cpp
-  ${IMGUI_ROOT}/backends/imgui_impl_vulkan.cpp
-)
-add_library(imgui STATIC ${IMGUI_SOURCES})
-target_include_directories(imgui PUBLIC
-  $<BUILD_INTERFACE:${IMGUI_ROOT}>
-  $<BUILD_INTERFACE:${IMGUI_ROOT}/backends>
-)
-target_link_libraries(imgui PUBLIC glfw3 Vulkan::Vulkan)
-
 set(IMGUIZMO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/vendor/imguizmo")
 set(IMGUIZMO_SOURCES
   ${IMGUIZMO_ROOT}/ImGuizmo.cpp
@@ -99,12 +74,18 @@ target_include_directories(${PROJECT_NAME} PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
 )
 
+# Link against windowing and UI middleware fetched via FetchContent.
+target_link_libraries(${PROJECT_NAME} PRIVATE
+  glfw
+  glad
+  imgui
+)
+
+# Keep existing public dependencies available to dependents.
 target_link_libraries(${PROJECT_NAME} PUBLIC
   Vulkan::Vulkan
-  glfw3
   glm
   spdlog
-  imgui
   imguizmo
   stb
   assimp::assimp
@@ -121,7 +102,6 @@ if(TRIDENT_ENABLE_VIEWPORTS)
 endif()
 
 message(STATUS "Vulkan SDK Path: ${VULKAN_SDK_PATH}")
-message(STATUS "GLFW Root: ${GLFW_ROOT}")
 
 set(ONNXRUNTIME_VERSION "1.17.0")
 set(ONNXRUNTIME_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/vendor/onnxruntime")

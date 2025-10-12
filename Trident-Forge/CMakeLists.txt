@@ -15,6 +15,11 @@ target_link_libraries(${PROJECT_NAME}
     PRIVATE Trident
 )
 
+# Link UI dependencies locally because the editor embeds the runtime.
+target_link_libraries(${PROJECT_NAME}
+    PRIVATE glfw glad imgui
+)
+
 target_link_options(${PROJECT_NAME} PRIVATE
     $<$<CONFIG:Release>:/SUBSYSTEM:WINDOWS>
     $<$<CONFIG:Release>:/ENTRY:mainCRTStartup>
