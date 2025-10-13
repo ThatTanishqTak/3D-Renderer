@@ -60,6 +60,7 @@ set(IMGUIZMO_SOURCES
 add_library(imguizmo STATIC ${IMGUIZMO_SOURCES})
 target_include_directories(imguizmo PUBLIC
   $<BUILD_INTERFACE:${IMGUIZMO_ROOT}>
+  $<BUILD_INTERFACE:${imgui_SOURCE_DIR}>
 )
 target_link_libraries(imguizmo PUBLIC imgui)
 
