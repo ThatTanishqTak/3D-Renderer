@@ -94,7 +94,7 @@ namespace UI
     void ViewportPanel::Render()
     {
         // The primary viewport renders the scene output and provides high-level camera assignment hooks.
-        if (!ImGui::Begin("Viewport"))
+        if (!ImGui::Begin("Viewport", nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse))
         {
             ImGui::End();
 
@@ -177,23 +177,19 @@ namespace UI
         const ImVec2 l_ImageOrigin = ImGui::GetCursorScreenPos();
         const ImVec2 l_ImageAvailable = ImGui::GetContentRegionAvail();
 
-        Trident::ViewportInfo l_Viewport{};
-        l_Viewport.ViewportID = l_ViewportID;
-        l_Viewport.Position = glm::vec2{ l_ImageOrigin.x, l_ImageOrigin.y };
-        l_Viewport.Size = glm::vec2
+        const ImVec2 l_RequestedImageSize
         {
             std::max(l_ImageAvailable.x, 0.0f),
             std::max(l_ImageAvailable.y, 0.0f)
         };
 
-        // Keep the renderer informed so the swapchain image and ImGuizmo draw commands align perfectly.
-        Trident::RenderCommand::SetViewport(l_Viewport);
-
-        const ImVec2 l_ImageSize{ l_Viewport.Size.x, l_Viewport.Size.y };
+        Trident::ViewportInfo l_Viewport{};
+        l_Viewport.ViewportID = l_ViewportID;
         const VkDescriptorSet l_ViewportTexture = Trident::RenderCommand::GetViewportTexture();
-        if (l_ViewportTexture != VK_NULL_HANDLE && l_ImageSize.x > 0.0f && l_ImageSize.y > 0.0f)
+        if (l_ViewportTexture != VK_NULL_HANDLE && l_RequestedImageSize.x > 0.0f && l_RequestedImageSize.y > 0.0f)
         {
-            ImGui::Image(reinterpret_cast<ImTextureID>(l_ViewportTexture), l_ImageSize);
+            ImGui::Image(reinterpret_cast<ImTextureID>(l_ViewportTexture), l_RequestedImageSize);
+            ImGui::SetItemAllowOverlap();
 
             // Clearing the selection when the user clicks empty space keeps the editor behavior consistent with other DCC tools.
             if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
@@ -223,8 +219,15 @@ namespace UI
             }
 
             const ImVec2 l_ImageMin = ImGui::GetItemRectMin();
-            const ImVec2 l_ImageMax = ImGui::GetItemRectMax();
-            const ImVec2 l_ImageExtent{ l_ImageMax.x - l_ImageMin.x, l_ImageMax.y - l_ImageMin.y };
+            const ImVec2 l_ImageSizeOnScreen = ImGui::GetItemRectSize();
+            const ImVec2 l_ImageMax = ImVec2{ l_ImageMin.x + l_ImageSizeOnScreen.x, l_ImageMin.y + l_ImageSizeOnScreen.y };
+            const ImVec2 l_ImageExtent = l_ImageSizeOnScreen;
+
+            l_Viewport.Position = glm::vec2{ l_ImageMin.x, l_ImageMin.y };
+            l_Viewport.Size = glm::vec2{ l_ImageSizeOnScreen.x, l_ImageSizeOnScreen.y };
+
+            // Keep the renderer informed so the swapchain image and ImGuizmo draw commands align perfectly.
+            Trident::RenderCommand::SetViewport(l_Viewport);
 
             glm::mat4 l_ViewMatrix{ 1.0f };
             glm::mat4 l_ProjectionMatrix{ 1.0f };
@@ -338,6 +341,11 @@ namespace UI
         }
         else
         {
+            // Keep the renderer in sync even when the swapchain image is unavailable so downstream systems read safe defaults.
+            l_Viewport.Position = glm::vec2{ l_ImageOrigin.x, l_ImageOrigin.y };
+            l_Viewport.Size = glm::vec2{ 0.0f, 0.0f };
+            Trident::RenderCommand::SetViewport(l_Viewport);
+
             ImGui::TextUnformatted("Scene viewport not ready.");
         }
 

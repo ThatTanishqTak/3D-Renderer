@@ -198,7 +198,7 @@ namespace Trident
         {
             const ImGuiID l_DockspaceID = ImGui::DockSpaceOverViewport();
 
-            vkDeviceWaitIdle(Application::GetDevice());
+            //vkDeviceWaitIdle(Application::GetDevice());
 
             if (m_DockspaceInitialized)
             {

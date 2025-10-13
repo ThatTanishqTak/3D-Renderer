@@ -81,13 +81,16 @@ namespace
             const float l_HalfHeight = cameraComponent.OrthographicSize * 0.5f;
             const float l_HalfWidth = l_HalfHeight * l_Aspect;
 
-            // ImGuizmo expects a projection defined in the conventional OpenGL-style clip space. Avoid the Vulkan Y flip that
-            // the renderer performs so the gizmo aligns with the rendered geometry regardless of camera motion.
-            return glm::ortho(-l_HalfWidth, l_HalfWidth, -l_HalfHeight, l_HalfHeight, cameraComponent.NearClip, cameraComponent.FarClip);
+            // Match the renderer's Vulkan-style clip space by flipping Y so ImGuizmo's axes coincide with the presented image.
+            glm::mat4 l_Projection = glm::ortho(-l_HalfWidth, l_HalfWidth, -l_HalfHeight, l_HalfHeight, cameraComponent.NearClip, cameraComponent.FarClip);
+            l_Projection[1][1] *= -1.0f;
+            return l_Projection;
         }
 
-        // Use the same convention for perspective projections—omit the Vulkan Y flip so ImGuizmo receives a consistent matrix.
-        return glm::perspective(glm::radians(cameraComponent.FieldOfView), l_Aspect, cameraComponent.NearClip, cameraComponent.FarClip);
+        // Mirror the renderer's perspective projection convention (Y down in clip space) to avoid mirrored gizmo handles.
+        glm::mat4 l_Projection = glm::perspective(glm::radians(cameraComponent.FieldOfView), l_Aspect, cameraComponent.NearClip, cameraComponent.FarClip);
+        l_Projection[1][1] *= -1.0f;
+        return l_Projection;
     }
 
     /**
@@ -128,31 +131,29 @@ void ImGuizmoLayer::Render(Trident::ECS::Entity selectedEntity, UI::ViewportPane
 
     // Fetch the viewport rectangle published by the renderer so the gizmo aligns with the active scene view.
     const Trident::ViewportInfo l_ViewportInfo = Trident::Application::GetRenderer().GetViewport();
-    ImVec2 l_RectPosition{};
-    ImVec2 l_RectSize{};
+    const ImVec2 l_RectPosition = ImVec2{ l_ViewportInfo.Position.x, l_ViewportInfo.Position.y };
+    const ImVec2 l_RectSize = ImVec2{ l_ViewportInfo.Size.x, l_ViewportInfo.Size.y };
 
-    if (l_ViewportInfo.Size.x > 0.0f && l_ViewportInfo.Size.y > 0.0f)
+    if (l_RectSize.x <= 0.0f || l_RectSize.y <= 0.0f)
     {
-        // Use the viewport data directly so the gizmo tracks the rendered scene even with multi-viewport enabled.
-        l_RectPosition = ImVec2{ l_ViewportInfo.Position.x, l_ViewportInfo.Position.y };
-        l_RectSize = ImVec2{ l_ViewportInfo.Size.x, l_ViewportInfo.Size.y };
-    }
-    else
-    {
-        // Fall back to the main viewport bounds when the renderer has not published explicit viewport information yet.
-        const ImGuiViewport* l_MainViewport = ImGui::GetMainViewport();
-        l_RectPosition = l_MainViewport->Pos;
-        l_RectSize = l_MainViewport->Size;
+        // Without a valid viewport we cannot perform reliable hit-testing, so bail out early this frame.
+        return;
     }
 
-    // Bind guizmo to the correct platform viewport, not the last ImGui window
-    ImGuiViewport* vp = ImGui::FindViewportByID((ImGuiID)l_ViewportInfo.ViewportID);
-    ImDrawList* dl = vp ? ImGui::GetForegroundDrawList(vp) : ImGui::GetForegroundDrawList();
-    ImGuizmo::SetDrawlist(dl);
+    // Bind the gizmo to the viewport's foreground draw list so it renders above the scene image even with multiple host windows.
+    ImGuiViewport* l_Viewport = ImGui::FindViewportByID(static_cast<ImGuiID>(l_ViewportInfo.ViewportID));
+    ImDrawList* l_DrawList = l_Viewport ? ImGui::GetForegroundDrawList(l_Viewport) : ImGui::GetForegroundDrawList();
+    ImGuizmo::SetDrawlist(l_DrawList);
 
-    dl->AddRect(l_RectPosition, ImVec2(l_RectPosition.x + l_RectSize.x, l_RectPosition.y + l_RectSize.y), IM_COL32(255, 215, 0, 200), 0.0f, 0, 2.0f);
+#if 0
+    // Optional debug outline: enable to visualize the gizmo rect in screen space while diagnosing viewport syncing issues.
+    if (l_DrawList != nullptr)
+    {
+        l_DrawList->AddRect(l_RectPosition, ImVec2(l_RectPosition.x + l_RectSize.x, l_RectPosition.y + l_RectSize.y), IM_COL32(255, 215, 0, 200), 0.0f, 0, 2.0f);
+    }
+#endif
 
-    // Screen-space rect that matches the scene image
+    // Provide ImGuizmo with the exact screen-space bounds of the rendered scene so hit-testing matches the visible image.
     ImGuizmo::SetRect(l_RectPosition.x, l_RectPosition.y, l_RectSize.x, l_RectSize.y);
 
     // Mirror the Scene panel camera selection logic so the gizmo uses whichever camera the user targeted.
@@ -183,6 +184,7 @@ void ImGuizmoLayer::Render(Trident::ECS::Entity selectedEntity, UI::ViewportPane
         l_ViewMatrix = l_Camera.GetViewMatrix();
         const float l_AspectRatio = l_RectSize.y > 0.0f ? l_RectSize.x / l_RectSize.y : 1.0f;
         l_ProjectionMatrix = glm::perspective(glm::radians(l_Camera.GetFOV()), l_AspectRatio, l_Camera.GetNearClip(), l_Camera.GetFarClip());
+        l_ProjectionMatrix[1][1] *= -1.0f;
         l_UseOrthographicGizmo = false;
     }
 
@@ -190,8 +192,6 @@ void ImGuizmoLayer::Render(Trident::ECS::Entity selectedEntity, UI::ViewportPane
     glm::mat4 l_ModelMatrix = ComposeTransform(l_EntityTransform);
 
     ImGuizmo::SetOrthographic(l_UseOrthographicGizmo);
-    ImGuizmo::SetDrawlist();
-    ImGuizmo::SetRect(l_RectPosition.x, l_RectPosition.y, l_RectSize.x, l_RectSize.y);
 
     if (ImGuizmo::Manipulate(glm::value_ptr(l_ViewMatrix), glm::value_ptr(l_ProjectionMatrix), m_GizmoOperation, m_GizmoMode, glm::value_ptr(l_ModelMatrix)))
     {
