@@ -55,7 +55,6 @@ ApplicationLayer::ApplicationLayer()
     m_SelectedEntity = s_InvalidEntity;
 
     // Allow the dedicated ImGuizmo layer to expose its state to UI controls.
-    m_ImGuizmoLayer.Initialize(m_InspectorPanel);
 }
 
 ApplicationLayer::~ApplicationLayer()
@@ -120,18 +119,7 @@ void ApplicationLayer::Run()
         m_SceneHierarchyPanel.Render();
         m_SelectedEntity = m_SceneHierarchyPanel.GetSelectedEntity();
 
-        m_ViewportPanel.SetSelectedEntity(m_SelectedEntity);
-        m_ViewportPanel.Render();
-
-        // Draw the gizmo after the viewport so it aligns with the freshly submitted viewport rect.
-        m_ImGuizmoLayer.Render(m_SelectedEntity, m_ViewportPanel);
-
-        // Evaluate gizmo interaction state before applying pending deselection requests from the viewport.
-        const ImGuizmoInteractionState l_GizmoInteractionState = m_ImGuizmoLayer.GetInteractionState();
-        m_ViewportPanel.ResolvePendingSelection(l_GizmoInteractionState);
-
         // Sync the viewport's selection state so downstream panels (e.g., inspector) respect viewport-driven deselection.
-        m_SelectedEntity = m_ViewportPanel.GetSelectedEntity();
 
         m_InspectorPanel.SetSelectedEntity(m_SelectedEntity);
         m_InspectorPanel.Render();
