@@ -15,11 +15,8 @@ if(NOT VULKAN_INCLUDE_DIR OR NOT VULKAN_LIBRARY)
   message(FATAL_ERROR "Unable to find Vulkan headers or lib in ${VULKAN_SDK_PATH}")
 endif()
 
-add_library(Vulkan::Vulkan UNKNOWN IMPORTED)
-set_target_properties(Vulkan::Vulkan PROPERTIES
-  IMPORTED_LOCATION "${VULKAN_LIBRARY}"
-  INTERFACE_INCLUDE_DIRECTORIES "${VULKAN_INCLUDE_DIR}"
-)
+add_definitions(-DGLFW_INCLUDE_VULKAN)
+find_package(Vulkan REQUIRED)
 
 add_library(glm INTERFACE)
 target_include_directories(glm INTERFACE
@@ -54,14 +51,13 @@ FetchContent_Declare(assimp
 FetchContent_MakeAvailable(assimp)
 
 set(IMGUIZMO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/vendor/imguizmo")
-set(IMGUIZMO_SOURCES
-  ${IMGUIZMO_ROOT}/ImGuizmo.cpp
-)
-add_library(imguizmo STATIC ${IMGUIZMO_SOURCES})
+add_library(imguizmo STATIC ${IMGUIZMO_ROOT}/ImGuizmo.cpp)
+
 target_include_directories(imguizmo PUBLIC
   $<BUILD_INTERFACE:${IMGUIZMO_ROOT}>
-  $<BUILD_INTERFACE:${imgui_SOURCE_DIR}>
 )
+
+# Pulls in ImGui’s public include dirs automatically
 target_link_libraries(imguizmo PUBLIC imgui)
 
 file(GLOB_RECURSE TRIDENT_SOURCES

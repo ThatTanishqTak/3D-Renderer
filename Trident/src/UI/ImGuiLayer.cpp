@@ -145,18 +145,18 @@ namespace Trident
             initInfo.Queue = queue;
             initInfo.PipelineCache = VK_NULL_HANDLE;
             initInfo.DescriptorPool = m_DescriptorPool;
-            initInfo.Subpass = 0;
+            //initInfo.Subpass = 0;
             initInfo.MinImageCount = imageCount;
             initInfo.ImageCount = imageCount;
-            initInfo.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
-            initInfo.RenderPass = renderPass;
+            //initInfo.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+            //initInfo.RenderPass = renderPass;
             //initInfo.CheckVkResultFn = [](VkResult err) { TR_CORE_ERROR("ImGui VkResult: {}", static_cast<int32_t>(err)); };
 
             ImGui_ImplVulkan_Init(&initInfo);
             ImGui_ImplVulkan_SetMinImageCount(imageCount);
 
             ScopedCommandBuffer fontCmd{ device, commandPool, queue };
-            ImGui_ImplVulkan_CreateFontsTexture();
+            //ImGui_ImplVulkan_CreateFontsTexture();
 
             TR_CORE_INFO("-------IMGUI INITIALIZED-------");
 
