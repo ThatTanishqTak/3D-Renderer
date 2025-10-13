@@ -204,13 +204,13 @@ namespace UI
 
             if (ImGui::BeginDragDropTarget())
             {
-                if (const ImGuiPayload* a_Payload = ImGui::AcceptDragDropPayload("TRIDENT_CONTENT_BROWSER_PATH"))
+                if (const ImGuiPayload* l_Payload = ImGui::AcceptDragDropPayload("TRIDENT_CONTENT_BROWSER_PATH"))
                 {
                     std::string l_PathString;
-                    if (a_Payload != nullptr && a_Payload->Data != nullptr && a_Payload->DataSize > 0)
+                    if (l_Payload != nullptr && l_Payload->Data != nullptr && l_Payload->DataSize > 0)
                     {
-                        const char* l_Data = static_cast<const char*>(a_Payload->Data);
-                        l_PathString.assign(l_Data, l_Data + a_Payload->DataSize);
+                        const char* l_Data = static_cast<const char*>(l_Payload->Data);
+                        l_PathString.assign(l_Data, l_Data + l_Payload->DataSize);
                         if (!l_PathString.empty() && l_PathString.back() == '\0')
                         {
                             l_PathString.pop_back();
