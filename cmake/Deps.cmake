@@ -8,14 +8,6 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(glfw)
 
-# GLAD
-FetchContent_Declare(
-  glad
-  GIT_REPOSITORY https://github.com/Dav1dde/glad.git
-  GIT_TAG v2.0.6
-)
-FetchContent_MakeAvailable(glad)
-
 # ImGui (docking branch)
 FetchContent_Declare(
   imgui

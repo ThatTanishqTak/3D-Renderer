@@ -35,15 +35,15 @@ namespace UI
         // Initialise caches so the panel behaves predictably when selection changes.
     }
 
-    void InspectorPanel::SetSelectedEntity(Trident::ECS::Entity a_SelectedEntity)
+    void InspectorPanel::SetSelectedEntity(Trident::ECS::Entity selectedEntity)
     {
-        m_SelectedEntity = a_SelectedEntity;
+        m_SelectedEntity = selectedEntity;
     }
 
-    void InspectorPanel::SetGizmoState(ImGuizmo::OPERATION* a_Operation, ImGuizmo::MODE* a_Mode)
+    void InspectorPanel::SetGizmoState(ImGuizmo::OPERATION* operation, ImGuizmo::MODE* mode)
     {
-        m_GizmoOperation = a_Operation;
-        m_GizmoMode = a_Mode;
+        m_GizmoOperation = operation;
+        m_GizmoMode = mode;
     }
 
     void InspectorPanel::Render()
@@ -83,16 +83,16 @@ namespace UI
         ImGui::End();
     }
 
-    void InspectorPanel::DrawTransformSection(Trident::ECS::Registry& a_Registry)
+    void InspectorPanel::DrawTransformSection(Trident::ECS::Registry& registry)
     {
-        if (!a_Registry.HasComponent<Trident::Transform>(m_SelectedEntity))
+        if (!registry.HasComponent<Trident::Transform>(m_SelectedEntity))
         {
             ImGui::TextUnformatted("Transform component not present.");
 
             return;
         }
 
-        Trident::Transform& l_EntityTransform = a_Registry.GetComponent<Trident::Transform>(m_SelectedEntity);
+        Trident::Transform& l_EntityTransform = registry.GetComponent<Trident::Transform>(m_SelectedEntity);
         bool l_TransformChanged = false;
 
         // Use a scoped ID so entity transform controls never collide with editor camera widgets.
@@ -125,39 +125,39 @@ namespace UI
         }
     }
 
-    void InspectorPanel::ResetCameraCacheIfNeeded(Trident::ECS::Entity a_SelectedEntity, Trident::ECS::Registry& a_Registry)
+    void InspectorPanel::ResetCameraCacheIfNeeded(Trident::ECS::Entity selectedEntity, Trident::ECS::Registry& registry)
     {
-        if (m_CachedCameraEntity == a_SelectedEntity)
+        if (m_CachedCameraEntity == selectedEntity)
         {
             return;
         }
 
         std::fill(m_CameraNameBuffer.begin(), m_CameraNameBuffer.end(), '\0');
-        if (a_Registry.HasComponent<Trident::CameraComponent>(a_SelectedEntity))
+        if (registry.HasComponent<Trident::CameraComponent>(selectedEntity))
         {
-            Trident::CameraComponent& l_CameraComponent = a_Registry.GetComponent<Trident::CameraComponent>(a_SelectedEntity);
+            Trident::CameraComponent& l_CameraComponent = registry.GetComponent<Trident::CameraComponent>(selectedEntity);
             std::strncpy(m_CameraNameBuffer.data(), l_CameraComponent.Name.c_str(), m_CameraNameBuffer.size() - 1);
         }
 
-        m_CachedCameraEntity = a_SelectedEntity;
+        m_CachedCameraEntity = selectedEntity;
     }
 
-    void InspectorPanel::DrawCameraSection(Trident::ECS::Registry& a_Registry)
+    void InspectorPanel::DrawCameraSection(Trident::ECS::Registry& registry)
     {
-        if (!a_Registry.HasComponent<Trident::CameraComponent>(m_SelectedEntity))
+        if (!registry.HasComponent<Trident::CameraComponent>(m_SelectedEntity))
         {
             m_CachedCameraEntity = s_InvalidEntity;
             if (ImGui::Button("Add Camera Component"))
             {
-                Trident::CameraComponent& l_CameraComponent = a_Registry.AddComponent<Trident::CameraComponent>(m_SelectedEntity);
+                Trident::CameraComponent& l_CameraComponent = registry.AddComponent<Trident::CameraComponent>(m_SelectedEntity);
                 l_CameraComponent.Name = "Camera";
                 m_CachedCameraEntity = s_InvalidEntity;
             }
             return;
         }
 
-        Trident::CameraComponent& l_CameraComponent = a_Registry.GetComponent<Trident::CameraComponent>(m_SelectedEntity);
-        ResetCameraCacheIfNeeded(m_SelectedEntity, a_Registry);
+        Trident::CameraComponent& l_CameraComponent = registry.GetComponent<Trident::CameraComponent>(m_SelectedEntity);
+        ResetCameraCacheIfNeeded(m_SelectedEntity, registry);
 
         if (ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen))
         {
@@ -247,9 +247,9 @@ namespace UI
         }
     }
 
-    void InspectorPanel::ResetSpriteCacheIfNeeded(Trident::ECS::Entity a_SelectedEntity, Trident::ECS::Registry& a_Registry)
+    void InspectorPanel::ResetSpriteCacheIfNeeded(Trident::ECS::Entity selectedEntity, Trident::ECS::Registry& registry)
     {
-        if (m_CachedSpriteEntity == a_SelectedEntity)
+        if (m_CachedSpriteEntity == selectedEntity)
         {
             return;
         }
@@ -257,9 +257,9 @@ namespace UI
         std::fill(m_SpriteTextureBuffer.begin(), m_SpriteTextureBuffer.end(), '\0');
         std::fill(m_SpriteMaterialBuffer.begin(), m_SpriteMaterialBuffer.end(), '\0');
 
-        if (a_Registry.HasComponent<Trident::SpriteComponent>(a_SelectedEntity))
+        if (registry.HasComponent<Trident::SpriteComponent>(selectedEntity))
         {
-            Trident::SpriteComponent& l_Sprite = a_Registry.GetComponent<Trident::SpriteComponent>(a_SelectedEntity);
+            Trident::SpriteComponent& l_Sprite = registry.GetComponent<Trident::SpriteComponent>(selectedEntity);
             if (!l_Sprite.m_TextureId.empty())
             {
                 std::strncpy(m_SpriteTextureBuffer.data(), l_Sprite.m_TextureId.c_str(), m_SpriteTextureBuffer.size() - 1);
@@ -272,24 +272,24 @@ namespace UI
             m_OpenSpriteTextureDialog = false;
         }
 
-        m_CachedSpriteEntity = a_SelectedEntity;
+        m_CachedSpriteEntity = selectedEntity;
     }
 
-    void InspectorPanel::DrawSpriteSection(Trident::ECS::Registry& a_Registry)
+    void InspectorPanel::DrawSpriteSection(Trident::ECS::Registry& registry)
     {
-        if (!a_Registry.HasComponent<Trident::SpriteComponent>(m_SelectedEntity))
+        if (!registry.HasComponent<Trident::SpriteComponent>(m_SelectedEntity))
         {
             m_CachedSpriteEntity = s_InvalidEntity;
             if (ImGui::Button("Add Sprite Component"))
             {
-                a_Registry.AddComponent<Trident::SpriteComponent>(m_SelectedEntity);
+                registry.AddComponent<Trident::SpriteComponent>(m_SelectedEntity);
                 m_CachedSpriteEntity = s_InvalidEntity;
             }
             return;
         }
 
-        Trident::SpriteComponent& l_Sprite = a_Registry.GetComponent<Trident::SpriteComponent>(m_SelectedEntity);
-        ResetSpriteCacheIfNeeded(m_SelectedEntity, a_Registry);
+        Trident::SpriteComponent& l_Sprite = registry.GetComponent<Trident::SpriteComponent>(m_SelectedEntity);
+        ResetSpriteCacheIfNeeded(m_SelectedEntity, registry);
 
         if (ImGui::CollapsingHeader("Sprite", ImGuiTreeNodeFlags_DefaultOpen))
         {
@@ -359,19 +359,19 @@ namespace UI
         }
     }
 
-    void InspectorPanel::DrawLightSection(Trident::ECS::Registry& a_Registry)
+    void InspectorPanel::DrawLightSection(Trident::ECS::Registry& registry)
     {
-        if (!a_Registry.HasComponent<Trident::LightComponent>(m_SelectedEntity))
+        if (!registry.HasComponent<Trident::LightComponent>(m_SelectedEntity))
         {
             if (ImGui::Button("Add Light Component"))
             {
-                Trident::LightComponent& l_Light = a_Registry.AddComponent<Trident::LightComponent>(m_SelectedEntity);
+                Trident::LightComponent& l_Light = registry.AddComponent<Trident::LightComponent>(m_SelectedEntity);
                 l_Light.m_Type = Trident::LightComponent::Type::Point;
             }
             return;
         }
 
-        Trident::LightComponent& l_LightComponent = a_Registry.GetComponent<Trident::LightComponent>(m_SelectedEntity);
+        Trident::LightComponent& l_LightComponent = registry.GetComponent<Trident::LightComponent>(m_SelectedEntity);
         if (ImGui::CollapsingHeader("Light", ImGuiTreeNodeFlags_DefaultOpen))
         {
             int l_SelectedType = static_cast<int>(l_LightComponent.m_Type);

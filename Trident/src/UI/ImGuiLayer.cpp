@@ -205,31 +205,31 @@ namespace Trident
                 return;
             }
 
-            // Rebuild the dockspace node tree only once to avoid rebuilding every frame.
-            ImGui::DockBuilderRemoveNode(l_DockspaceID);
-            ImGui::DockBuilderAddNode(l_DockspaceID, ImGuiDockNodeFlags_DockSpace);
-
-            // The main dock node (center) is initially the same as the dockspace identifier.
-            ImGuiID l_CenterNodeID = l_DockspaceID;
-
-            // Split the main node to produce a dedicated area for the World Outliner on the left side.
-            ImGuiID l_LeftNodeID = ImGui::DockBuilderSplitNode(l_CenterNodeID, ImGuiDir_Left, 0.20f, nullptr, &l_CenterNodeID);
-
-            // Split the remaining center horizontally to create a region for the Details panel on the right.
-            ImGuiID l_RightNodeID = ImGui::DockBuilderSplitNode(l_CenterNodeID, ImGuiDir_Right, 0.25f, nullptr, &l_CenterNodeID);
-
-            // Split the updated center vertically to host the Content Browser and Output Log at the bottom.
-            ImGuiID l_BottomNodeID = ImGui::DockBuilderSplitNode(l_CenterNodeID, ImGuiDir_Down, 0.30f, nullptr, &l_CenterNodeID);
-
-            // Dock target windows to their dedicated nodes (tab bar order is Content Browser then Output Log).
-            ImGui::DockBuilderDockWindow("Scene", l_CenterNodeID);                   // Central viewport for the scene rendering.
-            ImGui::DockBuilderDockWindow("Scene Hierarchy", l_LeftNodeID);            // Hierarchy of objects sits on the left for quick access.
-            ImGui::DockBuilderDockWindow("Inspector", l_RightNodeID);                  // Selected object properties live on the right.
-            ImGui::DockBuilderDockWindow("Content Browser", l_BottomNodeID);         // Asset management panel anchored at the bottom.
-            ImGui::DockBuilderDockWindow("Output Log", l_BottomNodeID);              // Output log shares the bottom area with the content browser.
-
-            // Finalize the builder so ImGui can start presenting the configured dockspace.
-            ImGui::DockBuilderFinish(l_DockspaceID);
+            //// Rebuild the dockspace node tree only once to avoid rebuilding every frame.
+            //ImGui::DockBuilderRemoveNode(l_DockspaceID);
+            //ImGui::DockBuilderAddNode(l_DockspaceID, ImGuiDockNodeFlags_DockSpace);
+            //
+            //// The main dock node (center) is initially the same as the dockspace identifier.
+            //ImGuiID l_CenterNodeID = l_DockspaceID;
+            //
+            //// Split the main node to produce a dedicated area for the World Outliner on the left side.
+            //ImGuiID l_LeftNodeID = ImGui::DockBuilderSplitNode(l_CenterNodeID, ImGuiDir_Left, 0.20f, nullptr, &l_CenterNodeID);
+            //
+            //// Split the remaining center horizontally to create a region for the Details panel on the right.
+            //ImGuiID l_RightNodeID = ImGui::DockBuilderSplitNode(l_CenterNodeID, ImGuiDir_Right, 0.25f, nullptr, &l_CenterNodeID);
+            //
+            //// Split the updated center vertically to host the Content Browser and Output Log at the bottom.
+            //ImGuiID l_BottomNodeID = ImGui::DockBuilderSplitNode(l_CenterNodeID, ImGuiDir_Down, 0.30f, nullptr, &l_CenterNodeID);
+            //
+            //// Dock target windows to their dedicated nodes (tab bar order is Content Browser then Output Log).
+            //ImGui::DockBuilderDockWindow("Scene", l_CenterNodeID);                   // Central viewport for the scene rendering.
+            //ImGui::DockBuilderDockWindow("Scene Hierarchy", l_LeftNodeID);            // Hierarchy of objects sits on the left for quick access.
+            //ImGui::DockBuilderDockWindow("Inspector", l_RightNodeID);                  // Selected object properties live on the right.
+            //ImGui::DockBuilderDockWindow("Content Browser", l_BottomNodeID);         // Asset management panel anchored at the bottom.
+            //ImGui::DockBuilderDockWindow("Output Log", l_BottomNodeID);              // Output log shares the bottom area with the content browser.
+            //
+            //// Finalize the builder so ImGui can start presenting the configured dockspace.
+            //ImGui::DockBuilderFinish(l_DockspaceID);
 
             // Mark as initialized so the layout is not reconstructed on subsequent frames.
             m_DockspaceInitialized = true;

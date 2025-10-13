@@ -33,6 +33,12 @@ namespace UI
         ImGui::SameLine();
         ImGui::Checkbox("Auto-scroll", &m_ConsoleAutoScroll);
 
+        ImGui::SameLine();
+        if (ImGui::Checkbox("Enable Performance Capture", &m_EnablePerformanceCapture))
+        {
+            m_Renderer.SetPerformanceCaptureEnabled(m_EnablePerformanceCapture);
+        }
+
         ImGui::Separator();
 
         ImGui::Checkbox("Errors", &m_ShowConsoleErrors);

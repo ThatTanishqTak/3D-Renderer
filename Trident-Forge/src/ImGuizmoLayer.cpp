@@ -145,6 +145,16 @@ void ImGuizmoLayer::Render(Trident::ECS::Entity selectedEntity, UI::ViewportPane
         l_RectSize = l_MainViewport->Size;
     }
 
+    // Bind guizmo to the correct platform viewport, not the last ImGui window
+    ImGuiViewport* vp = ImGui::FindViewportByID((ImGuiID)l_ViewportInfo.ViewportID);
+    ImDrawList* dl = vp ? ImGui::GetForegroundDrawList(vp) : ImGui::GetForegroundDrawList();
+    ImGuizmo::SetDrawlist(dl);
+
+    dl->AddRect(l_RectPosition, ImVec2(l_RectPosition.x + l_RectSize.x, l_RectPosition.y + l_RectSize.y), IM_COL32(255, 215, 0, 200), 0.0f, 0, 2.0f);
+
+    // Screen-space rect that matches the scene image
+    ImGuizmo::SetRect(l_RectPosition.x, l_RectPosition.y, l_RectSize.x, l_RectSize.y);
+
     // Mirror the Scene panel camera selection logic so the gizmo uses whichever camera the user targeted.
     glm::mat4 l_ViewMatrix{ 1.0f };
     glm::mat4 l_ProjectionMatrix{ 1.0f };

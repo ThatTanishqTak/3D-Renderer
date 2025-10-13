@@ -5,6 +5,8 @@
 #include <imgui.h>
 #include <spdlog/spdlog.h>
 
+#include "Renderer/Renderer.h"
+
 namespace UI
 {
 	class OutputPanel
@@ -27,5 +29,9 @@ namespace UI
 		bool m_ShowConsoleLogs = true;
 		bool m_ConsoleAutoScroll = true;
 		size_t m_LastConsoleEntryCount = 0;
+
+		bool m_EnablePerformanceCapture = false;
+
+		Trident::Renderer m_Renderer;
 	};
 }
