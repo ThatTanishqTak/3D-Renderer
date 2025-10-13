@@ -17,7 +17,7 @@ target_link_libraries(${PROJECT_NAME}
 
 # Link UI dependencies locally because the editor embeds the runtime.
 target_link_libraries(${PROJECT_NAME}
-    PRIVATE glfw glad imgui
+    PRIVATE glfw imgui
 )
 
 target_link_options(${PROJECT_NAME} PRIVATE

@@ -74,7 +74,6 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 # Link against windowing and UI middleware fetched via FetchContent.
 target_link_libraries(${PROJECT_NAME} PRIVATE
   glfw
-  glad
   imgui
 )
 
