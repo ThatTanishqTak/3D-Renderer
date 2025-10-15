@@ -12,7 +12,6 @@ struct ApplicationSpecifications
 
 #include "Window/Window.h"
 #include "Application/Startup.h"
-#include "Renderer/Renderer.h"
 
 namespace Trident
 {
@@ -34,6 +33,5 @@ namespace Trident
         ApplicationSpecifications m_Specifications;
         std::unique_ptr<Startup> m_Startup;
         std::unique_ptr<Window> m_Window;
-        std::unique_ptr<Renderer> m_Renderer;
     };
 }

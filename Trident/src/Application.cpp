@@ -33,8 +33,7 @@ namespace Trident
         m_Window = std::make_unique<Window>(m_Specifications);
         m_Startup = std::make_unique<Startup>(*m_Window);
 
-        m_Renderer = std::make_unique<Renderer>();
-        m_Renderer->Init();
+        RenderCommand::Init();
     }
 
     void Application::Run()
@@ -61,6 +60,6 @@ namespace Trident
 
     void Application::Shutdown()
     {
-
+        RenderCommand::Shutdown();
     }
 }
