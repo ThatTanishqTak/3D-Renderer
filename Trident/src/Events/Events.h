@@ -2,6 +2,7 @@
 
 #include "Core/Utilities.h"
 
+#include <sstream>
 #include <iostream>
 
 namespace Trident

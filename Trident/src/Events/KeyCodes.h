@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+
 namespace Trident
 {
 	using KeyCode = uint16_t;

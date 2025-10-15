@@ -2,6 +2,8 @@
 
 #include "Events/Events.h"
 
+#include <sstream>
+
 namespace Trident
 {
 	class WindowResizeEvent : public Events

@@ -1,19 +1,7 @@
 ﻿#include "Application.h"
 
 #include "Renderer/RenderCommand.h"
-
-#include "Loader/SceneLoader.h"
-#include "Loader/ModelLoader.h"
-
-#include "ECS/Scene.h"
-#include "ECS/Components/MeshComponent.h"
-#include "ECS/Components/TransformComponent.h"
-
-#include <string>
-#include <limits>
-#include <utility>
-#include <cstdint>
-#include <filesystem>
+#include "Events/ApplicationEvents.h"
 
 namespace Trident
 {
@@ -31,6 +19,11 @@ namespace Trident
         m_Specifications.Title = "Trident-Forge";
 
         m_Window = std::make_unique<Window>(m_Specifications);
+        m_Window->SetEventCallback([this](Events& l_Event)
+            {
+                // Route every GLFW callback through the Application entry point so systems can react.
+                OnEvent(l_Event);
+            });
         m_Startup = std::make_unique<Startup>(*m_Window);
 
         RenderCommand::Init();
@@ -38,7 +31,7 @@ namespace Trident
 
     void Application::Run()
     {
-        while (!m_Window->ShouldClose())
+        while (m_IsRunning && !m_Window->ShouldClose())
         {
             Update();
 
@@ -56,6 +49,23 @@ namespace Trident
     void Application::Render()
     {
         RenderCommand::DrawFrame();
+    }
+
+    void Application::OnEvent(Events& event)
+    {
+        // Dispatch events by type so only the relevant handler executes and other listeners remain extendable.
+        EventDispatcher l_Dispatcher(event);
+
+        l_Dispatcher.Dispatch<WindowCloseEvent>([this](WindowCloseEvent& l_Event)
+            {
+                (void)l_Event;
+
+                m_IsRunning = false;
+
+                return true;
+            });
+
+        // Future event types (input, window focus, etc.) can be dispatched here without modifying the callback wiring.
     }
 
     void Application::Shutdown()

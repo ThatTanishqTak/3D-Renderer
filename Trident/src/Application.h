@@ -12,6 +12,7 @@ struct ApplicationSpecifications
 
 #include "Window/Window.h"
 #include "Application/Startup.h"
+#include "Events/Events.h"
 
 namespace Trident
 {
@@ -24,6 +25,7 @@ namespace Trident
         void Shutdown();
 
         void Run();
+        void OnEvent(Events& event);
 
     private:
         void Update();
@@ -33,5 +35,6 @@ namespace Trident
         ApplicationSpecifications m_Specifications;
         std::unique_ptr<Startup> m_Startup;
         std::unique_ptr<Window> m_Window;
+        bool m_IsRunning = true;
     };
 }

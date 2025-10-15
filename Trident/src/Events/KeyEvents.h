@@ -3,6 +3,8 @@
 #include "Events/Events.h"
 #include "Events/KeyCodes.h"
 
+#include <sstream>
+
 namespace Trident
 {
 	class KeyEvent : public Events

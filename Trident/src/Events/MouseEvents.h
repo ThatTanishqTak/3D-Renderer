@@ -3,6 +3,8 @@
 #include "Events/Events.h"
 #include "Events/MouseCodes.h"
 
+#include <sstream>
+
 namespace Trident
 {
 	class MouseMovedEvent : public Events
