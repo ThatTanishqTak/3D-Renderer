@@ -3,7 +3,7 @@
 #include "Renderer/Vertex.h"
 #include "Renderer/RenderData.h"
 
-#include "Application.h"
+#include "Application/Startup.h"
 
 #include "Core/Utilities.h"
 
@@ -32,14 +32,14 @@ namespace Trident
 
         if (m_RenderPass != VK_NULL_HANDLE)
         {
-            vkDestroyRenderPass(Application::GetDevice(), m_RenderPass, nullptr);
+            vkDestroyRenderPass(Startup::GetDevice(), m_RenderPass, nullptr);
 
             m_RenderPass = VK_NULL_HANDLE;
         }
 
         if (m_DescriptorSetLayout != VK_NULL_HANDLE)
         {
-            vkDestroyDescriptorSetLayout(Application::GetDevice(), m_DescriptorSetLayout, nullptr);
+            vkDestroyDescriptorSetLayout(Startup::GetDevice(), m_DescriptorSetLayout, nullptr);
 
             m_DescriptorSetLayout = VK_NULL_HANDLE;
         }
@@ -59,7 +59,7 @@ namespace Trident
         {
             if (it_Framebuffer != VK_NULL_HANDLE)
             {
-                vkDestroyFramebuffer(Application::GetDevice(), it_Framebuffer, nullptr);
+                vkDestroyFramebuffer(Startup::GetDevice(), it_Framebuffer, nullptr);
             }
         }
 
@@ -70,7 +70,7 @@ namespace Trident
         {
             if (it_View != VK_NULL_HANDLE)
             {
-                vkDestroyImageView(Application::GetDevice(), it_View, nullptr);
+                vkDestroyImageView(Startup::GetDevice(), it_View, nullptr);
             }
         }
 
@@ -78,7 +78,7 @@ namespace Trident
         {
             if (it_Image != VK_NULL_HANDLE)
             {
-                vkDestroyImage(Application::GetDevice(), it_Image, nullptr);
+                vkDestroyImage(Startup::GetDevice(), it_Image, nullptr);
             }
         }
 
@@ -86,7 +86,7 @@ namespace Trident
         {
             if (it_Memory != VK_NULL_HANDLE)
             {
-                vkFreeMemory(Application::GetDevice(), it_Memory, nullptr);
+                vkFreeMemory(Startup::GetDevice(), it_Memory, nullptr);
             }
         }
 
@@ -99,13 +99,13 @@ namespace Trident
     {
         if (m_GraphicsPipeline != VK_NULL_HANDLE)
         {
-            vkDestroyPipeline(Application::GetDevice(), m_GraphicsPipeline, nullptr);
+            vkDestroyPipeline(Startup::GetDevice(), m_GraphicsPipeline, nullptr);
             m_GraphicsPipeline = VK_NULL_HANDLE;
         }
 
         if (m_PipelineLayout != VK_NULL_HANDLE)
         {
-            vkDestroyPipelineLayout(Application::GetDevice(), m_PipelineLayout, nullptr);
+            vkDestroyPipelineLayout(Startup::GetDevice(), m_PipelineLayout, nullptr);
             m_PipelineLayout = VK_NULL_HANDLE;
         }
     }
@@ -297,7 +297,7 @@ namespace Trident
         for (VkFormat l_Format : l_Candidates)
         {
             VkFormatProperties l_Properties{};
-            vkGetPhysicalDeviceFormatProperties(Application::GetPhysicalDevice(), l_Format, &l_Properties);
+            vkGetPhysicalDeviceFormatProperties(Startup::GetPhysicalDevice(), l_Format, &l_Properties);
             if ((l_Properties.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0)
             {
                 return l_Format;
@@ -311,7 +311,7 @@ namespace Trident
     uint32_t Pipeline::FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) const
     {
         VkPhysicalDeviceMemoryProperties l_MemoryProperties{};
-        vkGetPhysicalDeviceMemoryProperties(Application::GetPhysicalDevice(), &l_MemoryProperties);
+        vkGetPhysicalDeviceMemoryProperties(Startup::GetPhysicalDevice(), &l_MemoryProperties);
 
         for (uint32_t i = 0; i < l_MemoryProperties.memoryTypeCount; ++i)
         {
@@ -384,7 +384,7 @@ namespace Trident
         l_RenderPassInfo.dependencyCount = 1;
         l_RenderPassInfo.pDependencies = &l_Dependency;
 
-        if (vkCreateRenderPass(Application::GetDevice(), &l_RenderPassInfo, nullptr, &m_RenderPass) != VK_SUCCESS)
+        if (vkCreateRenderPass(Startup::GetDevice(), &l_RenderPassInfo, nullptr, &m_RenderPass) != VK_SUCCESS)
         {
             TR_CORE_CRITICAL("Failed to create render pass");
         }
@@ -423,7 +423,7 @@ namespace Trident
         l_LayoutInfo.bindingCount = 3;
         l_LayoutInfo.pBindings = l_Bindings;
 
-        if (vkCreateDescriptorSetLayout(Application::GetDevice(), &l_LayoutInfo, nullptr, &m_DescriptorSetLayout) != VK_SUCCESS)
+        if (vkCreateDescriptorSetLayout(Startup::GetDevice(), &l_LayoutInfo, nullptr, &m_DescriptorSetLayout) != VK_SUCCESS)
         {
             TR_CORE_CRITICAL("Failed to create descriptor set layout");
         }
@@ -475,7 +475,7 @@ namespace Trident
         {
             for (VkShaderModule it_Module : l_ShaderModules)
             {
-                vkDestroyShaderModule(Application::GetDevice(), it_Module, nullptr);
+                vkDestroyShaderModule(Startup::GetDevice(), it_Module, nullptr);
             }
 
             TR_CORE_CRITICAL("Aborting pipeline creation because a shader stage failed to load");
@@ -561,7 +561,7 @@ namespace Trident
         l_PipelineLayoutInfo.pushConstantRangeCount = 1;
         l_PipelineLayoutInfo.pPushConstantRanges = &l_PushConstant;
 
-        if (vkCreatePipelineLayout(Application::GetDevice(), &l_PipelineLayoutInfo, nullptr, &m_PipelineLayout) != VK_SUCCESS)
+        if (vkCreatePipelineLayout(Startup::GetDevice(), &l_PipelineLayoutInfo, nullptr, &m_PipelineLayout) != VK_SUCCESS)
         {
             TR_CORE_CRITICAL("Failed to create pipeline layout");
         }
@@ -583,14 +583,14 @@ namespace Trident
         l_PipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
         l_PipelineInfo.basePipelineIndex = -1;
 
-        if (vkCreateGraphicsPipelines(Application::GetDevice(), VK_NULL_HANDLE, 1, &l_PipelineInfo, nullptr, &m_GraphicsPipeline) != VK_SUCCESS)
+        if (vkCreateGraphicsPipelines(Startup::GetDevice(), VK_NULL_HANDLE, 1, &l_PipelineInfo, nullptr, &m_GraphicsPipeline) != VK_SUCCESS)
         {
             TR_CORE_CRITICAL("Failed to create graphics pipeline");
         }
 
         for (VkShaderModule it_Module : l_ShaderModules)
         {
-            vkDestroyShaderModule(Application::GetDevice(), it_Module, nullptr);
+            vkDestroyShaderModule(Startup::GetDevice(), it_Module, nullptr);
         }
 
         std::error_code l_Error{};
@@ -613,7 +613,7 @@ namespace Trident
     {
         TR_CORE_TRACE("Creating Framebuffers");
 
-        const VkDevice l_Device = Application::GetDevice();
+        const VkDevice l_Device = Startup::GetDevice();
         const size_t l_ImageCount = swapchain.GetImageViews().size();
 
         m_SwapchainFramebuffers.resize(l_ImageCount);
@@ -721,7 +721,7 @@ namespace Trident
 
         if (waitForDevice)
         {
-            vkDeviceWaitIdle(Application::GetDevice());
+            vkDeviceWaitIdle(Startup::GetDevice());
         }
 
         CreateGraphicsPipeline(swapchain);
@@ -745,7 +745,7 @@ namespace Trident
         l_CreateInfo.pCode = reinterpret_cast<const uint32_t*>(code.data());
 
         VkShaderModule l_Module;
-        if (vkCreateShaderModule(Application::GetDevice(), &l_CreateInfo, nullptr, &l_Module) != VK_SUCCESS)
+        if (vkCreateShaderModule(Startup::GetDevice(), &l_CreateInfo, nullptr, &l_Module) != VK_SUCCESS)
         {
             TR_CORE_CRITICAL("Failed to create shader l_Module");
         }

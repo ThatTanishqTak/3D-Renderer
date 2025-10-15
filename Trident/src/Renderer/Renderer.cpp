@@ -1,6 +1,6 @@
 ﻿#include "Renderer/Renderer.h"
 
-#include "Application.h"
+#include "Application/Startup.h"
 
 #include "ECS/Components/TransformComponent.h"
 #include "Geometry/Mesh.h"
@@ -65,9 +65,7 @@ namespace Trident
     {
         TR_CORE_INFO("-------INITIALIZING RENDERER-------");
 
-        m_Registry = &Application::GetRegistry();
-        m_Entity = m_Registry->CreateEntity();
-        m_Registry->AddComponent<Transform>(m_Entity);
+        m_Registry = &Startup::GetRegistry();
 
         m_Swapchain.Init();
         // Reset the cached swapchain image layouts so new back buffers start from a known undefined state.
@@ -98,7 +96,7 @@ namespace Trident
         // Prepare shared quad geometry so every sprite draw can reference the same GPU buffers.
         BuildSpriteGeometry();
 
-        m_Camera = Camera(Application::GetWindow().GetNativeWindow());
+        m_Camera = Camera(Startup::GetWindow().GetNativeWindow());
 
         m_Viewport.Position = { 0.0f, 0.0f };
         m_Viewport.Size = { static_cast<float>(m_Swapchain.GetExtent().width), static_cast<float>(m_Swapchain.GetExtent().height) };
@@ -107,7 +105,7 @@ namespace Trident
 
         VkFenceCreateInfo l_FenceInfo{ VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
         l_FenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-        if (vkCreateFence(Application::GetDevice(), &l_FenceInfo, nullptr, &m_ResourceFence) != VK_SUCCESS)
+        if (vkCreateFence(Startup::GetDevice(), &l_FenceInfo, nullptr, &m_ResourceFence) != VK_SUCCESS)
         {
             TR_CORE_CRITICAL("Failed to create resource fence");
         }
@@ -129,7 +127,7 @@ namespace Trident
 
         if (m_DescriptorPool != VK_NULL_HANDLE)
         {
-            vkDestroyDescriptorPool(Application::GetDevice(), m_DescriptorPool, nullptr);
+            vkDestroyDescriptorPool(Startup::GetDevice(), m_DescriptorPool, nullptr);
 
             m_DescriptorPool = VK_NULL_HANDLE;
         }
@@ -146,28 +144,28 @@ namespace Trident
 
         if (m_TextureSampler != VK_NULL_HANDLE)
         {
-            vkDestroySampler(Application::GetDevice(), m_TextureSampler, nullptr);
+            vkDestroySampler(Startup::GetDevice(), m_TextureSampler, nullptr);
 
             m_TextureSampler = VK_NULL_HANDLE;
         }
 
         if (m_TextureImageView != VK_NULL_HANDLE)
         {
-            vkDestroyImageView(Application::GetDevice(), m_TextureImageView, nullptr);
+            vkDestroyImageView(Startup::GetDevice(), m_TextureImageView, nullptr);
 
             m_TextureImageView = VK_NULL_HANDLE;
         }
 
         if (m_TextureImage != VK_NULL_HANDLE)
         {
-            vkDestroyImage(Application::GetDevice(), m_TextureImage, nullptr);
+            vkDestroyImage(Startup::GetDevice(), m_TextureImage, nullptr);
 
             m_TextureImage = VK_NULL_HANDLE;
         }
 
         if (m_TextureImageMemory != VK_NULL_HANDLE)
         {
-            vkFreeMemory(Application::GetDevice(), m_TextureImageMemory, nullptr);
+            vkFreeMemory(Startup::GetDevice(), m_TextureImageMemory, nullptr);
 
             m_TextureImageMemory = VK_NULL_HANDLE;
         }
@@ -184,7 +182,7 @@ namespace Trident
 
         if (m_ResourceFence != VK_NULL_HANDLE)
         {
-            vkDestroyFence(Application::GetDevice(), m_ResourceFence, nullptr);
+            vkDestroyFence(Startup::GetDevice(), m_ResourceFence, nullptr);
 
             m_ResourceFence = VK_NULL_HANDLE;
         }
@@ -211,7 +209,7 @@ namespace Trident
         }
 
         VkFence l_InFlightFence = m_Commands.GetInFlightFence(m_Commands.CurrentFrame());
-        vkWaitForFences(Application::GetDevice(), 1, &l_InFlightFence, VK_TRUE, UINT64_MAX);
+        vkWaitForFences(Startup::GetDevice(), 1, &l_InFlightFence, VK_TRUE, UINT64_MAX);
 
         uint32_t l_ImageIndex = 0;
         if (!AcquireNextImage(l_ImageIndex, l_InFlightFence))
@@ -223,7 +221,7 @@ namespace Trident
 
         UpdateUniformBuffer(l_ImageIndex);
 
-        vkResetFences(Application::GetDevice(), 1, &l_InFlightFence);
+        vkResetFences(Startup::GetDevice(), 1, &l_InFlightFence);
 
         if (!RecordCommandBuffer(l_ImageIndex))
         {
@@ -258,7 +256,7 @@ namespace Trident
     void Renderer::UploadMesh(const std::vector<Geometry::Mesh>& meshes, const std::vector<Geometry::Material>& materials)
     {
         // Ensure no GPU operations are using the old buffers
-        vkWaitForFences(Application::GetDevice(), 1, &m_ResourceFence, VK_TRUE, UINT64_MAX);
+        vkWaitForFences(Startup::GetDevice(), 1, &m_ResourceFence, VK_TRUE, UINT64_MAX);
 
         // Cache the material table so that future shading passes can evaluate PBR parameters
         m_Materials = materials;
@@ -386,7 +384,7 @@ namespace Trident
             return;
         }
 
-        VkDevice l_Device = Application::GetDevice();
+        VkDevice l_Device = Startup::GetDevice();
 
         vkWaitForFences(l_Device, 1, &m_ResourceFence, VK_TRUE, UINT64_MAX);
 
@@ -577,7 +575,7 @@ namespace Trident
             return nullptr;
         }
 
-        VkDevice l_Device = Application::GetDevice();
+        VkDevice l_Device = Startup::GetDevice();
 
         auto l_TextureStorage = std::make_unique<ImGuiTexture>();
         ImGuiTexture& l_Texture = *l_TextureStorage;
@@ -745,25 +743,25 @@ namespace Trident
         // created during error paths.
         if (texture.m_Sampler != VK_NULL_HANDLE)
         {
-            vkDestroySampler(Application::GetDevice(), texture.m_Sampler, nullptr);
+            vkDestroySampler(Startup::GetDevice(), texture.m_Sampler, nullptr);
             texture.m_Sampler = VK_NULL_HANDLE;
         }
 
         if (texture.m_ImageView != VK_NULL_HANDLE)
         {
-            vkDestroyImageView(Application::GetDevice(), texture.m_ImageView, nullptr);
+            vkDestroyImageView(Startup::GetDevice(), texture.m_ImageView, nullptr);
             texture.m_ImageView = VK_NULL_HANDLE;
         }
 
         if (texture.m_Image != VK_NULL_HANDLE)
         {
-            vkDestroyImage(Application::GetDevice(), texture.m_Image, nullptr);
+            vkDestroyImage(Startup::GetDevice(), texture.m_Image, nullptr);
             texture.m_Image = VK_NULL_HANDLE;
         }
 
         if (texture.m_ImageMemory != VK_NULL_HANDLE)
         {
-            vkFreeMemory(Application::GetDevice(), texture.m_ImageMemory, nullptr);
+            vkFreeMemory(Startup::GetDevice(), texture.m_ImageMemory, nullptr);
             texture.m_ImageMemory = VK_NULL_HANDLE;
         }
 
@@ -1078,16 +1076,16 @@ namespace Trident
         uint32_t l_Width = 0;
         uint32_t l_Height = 0;
 
-        Application::GetWindow().GetFramebufferSize(l_Width, l_Height);
+        Startup::GetWindow().GetFramebufferSize(l_Width, l_Height);
 
         while (l_Width == 0 || l_Height == 0)
         {
             glfwWaitEvents();
 
-            Application::GetWindow().GetFramebufferSize(l_Width, l_Height);
+            Startup::GetWindow().GetFramebufferSize(l_Width, l_Height);
         }
 
-        vkDeviceWaitIdle(Application::GetDevice());
+        vkDeviceWaitIdle(Startup::GetDevice());
 
         m_Pipeline.CleanupFramebuffers();
 
@@ -1124,14 +1122,14 @@ namespace Trident
             if (!m_DescriptorSets.empty())
             {
                 // Free descriptor sets from the old pool so we can rebuild them cleanly.
-                vkFreeDescriptorSets(Application::GetDevice(), m_DescriptorPool, static_cast<uint32_t>(m_DescriptorSets.size()), m_DescriptorSets.data());
+                vkFreeDescriptorSets(Startup::GetDevice(), m_DescriptorPool, static_cast<uint32_t>(m_DescriptorSets.size()), m_DescriptorSets.data());
                 m_DescriptorSets.clear();
             }
 
             if (m_DescriptorPool != VK_NULL_HANDLE)
             {
                 // Tear down the descriptor pool so that we can rebuild it with the new descriptor counts.
-                vkDestroyDescriptorPool(Application::GetDevice(), m_DescriptorPool, nullptr);
+                vkDestroyDescriptorPool(Startup::GetDevice(), m_DescriptorPool, nullptr);
                 m_DescriptorPool = VK_NULL_HANDLE;
             }
 
@@ -1198,7 +1196,7 @@ namespace Trident
         l_PoolInfo.pPoolSizes = l_PoolSizes;
         l_PoolInfo.maxSets = m_Swapchain.GetImageCount();
 
-        if (vkCreateDescriptorPool(Application::GetDevice(), &l_PoolInfo, nullptr, &m_DescriptorPool) != VK_SUCCESS)
+        if (vkCreateDescriptorPool(Startup::GetDevice(), &l_PoolInfo, nullptr, &m_DescriptorPool) != VK_SUCCESS)
         {
             TR_CORE_CRITICAL("Failed to create descriptor pool");
         }
@@ -1219,9 +1217,9 @@ namespace Trident
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, l_StagingBuffer, l_StagingMemory);
 
         void* l_Data = nullptr;
-        vkMapMemory(Application::GetDevice(), l_StagingMemory, 0, l_ImageSize, 0, &l_Data);
+        vkMapMemory(Startup::GetDevice(), l_StagingMemory, 0, l_ImageSize, 0, &l_Data);
         memcpy(l_Data, &l_Pixel, static_cast<size_t>(l_ImageSize));
-        vkUnmapMemory(Application::GetDevice(), l_StagingMemory);
+        vkUnmapMemory(Startup::GetDevice(), l_StagingMemory);
 
         VkImageCreateInfo l_ImageInfo{ VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO };
         l_ImageInfo.imageType = VK_IMAGE_TYPE_2D;
@@ -1237,24 +1235,24 @@ namespace Trident
         l_ImageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         l_ImageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
 
-        if (vkCreateImage(Application::GetDevice(), &l_ImageInfo, nullptr, &m_TextureImage) != VK_SUCCESS)
+        if (vkCreateImage(Startup::GetDevice(), &l_ImageInfo, nullptr, &m_TextureImage) != VK_SUCCESS)
         {
             TR_CORE_CRITICAL("Failed to create default texture image");
         }
 
         VkMemoryRequirements l_MemRequirements{};
-        vkGetImageMemoryRequirements(Application::GetDevice(), m_TextureImage, &l_MemRequirements);
+        vkGetImageMemoryRequirements(Startup::GetDevice(), m_TextureImage, &l_MemRequirements);
 
         VkMemoryAllocateInfo l_AllocInfo{ VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO };
         l_AllocInfo.allocationSize = l_MemRequirements.size;
         l_AllocInfo.memoryTypeIndex = m_Buffers.FindMemoryType(l_MemRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
-        if (vkAllocateMemory(Application::GetDevice(), &l_AllocInfo, nullptr, &m_TextureImageMemory) != VK_SUCCESS)
+        if (vkAllocateMemory(Startup::GetDevice(), &l_AllocInfo, nullptr, &m_TextureImageMemory) != VK_SUCCESS)
         {
             TR_CORE_CRITICAL("Failed to allocate default texture memory");
         }
 
-        vkBindImageMemory(Application::GetDevice(), m_TextureImage, m_TextureImageMemory, 0);
+        vkBindImageMemory(Startup::GetDevice(), m_TextureImage, m_TextureImageMemory, 0);
 
         VkCommandBuffer l_CommandBuffer = m_Commands.BeginSingleTimeCommands();
 
@@ -1314,7 +1312,7 @@ namespace Trident
         l_ViewInfo.subresourceRange.baseArrayLayer = 0;
         l_ViewInfo.subresourceRange.layerCount = 1;
 
-        if (vkCreateImageView(Application::GetDevice(), &l_ViewInfo, nullptr, &m_TextureImageView) != VK_SUCCESS)
+        if (vkCreateImageView(Startup::GetDevice(), &l_ViewInfo, nullptr, &m_TextureImageView) != VK_SUCCESS)
         {
             TR_CORE_CRITICAL("Failed to create texture image view");
         }
@@ -1336,7 +1334,7 @@ namespace Trident
         l_SamplerInfo.minLod = 0.0f;
         l_SamplerInfo.maxLod = 0.0f;
 
-        if (vkCreateSampler(Application::GetDevice(), &l_SamplerInfo, nullptr, &m_TextureSampler) != VK_SUCCESS)
+        if (vkCreateSampler(Startup::GetDevice(), &l_SamplerInfo, nullptr, &m_TextureSampler) != VK_SUCCESS)
         {
             TR_CORE_CRITICAL("Failed to create texture sampler");
         }
@@ -1368,7 +1366,7 @@ namespace Trident
         l_AllocateInfo.pSetLayouts = l_Layouts.data();
 
         m_DescriptorSets.resize(l_ImageCount);
-        if (vkAllocateDescriptorSets(Application::GetDevice(), &l_AllocateInfo, m_DescriptorSets.data()) != VK_SUCCESS)
+        if (vkAllocateDescriptorSets(Startup::GetDevice(), &l_AllocateInfo, m_DescriptorSets.data()) != VK_SUCCESS)
         {
             TR_CORE_CRITICAL("Failed to allocate descriptor sets");
         }
@@ -1415,7 +1413,7 @@ namespace Trident
             l_ImageWrite.pImageInfo = &l_ImageInfo;
 
             VkWriteDescriptorSet l_Writes[] = { l_GlobalWrite, l_MaterialWrite, l_ImageWrite };
-            vkUpdateDescriptorSets(Application::GetDevice(), 3, l_Writes, 0, nullptr);
+            vkUpdateDescriptorSets(Startup::GetDevice(), 3, l_Writes, 0, nullptr);
         }
 
         TR_CORE_TRACE("Descriptor Sets Allocated ({})", l_ImageCount);
@@ -1434,7 +1432,7 @@ namespace Trident
             return;
         }
 
-        VkDevice l_Device = Application::GetDevice();
+        VkDevice l_Device = Startup::GetDevice();
         OffscreenTarget& l_Target = it_Target->second;
 
         vkDeviceWaitIdle(l_Device);
@@ -1532,7 +1530,7 @@ namespace Trident
 
     void Renderer::CreateOrResizeOffscreenResources(OffscreenTarget& target, VkExtent2D extent)
     {
-        VkDevice l_Device = Application::GetDevice();
+        VkDevice l_Device = Startup::GetDevice();
 
         // Ensure the GPU is idle before we reuse or release any image memory.
         vkDeviceWaitIdle(l_Device);
@@ -1798,8 +1796,8 @@ namespace Trident
         l_BootstrapSubmitInfo.commandBufferCount = 1;
         l_BootstrapSubmitInfo.pCommandBuffers = &l_BootstrapCommandBuffer;
 
-        vkQueueSubmit(Application::GetGraphicsQueue(), 1, &l_BootstrapSubmitInfo, VK_NULL_HANDLE);
-        vkQueueWaitIdle(Application::GetGraphicsQueue());
+        vkQueueSubmit(Startup::GetGraphicsQueue(), 1, &l_BootstrapSubmitInfo, VK_NULL_HANDLE);
+        vkQueueWaitIdle(Startup::GetGraphicsQueue());
 
         m_Commands.GetOneTimePool().Release(l_BootstrapCommandBuffer);
 
@@ -1814,7 +1812,7 @@ namespace Trident
 
     bool Renderer::AcquireNextImage(uint32_t& imageIndex, VkFence inFlightFence)
     {
-        VkResult l_Result = vkAcquireNextImageKHR(Application::GetDevice(), m_Swapchain.GetSwapchain(), UINT64_MAX,
+        VkResult l_Result = vkAcquireNextImageKHR(Startup::GetDevice(), m_Swapchain.GetSwapchain(), UINT64_MAX,
             m_Commands.GetImageAvailableSemaphorePerImage(m_Commands.CurrentFrame()), VK_NULL_HANDLE, &imageIndex);
 
         if (l_Result == VK_ERROR_OUT_OF_DATE_KHR)
@@ -1832,7 +1830,7 @@ namespace Trident
         VkFence& l_ImageFence = m_Commands.GetImageInFlight(imageIndex);
         if (l_ImageFence != VK_NULL_HANDLE)
         {
-            vkWaitForFences(Application::GetDevice(), 1, &l_ImageFence, VK_TRUE, UINT64_MAX);
+            vkWaitForFences(Startup::GetDevice(), 1, &l_ImageFence, VK_TRUE, UINT64_MAX);
         }
 
         m_Commands.SetImageInFlight(imageIndex, inFlightFence);
@@ -2391,22 +2389,22 @@ namespace Trident
         l_SubmitInfo.signalSemaphoreCount = 1;
         l_SubmitInfo.pSignalSemaphores = l_SignalSemaphores;
 
-        if (vkQueueSubmit(Application::GetGraphicsQueue(), 1, &l_SubmitInfo, inFlightFence) != VK_SUCCESS)
+        if (vkQueueSubmit(Startup::GetGraphicsQueue(), 1, &l_SubmitInfo, inFlightFence) != VK_SUCCESS)
         {
             TR_CORE_CRITICAL("Failed to submit draw command buffer!");
 
             return EXIT_FAILURE;
         }
 
-        if (vkGetFenceStatus(Application::GetDevice(), m_ResourceFence) == VK_NOT_READY)
+        if (vkGetFenceStatus(Startup::GetDevice(), m_ResourceFence) == VK_NOT_READY)
         {
-            vkWaitForFences(Application::GetDevice(), 1, &m_ResourceFence, VK_TRUE, UINT64_MAX);
+            vkWaitForFences(Startup::GetDevice(), 1, &m_ResourceFence, VK_TRUE, UINT64_MAX);
         }
 
-        vkResetFences(Application::GetDevice(), 1, &m_ResourceFence);
+        vkResetFences(Startup::GetDevice(), 1, &m_ResourceFence);
         VkSubmitInfo l_FenceSubmit{ VK_STRUCTURE_TYPE_SUBMIT_INFO };
         l_FenceSubmit.commandBufferCount = 0;
-        if (vkQueueSubmit(Application::GetGraphicsQueue(), 1, &l_FenceSubmit, m_ResourceFence) != VK_SUCCESS)
+        if (vkQueueSubmit(Startup::GetGraphicsQueue(), 1, &l_FenceSubmit, m_ResourceFence) != VK_SUCCESS)
         {
             TR_CORE_CRITICAL("Failed to submit resource fence");
         }
@@ -2431,7 +2429,7 @@ namespace Trident
         l_PresentInfo.pSwapchains = l_Swapchains;
         l_PresentInfo.pImageIndices = &imageIndex;
 
-        VkResult l_PresentResult = vkQueuePresentKHR(Application::GetPresentQueue(), &l_PresentInfo);
+        VkResult l_PresentResult = vkQueuePresentKHR(Startup::GetPresentQueue(), &l_PresentInfo);
 
         // Future improvement: leverage VK_EXT_swapchain_maintenance1 to release images earlier if presentation gets backlogged.
 
@@ -2456,7 +2454,7 @@ namespace Trident
             if (!l_DeviceIdle)
             {
                 // Block the graphics queue once before processing the first reload to ensure resources are idle.
-                vkDeviceWaitIdle(Application::GetDevice());
+                vkDeviceWaitIdle(Startup::GetDevice());
                 l_DeviceIdle = true;
             }
 
@@ -2647,13 +2645,13 @@ namespace Trident
         }
 
         void* l_Data = nullptr;
-        vkMapMemory(Application::GetDevice(), m_GlobalUniformBuffersMemory[currentImage], 0, sizeof(l_Global), 0, &l_Data);
+        vkMapMemory(Startup::GetDevice(), m_GlobalUniformBuffersMemory[currentImage], 0, sizeof(l_Global), 0, &l_Data);
         memcpy(l_Data, &l_Global, sizeof(l_Global));
-        vkUnmapMemory(Application::GetDevice(), m_GlobalUniformBuffersMemory[currentImage]);
+        vkUnmapMemory(Startup::GetDevice(), m_GlobalUniformBuffersMemory[currentImage]);
 
-        vkMapMemory(Application::GetDevice(), m_MaterialUniformBuffersMemory[currentImage], 0, sizeof(l_Material), 0, &l_Data);
+        vkMapMemory(Startup::GetDevice(), m_MaterialUniformBuffersMemory[currentImage], 0, sizeof(l_Material), 0, &l_Data);
         memcpy(l_Data, &l_Material, sizeof(l_Material));
-        vkUnmapMemory(Application::GetDevice(), m_MaterialUniformBuffersMemory[currentImage]);
+        vkUnmapMemory(Startup::GetDevice(), m_MaterialUniformBuffersMemory[currentImage]);
     }
 
     void Renderer::SetTransform(const Transform& props)

@@ -1,6 +1,6 @@
 #include "UI/FileDialog.h"
 
-#include "Application.h"
+#include "Application/Startup.h"
 #include "Loader/TextureLoader.h"
 #include "Renderer/Renderer.h"
 
@@ -113,7 +113,7 @@ namespace Trident
                         return l_Icon;
                     }
 
-                    Renderer::ImGuiTexture* a_Texture = Application::GetRenderer().CreateImGuiTexture(l_TextureData);
+                    Renderer::ImGuiTexture* a_Texture = Startup::GetRenderer().CreateImGuiTexture(l_TextureData);
                     if (a_Texture != nullptr)
                     {
                         l_Icon.m_TextureId = a_Texture->m_Descriptor;

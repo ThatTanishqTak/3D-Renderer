@@ -6,11 +6,11 @@
 
 namespace Trident
 {
-    Window::Window(uint32_t width, uint32_t height, const std::string& title)
+    Window::Window(ApplicationSpecifications specs)
     {
         TR_CORE_INFO("-------INITIALIZING WINDOW-------");
         
-        InitWindow(width, height, title);
+        InitWindow(specs.Width, specs.Height, specs.Title);
 
         TR_CORE_INFO("-------WINDOW INITIALIZED-------");
     }

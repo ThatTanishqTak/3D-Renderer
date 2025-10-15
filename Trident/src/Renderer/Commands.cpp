@@ -1,6 +1,6 @@
 #include "Renderer/Commands.h"
 
-#include "Application.h"
+#include "Application/Startup.h"
 #include "Core/Utilities.h"
 
 namespace Trident
@@ -16,7 +16,7 @@ namespace Trident
 
     void Commands::Cleanup()
     {
-        const VkDevice l_Device = Application::GetDevice();
+        const VkDevice l_Device = Startup::GetDevice();
 
         // Tear down per-image semaphores before pool destruction so presentation never observes recycled handles mid-teardown.
         for (VkSemaphore l_RenderFinished : m_RenderFinishedSemaphoresPerImage)
@@ -45,7 +45,7 @@ namespace Trident
 
         if (!m_CommandBuffers.empty())
         {
-            vkFreeCommandBuffers(Application::GetDevice(), m_CommandPool, static_cast<uint32_t>(m_CommandBuffers.size()), m_CommandBuffers.data());
+            vkFreeCommandBuffers(Startup::GetDevice(), m_CommandPool, static_cast<uint32_t>(m_CommandBuffers.size()), m_CommandBuffers.data());
 
             m_CommandBuffers.clear();
         }
@@ -54,7 +54,7 @@ namespace Trident
 
         if (m_CommandPool != VK_NULL_HANDLE)
         {
-            vkDestroyCommandPool(Application::GetDevice(), m_CommandPool, nullptr);
+            vkDestroyCommandPool(Startup::GetDevice(), m_CommandPool, nullptr);
 
             m_CommandPool = VK_NULL_HANDLE;
         }
@@ -67,7 +67,7 @@ namespace Trident
 
     void Commands::Recreate(uint32_t commandBufferCount)
     {
-        const VkDevice l_Device = Application::GetDevice();
+        const VkDevice l_Device = Startup::GetDevice();
 
         for (VkSemaphore l_RenderFinished : m_RenderFinishedSemaphoresPerImage)
         {
@@ -100,7 +100,7 @@ namespace Trident
 
         m_CurrentFrame = 0;
 
-        vkFreeCommandBuffers(Application::GetDevice(), m_CommandPool, static_cast<uint32_t>(m_CommandBuffers.size()), m_CommandBuffers.data());
+        vkFreeCommandBuffers(Startup::GetDevice(), m_CommandPool, static_cast<uint32_t>(m_CommandBuffers.size()), m_CommandBuffers.data());
         m_CommandBuffers.clear();
         m_OneTimePool.Cleanup();
 
@@ -131,8 +131,8 @@ namespace Trident
         l_SubmitInfo.commandBufferCount = 1;
         l_SubmitInfo.pCommandBuffers = &l_CommandBuffer;
 
-        vkQueueSubmit(Application::GetGraphicsQueue(), 1, &l_SubmitInfo, VK_NULL_HANDLE);
-        vkQueueWaitIdle(Application::GetGraphicsQueue());
+        vkQueueSubmit(Startup::GetGraphicsQueue(), 1, &l_SubmitInfo, VK_NULL_HANDLE);
+        vkQueueWaitIdle(Startup::GetGraphicsQueue());
 
         m_OneTimePool.Release(l_CommandBuffer);
     }
@@ -144,9 +144,9 @@ namespace Trident
         VkCommandPoolCreateInfo l_PoolInfo{};
         l_PoolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
         l_PoolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-        l_PoolInfo.queueFamilyIndex = Application::GetQueueFamilyIndices().GraphicsFamily.value();
+        l_PoolInfo.queueFamilyIndex = Startup::GetQueueFamilyIndices().GraphicsFamily.value();
 
-        if (vkCreateCommandPool(Application::GetDevice(), &l_PoolInfo, nullptr, &m_CommandPool) != VK_SUCCESS)
+        if (vkCreateCommandPool(Startup::GetDevice(), &l_PoolInfo, nullptr, &m_CommandPool) != VK_SUCCESS)
         {
             TR_CORE_CRITICAL("Failed to create command pool");
         }
@@ -166,7 +166,7 @@ namespace Trident
         l_AllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
         l_AllocateInfo.commandBufferCount = static_cast<uint32_t>(m_CommandBuffers.size());
 
-        if (vkAllocateCommandBuffers(Application::GetDevice(), &l_AllocateInfo, m_CommandBuffers.data()) != VK_SUCCESS)
+        if (vkAllocateCommandBuffers(Startup::GetDevice(), &l_AllocateInfo, m_CommandBuffers.data()) != VK_SUCCESS)
         {
             TR_CORE_CRITICAL("Failed to allocate command buffers");
         }
@@ -196,8 +196,8 @@ namespace Trident
 
         for (size_t i = 0; i < swapchainImageCount; ++i)
         {
-            if (vkCreateSemaphore(Application::GetDevice(), &semaphoreInfo, nullptr, &m_ImageAvailableSemaphoresPerImage[i]) != VK_SUCCESS ||
-                vkCreateSemaphore(Application::GetDevice(), &semaphoreInfo, nullptr, &m_RenderFinishedSemaphoresPerImage[i]) != VK_SUCCESS)
+            if (vkCreateSemaphore(Startup::GetDevice(), &semaphoreInfo, nullptr, &m_ImageAvailableSemaphoresPerImage[i]) != VK_SUCCESS ||
+                vkCreateSemaphore(Startup::GetDevice(), &semaphoreInfo, nullptr, &m_RenderFinishedSemaphoresPerImage[i]) != VK_SUCCESS)
             {
                 TR_CORE_CRITICAL("Failed to create sync objects for image {}", i);
             }
@@ -205,7 +205,7 @@ namespace Trident
 
         for (size_t i = 0; i < l_FrameCount; ++i)
         {
-            if (vkCreateFence(Application::GetDevice(), &fenceInfo, nullptr, &m_InFlightFences[i]) != VK_SUCCESS)
+            if (vkCreateFence(Startup::GetDevice(), &fenceInfo, nullptr, &m_InFlightFences[i]) != VK_SUCCESS)
             {
                 TR_CORE_CRITICAL("Failed to create in-flight fence for frame {}", i);
             }

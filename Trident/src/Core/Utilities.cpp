@@ -415,10 +415,10 @@ namespace Trident
 
         void Time::Update()
         {
-            double current = glfwGetTime();
+            double l_Current = glfwGetTime();
 
-            s_DeltaTime = static_cast<float>(current - s_LastTime);
-            s_LastTime = current;
+            s_DeltaTime = static_cast<float>(l_Current - s_LastTime);
+            s_LastTime = l_Current;
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------//

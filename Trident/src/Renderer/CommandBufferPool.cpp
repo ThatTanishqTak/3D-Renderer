@@ -1,5 +1,5 @@
 #include "Renderer/CommandBufferPool.h"
-#include "Application.h"
+#include "Application/Startup.h"
 
 namespace Trident
 {
@@ -19,7 +19,7 @@ namespace Trident
         allocInfo.commandPool = m_CommandPool;
         allocInfo.commandBufferCount = count;
 
-        vkAllocateCommandBuffers(Application::GetDevice(), &allocInfo, m_AllBuffers.data());
+        vkAllocateCommandBuffers(Startup::GetDevice(), &allocInfo, m_AllBuffers.data());
         m_FreeBuffers = m_AllBuffers;
     }
 
@@ -27,7 +27,7 @@ namespace Trident
     {
         if (!m_AllBuffers.empty())
         {
-            vkFreeCommandBuffers(Application::GetDevice(), m_CommandPool, static_cast<uint32_t>(m_AllBuffers.size()), m_AllBuffers.data());
+            vkFreeCommandBuffers(Startup::GetDevice(), m_CommandPool, static_cast<uint32_t>(m_AllBuffers.size()), m_AllBuffers.data());
             m_AllBuffers.clear();
             m_FreeBuffers.clear();
         }
@@ -43,7 +43,7 @@ namespace Trident
             allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
             allocInfo.commandPool = m_CommandPool;
             allocInfo.commandBufferCount = 1;
-            vkAllocateCommandBuffers(Application::GetDevice(), &allocInfo, &cmd);
+            vkAllocateCommandBuffers(Startup::GetDevice(), &allocInfo, &cmd);
             m_AllBuffers.push_back(cmd);
 
             return cmd;

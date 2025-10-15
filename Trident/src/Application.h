@@ -1,101 +1,35 @@
 #pragma once
 
 #include "Window/Window.h"
-
-#include "Core/Utilities.h"
-
+#include "Application/Startup.h"
 #include "Renderer/Renderer.h"
 
-#include "Geometry/Mesh.h"
-#include "Geometry/Material.h"
-
-#include "ECS/Registry.h"
-#include "ECS/Scene.h"
-
-#include <vulkan/vulkan.h>
-#include <GLFW/glfw3.h>
-
-#include <optional>
-#include <vector>
-#include <set>
-#include <memory>
-#include <functional>
+struct ApplicationSpecifications
+{
+    int Width = 1920;
+    int Height = 1080;
+    std::string Title = "Trident-Application";
+} specifications;
 
 namespace Trident
 {
-    struct QueueFamilyIndices
-    {
-        std::optional<uint32_t> GraphicsFamily;
-        std::optional<uint32_t> PresentFamily;
-
-        bool IsComplete() const { return GraphicsFamily.has_value() && PresentFamily.has_value(); }
-    };
-
     class Application
     {
     public:
-        explicit Application(Window& window);
+        Application();
 
-        void Init();
-        void Update();
-
-        void LoadScene(const std::string& path);
-        void SaveScene(const std::string& path) const;
-        void PlayScene();
-        void StopScene();
-        [[nodiscard]] bool IsScenePlaying() const;
-        ECS::Entity ImportModelAsset(const std::string& path);
-        void RenderScene();
-
+        void Inititialize();
         void Shutdown();
 
-        static Application& Get() { return *s_Instance; }
-        static VkInstance GetInstance() { return Get().m_Instance; }
-        static VkPhysicalDevice GetPhysicalDevice() { return Get().m_PhysicalDevice; }
-        static VkDevice GetDevice() { return Get().m_Device; }
-        static VkSurfaceKHR GetSurface() { return Get().m_Surface; }
-        static VkQueue GetGraphicsQueue() { return Get().m_GraphicsQueue; }
-        static VkQueue GetPresentQueue() { return Get().m_PresentQueue; }
-        static QueueFamilyIndices GetQueueFamilyIndices() { return Get().m_QueueFamilyIndices; }
-        static Window& GetWindow() { return Get().m_Window; }
-        static Renderer& GetRenderer() { return *Get().m_Renderer; }
-        static ECS::Registry& GetRegistry() { return Get().m_Registry; }
-        static Scene& GetScene() { return *Get().m_Scene; }
-        bool IsDeviceSuitable(VkPhysicalDevice device);
+        void Run();
 
     private:
-        Window& m_Window;
-        VkInstance m_Instance = VK_NULL_HANDLE;
-        VkDebugUtilsMessengerEXT m_DebugMessenger = VK_NULL_HANDLE;
-        VkSurfaceKHR m_Surface = VK_NULL_HANDLE;
-        VkPhysicalDevice m_PhysicalDevice = VK_NULL_HANDLE;
-        VkDevice m_Device = VK_NULL_HANDLE;
-        VkQueue m_GraphicsQueue = VK_NULL_HANDLE;
-        VkQueue m_PresentQueue = VK_NULL_HANDLE;
-        QueueFamilyIndices m_QueueFamilyIndices;
+        void Update();
+        void Render();
 
+    private:
+        std::unique_ptr<Startup> m_Startup;
+        std::unique_ptr<Window> m_Window;
         std::unique_ptr<Renderer> m_Renderer;
-        ECS::Registry m_Registry;
-        std::unique_ptr<Scene> m_Scene;
-
-        std::vector<Geometry::Mesh> m_LoadedMeshes;
-        std::vector<Geometry::Material> m_LoadedMaterials;
-
-        static Application* s_Instance;
-
-    private:
-        void InitVulkan();
-        void CleanupVulkan();
-
-        void CreateInstance();
-        void SetupDebugMessenger();
-        void CreateSurface();
-        void PickPhysicalDevice();
-        void CreateLogicalDevice();
-
-        std::vector<const char*> GetRequiredExtensions();
-        bool CheckValidationLayerSupport();
-
-        QueueFamilyIndices FindQueueFamilies(VkPhysicalDevice device);
     };
 }

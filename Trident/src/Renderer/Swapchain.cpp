@@ -1,6 +1,6 @@
 #include "Renderer/Swapchain.h"
 
-#include "Application.h"
+#include "Application/Startup.h"
 #include "Core/Utilities.h"
 
 #include <algorithm>
@@ -20,7 +20,7 @@ namespace Trident
         {
             if (it_View != VK_NULL_HANDLE)
             {
-                vkDestroyImageView(Application::GetDevice(), it_View, nullptr);
+                vkDestroyImageView(Startup::GetDevice(), it_View, nullptr);
             }
         }
 
@@ -28,7 +28,7 @@ namespace Trident
 
         if (m_Swapchain != VK_NULL_HANDLE)
         {
-            vkDestroySwapchainKHR(Application::GetDevice(), m_Swapchain, nullptr);
+            vkDestroySwapchainKHR(Startup::GetDevice(), m_Swapchain, nullptr);
 
             m_Swapchain = VK_NULL_HANDLE;
         }
@@ -40,7 +40,7 @@ namespace Trident
     {
         TR_CORE_TRACE("Creating Swapchain");
 
-        auto l_Details = QuerySwapchainSupport(Application::GetPhysicalDevice(), Application::GetSurface());
+        auto l_Details = QuerySwapchainSupport(Startup::GetPhysicalDevice(), Startup::GetSurface());
 
         VkSurfaceFormatKHR l_SurfaceFormat = ChooseSwapSurfaceFormat(l_Details.Formats);
         VkPresentModeKHR l_PresentMode = ChooseSwapPresentMode(l_Details.PresentModes);
@@ -54,7 +54,7 @@ namespace Trident
 
         VkSwapchainCreateInfoKHR l_CreateInfo{};
         l_CreateInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-        l_CreateInfo.surface = Application::GetSurface();
+        l_CreateInfo.surface = Startup::GetSurface();
         l_CreateInfo.minImageCount = l_ImageCount;
         l_CreateInfo.imageFormat = l_SurfaceFormat.format;
         l_CreateInfo.imageColorSpace = l_SurfaceFormat.colorSpace;
@@ -63,7 +63,7 @@ namespace Trident
         // Ensure swapchain images can also be used as transfer destinations for layout transitions in Renderer.cpp
         l_CreateInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 
-        auto a_Indices = Application::GetQueueFamilyIndices();
+        auto a_Indices = Startup::GetQueueFamilyIndices();
         uint32_t l_QueueFamilyIndices[] = { a_Indices.GraphicsFamily.value(), a_Indices.PresentFamily.value() };
 
         if (a_Indices.GraphicsFamily != a_Indices.PresentFamily)
@@ -86,14 +86,14 @@ namespace Trident
         l_CreateInfo.clipped = VK_TRUE;
         l_CreateInfo.oldSwapchain = VK_NULL_HANDLE;
 
-        if (vkCreateSwapchainKHR(Application::GetDevice(), &l_CreateInfo, nullptr, &m_Swapchain) != VK_SUCCESS)
+        if (vkCreateSwapchainKHR(Startup::GetDevice(), &l_CreateInfo, nullptr, &m_Swapchain) != VK_SUCCESS)
         {
             TR_CORE_CRITICAL("Failed to create swap chain");
         }
 
-        vkGetSwapchainImagesKHR(Application::GetDevice(), m_Swapchain, &l_ImageCount, nullptr);
+        vkGetSwapchainImagesKHR(Startup::GetDevice(), m_Swapchain, &l_ImageCount, nullptr);
         m_Images.resize(l_ImageCount);
-        vkGetSwapchainImagesKHR(Application::GetDevice(), m_Swapchain, &l_ImageCount, m_Images.data());
+        vkGetSwapchainImagesKHR(Startup::GetDevice(), m_Swapchain, &l_ImageCount, m_Images.data());
 
         m_ImageFormat = l_SurfaceFormat.format;
         m_Extent = l_Extent;
@@ -124,7 +124,7 @@ namespace Trident
             l_ViewInfo.subresourceRange.baseArrayLayer = 0;
             l_ViewInfo.subresourceRange.layerCount = 1;
 
-            if (vkCreateImageView(Application::GetDevice(), &l_ViewInfo, nullptr, &m_ImageViews[i]) != VK_SUCCESS)
+            if (vkCreateImageView(Startup::GetDevice(), &l_ViewInfo, nullptr, &m_ImageViews[i]) != VK_SUCCESS)
             {
                 TR_CORE_CRITICAL("Failed to create image view for swapchain image {}", i);
             }
@@ -194,7 +194,7 @@ namespace Trident
         {
             uint32_t l_Width = 0;
             uint32_t l_Height = 0;
-            Application::GetWindow().GetFramebufferSize(l_Width, l_Height);
+            Startup::GetWindow().GetFramebufferSize(l_Width, l_Height);
 
             VkExtent2D l_ActualExtent = { l_Width, l_Height };
 

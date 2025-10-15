@@ -1,12 +1,12 @@
 // Application entry point for Trident-Forge
 
-#include "ApplicationLayer.h"
+#include "Application.h"
 
 int main()
 {
     try
     {
-        ApplicationLayer l_App;
+        Trident::Application l_App;
 
         l_App.Run();
     }

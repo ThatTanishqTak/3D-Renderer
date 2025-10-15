@@ -2,7 +2,7 @@
 #include "Loader/ModelLoader.h"
 #include "Loader/AssimpExtensions.h"
 #include "Core/Utilities.h"
-#include "Application.h"
+#include "Application/Startup.h"
 
 #include "ECS/Components/MeshComponent.h"
 #include "ECS/Components/TransformComponent.h"
@@ -23,7 +23,7 @@ namespace Trident
             SceneData l_Scene{};
 
             // Resolve the active registry up front so meshes can spawn ECS entities as they are imported.
-            ECS::Registry& l_Registry = Application::GetRegistry();
+            ECS::Registry& l_Registry = Startup::GetRegistry();
             fs::path l_Path = Utilities::FileManagement::NormalizePath(directoryPath);
             if (!fs::is_directory(l_Path))
             {

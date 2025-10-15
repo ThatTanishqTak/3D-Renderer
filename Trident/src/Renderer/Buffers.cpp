@@ -1,6 +1,6 @@
 #include "Renderer/Buffers.h"
 
-#include "Application.h"
+#include "Application/Startup.h"
 #include "Core/Utilities.h"
 
 #include <algorithm>
@@ -13,12 +13,12 @@ namespace Trident
         {
             if (it_Allocation.Buffer != VK_NULL_HANDLE)
             {
-                vkDestroyBuffer(Application::GetDevice(), it_Allocation.Buffer, nullptr);
+                vkDestroyBuffer(Startup::GetDevice(), it_Allocation.Buffer, nullptr);
             }
         
             if (it_Allocation.Memory != VK_NULL_HANDLE)
             {
-                vkFreeMemory(Application::GetDevice(), it_Allocation.Memory, nullptr);
+                vkFreeMemory(Startup::GetDevice(), it_Allocation.Memory, nullptr);
             }
         }
 
@@ -45,9 +45,9 @@ namespace Trident
         CreateBuffer(l_BufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, l_StagingBuffer, l_StagingBufferMemory);
 
         void* l_Data;
-        vkMapMemory(Application::GetDevice(), l_StagingBufferMemory, 0, l_BufferSize, 0, &l_Data);
+        vkMapMemory(Startup::GetDevice(), l_StagingBufferMemory, 0, l_BufferSize, 0, &l_Data);
         memcpy(l_Data, vertices.data(), static_cast<size_t>(l_BufferSize));
-        vkUnmapMemory(Application::GetDevice(), l_StagingBufferMemory);
+        vkUnmapMemory(Startup::GetDevice(), l_StagingBufferMemory);
 
         CreateBuffer(l_BufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer, vertexBufferMemory);
         if (vertexBuffer != VK_NULL_HANDLE)
@@ -55,8 +55,8 @@ namespace Trident
             CopyBuffer(l_StagingBuffer, vertexBuffer, l_BufferSize, pool);
         }
 
-        vkDestroyBuffer(Application::GetDevice(), l_StagingBuffer, nullptr);
-        vkFreeMemory(Application::GetDevice(), l_StagingBufferMemory, nullptr);
+        vkDestroyBuffer(Startup::GetDevice(), l_StagingBuffer, nullptr);
+        vkFreeMemory(Startup::GetDevice(), l_StagingBufferMemory, nullptr);
 
         if (vertexBuffer != VK_NULL_HANDLE)
         {
@@ -85,9 +85,9 @@ namespace Trident
         CreateBuffer(l_BufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, l_StagingBuffer, l_StagingBufferMemory);
 
         void* l_Data;
-        vkMapMemory(Application::GetDevice(), l_StagingBufferMemory, 0, l_BufferSize, 0, &l_Data);
+        vkMapMemory(Startup::GetDevice(), l_StagingBufferMemory, 0, l_BufferSize, 0, &l_Data);
         memcpy(l_Data, indices.data(), static_cast<size_t>(l_BufferSize));
-        vkUnmapMemory(Application::GetDevice(), l_StagingBufferMemory);
+        vkUnmapMemory(Startup::GetDevice(), l_StagingBufferMemory);
 
         CreateBuffer(l_BufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexBuffer, indexBufferMemory);
         if (indexBuffer != VK_NULL_HANDLE)
@@ -95,8 +95,8 @@ namespace Trident
             CopyBuffer(l_StagingBuffer, indexBuffer, l_BufferSize, pool);
         }
 
-        vkDestroyBuffer(Application::GetDevice(), l_StagingBuffer, nullptr);
-        vkFreeMemory(Application::GetDevice(), l_StagingBufferMemory, nullptr);
+        vkDestroyBuffer(Startup::GetDevice(), l_StagingBuffer, nullptr);
+        vkFreeMemory(Startup::GetDevice(), l_StagingBufferMemory, nullptr);
 
         if (indexBuffer != VK_NULL_HANDLE)
         {
@@ -133,7 +133,7 @@ namespace Trident
     uint32_t Buffers::FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties)
     {
         VkPhysicalDeviceMemoryProperties l_MemoryProperties;
-        vkGetPhysicalDeviceMemoryProperties(Application::GetPhysicalDevice(), &l_MemoryProperties);
+        vkGetPhysicalDeviceMemoryProperties(Startup::GetPhysicalDevice(), &l_MemoryProperties);
 
         for (uint32_t i = 0; i < l_MemoryProperties.memoryTypeCount; i++)
         {
@@ -165,26 +165,26 @@ namespace Trident
         l_BufferInfo.usage = usage;
         l_BufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-        VkResult l_Result = vkCreateBuffer(Application::GetDevice(), &l_BufferInfo, nullptr, &buffer);
+        VkResult l_Result = vkCreateBuffer(Startup::GetDevice(), &l_BufferInfo, nullptr, &buffer);
         if (l_Result != VK_SUCCESS)
         {
             TR_CORE_CRITICAL("vkCreateBuffer failed(code {}) for size = {} usage = 0x{:x}", static_cast<int>(l_Result), static_cast<uint64_t>(size), static_cast<uint64_t>(usage));
         }
 
         VkMemoryRequirements l_MemoryRequirements;
-        vkGetBufferMemoryRequirements(Application::GetDevice(), buffer, &l_MemoryRequirements);
+        vkGetBufferMemoryRequirements(Startup::GetDevice(), buffer, &l_MemoryRequirements);
 
         VkMemoryAllocateInfo l_AllocateInfo{ VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO };
         l_AllocateInfo.allocationSize = l_MemoryRequirements.size;
         l_AllocateInfo.memoryTypeIndex = FindMemoryType(l_MemoryRequirements.memoryTypeBits, properties);
 
-        l_Result = vkAllocateMemory(Application::GetDevice(), &l_AllocateInfo, nullptr, &bufferMemory);
+        l_Result = vkAllocateMemory(Startup::GetDevice(), &l_AllocateInfo, nullptr, &bufferMemory);
         if (l_Result != VK_SUCCESS)
         {
             TR_CORE_CRITICAL("vkAllocateMemory failed(code {}) for size = {}", static_cast<int>(l_Result), static_cast<uint64_t>(l_MemoryRequirements.size));
         }
 
-        vkBindBufferMemory(Application::GetDevice(), buffer, bufferMemory, 0);
+        vkBindBufferMemory(Startup::GetDevice(), buffer, bufferMemory, 0);
     }
 
     void Buffers::CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size, CommandBufferPool& pool)
@@ -206,8 +206,8 @@ namespace Trident
         l_SubmitInfo.commandBufferCount = 1;
         l_SubmitInfo.pCommandBuffers = &l_CommandBuffer;
 
-        vkQueueSubmit(Application::GetGraphicsQueue(), 1, &l_SubmitInfo, VK_NULL_HANDLE);
-        vkQueueWaitIdle(Application::GetGraphicsQueue());
+        vkQueueSubmit(Startup::GetGraphicsQueue(), 1, &l_SubmitInfo, VK_NULL_HANDLE);
+        vkQueueWaitIdle(Startup::GetGraphicsQueue());
 
         pool.Release(l_CommandBuffer);
     }
@@ -216,12 +216,12 @@ namespace Trident
     {
         if (buffer != VK_NULL_HANDLE)
         {
-            vkDestroyBuffer(Application::GetDevice(), buffer, nullptr);
+            vkDestroyBuffer(Startup::GetDevice(), buffer, nullptr);
         }
 
         if (memory != VK_NULL_HANDLE)
         {
-            vkFreeMemory(Application::GetDevice(), memory, nullptr);
+            vkFreeMemory(Startup::GetDevice(), memory, nullptr);
         }
 
         auto it = std::find_if(m_Allocations.begin(), m_Allocations.end(),
