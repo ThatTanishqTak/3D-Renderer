@@ -210,3 +210,5 @@ void operator delete[](void* ptr) noexcept;
 
 #define TR_MALLOC(size) ::Trident::Utilities::Allocation::Malloc(size, __FILE__, __LINE__)
 #define TR_NEW(TYPE, ...) new(__FILE__, __LINE__) TYPE(__VA_ARGS__)
+
+#define BIT(x) (1 << x)
