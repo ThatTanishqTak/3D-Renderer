@@ -8,7 +8,7 @@ struct ApplicationSpecifications
     int Width = 1920;
     int Height = 1080;
     std::string Title = "Trident-Application";
-} specifications;
+};
 
 #include "Window/Window.h"
 #include "Application/Startup.h"
@@ -31,6 +31,7 @@ namespace Trident
         void Render();
 
     private:
+        ApplicationSpecifications m_Specifications;
         std::unique_ptr<Startup> m_Startup;
         std::unique_ptr<Window> m_Window;
         std::unique_ptr<Renderer> m_Renderer;

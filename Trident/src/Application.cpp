@@ -26,11 +26,11 @@ namespace Trident
 
     void Application::Inititialize()
     {
-        specifications.Width = 1920;
-        specifications.Height = 1080;
-        specifications.Title = "Trident-Forge";
+        m_Specifications.Width = 1920;
+        m_Specifications.Height = 1080;
+        m_Specifications.Title = "Trident-Forge";
 
-        m_Window = std::make_unique<Window>(specifications);
+        m_Window = std::make_unique<Window>(m_Specifications);
         m_Startup = std::make_unique<Startup>(*m_Window);
 
         m_Renderer = std::make_unique<Renderer>();
