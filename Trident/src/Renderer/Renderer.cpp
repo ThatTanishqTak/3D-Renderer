@@ -6,6 +6,7 @@
 #include "Geometry/Mesh.h"
 #include "UI/ImGuiLayer.h"
 #include "Core/Utilities.h"
+#include "Window/Window.h"
 #include "Loader/ModelLoader.h"
 #include "Loader/TextureLoader.h"
 

@@ -2,6 +2,7 @@
 
 #include "Application/Startup.h"
 #include "Core/Utilities.h"
+#include "Window/Window.h"
 
 #include <algorithm>
 #include <limits>
