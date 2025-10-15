@@ -1,11 +1,11 @@
 #pragma once
 
-#include "Application.h" 
-
 #include <GLFW/glfw3.h>
 
 #include <string>
 #include <cstdint>
+
+struct ApplicationSpecifications;
 
 namespace Trident
 {
@@ -13,7 +13,7 @@ namespace Trident
     {
     public:
         Window(uint32_t width = 1920, uint32_t height = 1080, const std::string& title = "Trident-Application");
-        Window(ApplicationSpecifications specs);
+        Window(const ApplicationSpecifications& specs);
         ~Window();
 
         Window(const Window&) = delete;

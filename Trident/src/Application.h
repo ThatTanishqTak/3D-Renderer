@@ -1,8 +1,7 @@
 #pragma once
 
-#include "Window/Window.h"
-#include "Application/Startup.h"
-#include "Renderer/Renderer.h"
+#include <memory>
+#include <string>
 
 struct ApplicationSpecifications
 {
@@ -10,6 +9,10 @@ struct ApplicationSpecifications
     int Height = 1080;
     std::string Title = "Trident-Application";
 } specifications;
+
+#include "Window/Window.h"
+#include "Application/Startup.h"
+#include "Renderer/Renderer.h"
 
 namespace Trident
 {

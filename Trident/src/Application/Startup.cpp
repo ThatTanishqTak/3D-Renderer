@@ -1,25 +1,41 @@
 #include "Startup.h"
 
 #include "Core/Utilities.h"
+#include "Window/Window.h"
 
 #include <set>
+#include <stdexcept>
+#include <GLFW/glfw3.h>
 
 namespace Trident
 {
     Startup* Startup::s_Instance = nullptr;
 
     Startup::Startup(Window& window) : m_Window(window)
-	{
-		Initialize();
-	}
+    {
+        if (s_Instance != nullptr)
+        {
+            // Guard against accidental double construction which would leave
+            // the static accessors pointing at a stale Startup instance.
+            TR_CORE_CRITICAL("Startup already exists");
+            throw std::runtime_error("Startup singleton already constructed");
+        }
 
-	Startup::~Startup()
-	{
-		Shutdown();
-	}
-	
-	void Startup::Initialize()
-	{
+        s_Instance = this;
+
+        Initialize();
+    }
+
+    Startup::~Startup()
+    {
+        Shutdown();
+
+        // Release the singleton slot so a future reinitialisation can succeed.
+        s_Instance = nullptr;
+    }
+
+    void Startup::Initialize()
+    {
         TR_CORE_INFO("-------INITIALIZING VULKAN-------");
 
         CreateInstance();
@@ -31,10 +47,10 @@ namespace Trident
         CreateLogicalDevice();
 
         TR_CORE_INFO("-------VULKAN INITIALIZED-------");
-	}
+    }
 
-	void Startup::Shutdown()
-	{
+    void Startup::Shutdown()
+    {
         TR_CORE_TRACE("Shutting down Vulkan");
 
         if (m_Surface != VK_NULL_HANDLE)
@@ -71,7 +87,7 @@ namespace Trident
         }
 
         TR_CORE_TRACE("Vulkan Shutdown Complete");
-	}
+    }
 
     //------------------------------------------------------------------------------------------------------------------------------------------------------//
 

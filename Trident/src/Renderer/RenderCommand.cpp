@@ -61,7 +61,7 @@ namespace Trident
         return Startup::GetRenderer().GetViewportTexture();
     }
 
-    uint32_t RenderCommand::GetCurrentFrame()
+    size_t RenderCommand::GetCurrentFrame()
     {
         return Startup::GetRenderer().GetCurrentFrame();
     }

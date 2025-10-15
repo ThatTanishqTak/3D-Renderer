@@ -102,7 +102,7 @@ namespace Trident
         // Returns the colour applied when clearing render targets so UI layers can present the current state.
         glm::vec4 GetClearColor() const { return m_ClearColor; }
 
-        uint32_t GetCurrentFrame() const { return m_Commands.CurrentFrame(); }
+        size_t GetCurrentFrame() const { return m_Commands.CurrentFrame(); }
         size_t GetLastFrameAllocationCount() const { return m_FrameAllocationCount; }
         size_t GetModelCount() const { return m_ModelCount; }
         size_t GetTriangleCount() const { return m_TriangleCount; }

@@ -1,12 +1,13 @@
 #include "Window/Window.h"
 
+#include "Application.h"
 #include "Core/Utilities.h"
 
 #include <stdexcept>
 
 namespace Trident
 {
-    Window::Window(ApplicationSpecifications specs)
+    Window::Window(const ApplicationSpecifications& specs)
     {
         TR_CORE_INFO("-------INITIALIZING WINDOW-------");
         
