@@ -61,6 +61,16 @@ namespace Trident
         return Startup::GetRenderer().GetViewportTexture();
     }
 
+    glm::mat4 RenderCommand::GetViewportViewMatrix()
+    {
+        return Startup::GetRenderer().GetViewportViewMatrix();
+    }
+
+    glm::mat4 RenderCommand::GetViewportProjectionMatrix()
+    {
+        return Startup::GetRenderer().GetViewportProjectionMatrix();
+    }
+
     size_t RenderCommand::GetCurrentFrame()
     {
         return Startup::GetRenderer().GetCurrentFrame();

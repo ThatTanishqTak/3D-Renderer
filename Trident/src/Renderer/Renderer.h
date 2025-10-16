@@ -122,6 +122,10 @@ namespace Trident
         VkDescriptorSet GetViewportTexture() const;
         ECS::Entity GetViewportCamera() const { return m_ViewportCamera; }
 
+        // Provide tooling with the matrices required for gizmo overlay composition.
+        glm::mat4 GetViewportViewMatrix() const;
+        glm::mat4 GetViewportProjectionMatrix() const;
+
         Camera& GetCamera() { return m_Camera; }
         const Camera& GetCamera() const { return m_Camera; }
 

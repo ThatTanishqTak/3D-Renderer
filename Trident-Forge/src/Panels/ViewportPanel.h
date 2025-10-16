@@ -6,11 +6,19 @@
 #include "Renderer/RenderCommand.h"
 #include "ECS/Entity.h"
 
+namespace ImGuizmo
+{
+    enum OPERATION;
+    enum MODE;
+}
+
 // The ViewportPanel encapsulates the editor-facing viewport widget, wiring up ImGui with
 // Trident's renderer so the off-screen scene texture is displayed in the UI.
 class ViewportPanel
 {
 public:
+    // Constructor initialises gizmo defaults so the panel is immediately interactive.
+    ViewportPanel();
     // Called once per frame so the panel can prepare state prior to rendering widgets.
     void Update();
     // Draws the viewport ImGui window and presents the renderer output.
@@ -31,4 +39,8 @@ private:
     bool m_IsCameraControlEnabled = false;
     // Camera entity currently driving the viewport render target.
     Trident::ECS::Entity m_ActiveCameraEntity = 0;
+    // Tracks which transform operation the gizmo should perform this frame.
+    ImGuizmo::OPERATION m_GizmoOperation;
+    // Toggles between local and world space so users can align transformations accurately.
+    ImGuizmo::MODE m_GizmoMode;
 };

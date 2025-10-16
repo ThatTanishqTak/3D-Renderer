@@ -23,6 +23,8 @@ namespace Trident
         static Transform GetTransform();
         static ViewportInfo GetViewport();
         static VkDescriptorSet GetViewportTexture();
+        static glm::mat4 GetViewportViewMatrix();
+        static glm::mat4 GetViewportProjectionMatrix();
         static size_t GetCurrentFrame();
         // Expose the active clear colour so UI panels can stay in sync with renderer preferences.
         static glm::vec4 GetClearColor();

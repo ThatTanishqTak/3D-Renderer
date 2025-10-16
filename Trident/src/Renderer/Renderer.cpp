@@ -805,6 +805,42 @@ namespace Trident
         return VK_NULL_HANDLE;
     }
 
+    glm::mat4 Renderer::GetViewportViewMatrix() const
+    {
+        // Resolve the camera hierarchy so tooling receives the same view used during the render pass.
+        const CameraSnapshot l_Snapshot = ResolveViewportCamera();
+        return l_Snapshot.View;
+    }
+
+    glm::mat4 Renderer::GetViewportProjectionMatrix() const
+    {
+        // Build a projection matching the renderer so gizmos align with the presented frame.
+        const CameraSnapshot l_Snapshot = ResolveViewportCamera();
+
+        float l_DefaultAspectRatio = 16.0f / 9.0f;
+        if (m_Viewport.Size.y != 0.0f)
+        {
+            l_DefaultAspectRatio = std::max(m_Viewport.Size.x / m_Viewport.Size.y, 0.0001f);
+        }
+
+        float l_TargetAspectRatio = l_Snapshot.OverrideAspectRatio ? l_Snapshot.AspectRatio : l_DefaultAspectRatio;
+        l_TargetAspectRatio = std::max(l_TargetAspectRatio, 0.0001f);
+
+        if (l_Snapshot.UseCustomProjection)
+        {
+            return l_Snapshot.CustomProjection;
+        }
+
+        if (l_Snapshot.Projection == ProjectionType::Orthographic)
+        {
+            const float l_HalfHeight = l_Snapshot.OrthographicSize * 0.5f;
+            const float l_HalfWidth = l_HalfHeight * l_TargetAspectRatio;
+            return glm::ortho(-l_HalfWidth, l_HalfWidth, -l_HalfHeight, l_HalfHeight, l_Snapshot.NearClip, l_Snapshot.FarClip);
+        }
+
+        return glm::perspective(glm::radians(l_Snapshot.FieldOfView), l_TargetAspectRatio, l_Snapshot.NearClip, l_Snapshot.FarClip);
+    }
+
     void Renderer::SetViewport(const ViewportInfo& info)
     {
         const uint32_t l_PreviousViewportId = m_ActiveViewportId;
