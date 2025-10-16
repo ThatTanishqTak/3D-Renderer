@@ -236,12 +236,16 @@ namespace Trident
                         ImGui::TableSetColumnIndex(1);
 
                         const std::string l_DisplayName = l_IsDirectory ? l_Name + "/" : l_Name;
-                        const bool l_Selected = ImGui::Selectable(l_DisplayName.c_str(), false, ImGuiSelectableFlags_SpanAllColumns);
+                        const ImGuiSelectableFlags l_SelectFlags = ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowDoubleClick;
+                        const bool l_Selected = ImGui::Selectable(l_DisplayName.c_str(), false, l_SelectFlags);
                         if (l_Selected)
                         {
                             if (l_IsDirectory)
                             {
-                                s_CurrentDirectory /= l_Name;
+                                if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+                                {
+                                    s_CurrentDirectory /= l_Name;
+                                }
                             }
                             else
                             {
@@ -251,7 +255,7 @@ namespace Trident
                                     l_Matches = l_Entry.path().extension() == extension;
                                 }
 
-                                if (l_Matches)
+                                if (l_Matches && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
                                 {
                                     path = l_Entry.path().string();
                                     l_FileChosen = true;

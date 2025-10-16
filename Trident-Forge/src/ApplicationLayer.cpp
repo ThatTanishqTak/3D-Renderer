@@ -1,11 +1,15 @@
 ﻿#include "ApplicationLayer.h"
 
 #include "Application/Startup.h"
+#include "Core/Utilities.h"
 #include "Renderer/RenderCommand.h"
 
 #include "ECS/Registry.h"
 #include "ECS/Components/TransformComponent.h"
 #include "ECS/Components/TagComponent.h"
+#include "ECS/Components/MeshComponent.h"
+#include "Loader/AssimpExtensions.h"
+#include "Loader/ModelLoader.h"
 
 #include <imgui.h>
 #include <ImGuizmo.h>
@@ -14,10 +18,15 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include <algorithm>
+#include <cctype>
+#include <system_error>
 #include <string>
+#include <utility>
 
 namespace
 {
+    constexpr char s_ModelPayloadId[] = "TRIDENT_MODEL_FILE"; ///< Drag and drop payload identifier shared between panels.
+
     /**
      * Compose a model matrix from an ECS transform component so ImGuizmo can manipulate it.
      */
@@ -83,6 +92,26 @@ void ApplicationLayer::Initialize()
         // Fall back to the working directory so standalone builds still show something useful.
         m_ContentRoot = l_EditorRoot;
     }
+
+    std::error_code l_CreateDirectoryError{};
+    std::filesystem::create_directories(m_ContentRoot, l_CreateDirectoryError);
+    if (l_CreateDirectoryError)
+    {
+        TR_CORE_WARN("Unable to ensure content root '{}' exists: {}", m_ContentRoot.string(), l_CreateDirectoryError.message());
+    }
+
+    std::error_code l_CanonicalError{};
+    const std::filesystem::path l_CanonicalRoot = std::filesystem::weakly_canonical(m_ContentRoot, l_CanonicalError);
+    if (!l_CanonicalError)
+    {
+        m_ContentRoot = l_CanonicalRoot;
+    }
+
+    m_CurrentContentDirectory = m_ContentRoot;
+
+    const std::vector<std::string>& l_SupportedExtensions = Trident::Loader::AssimpExtensions::GetNormalizedExtensions();
+    m_ModelExtensions.clear();
+    m_ModelExtensions.insert(l_SupportedExtensions.begin(), l_SupportedExtensions.end());
 
     RefreshDirectoryCache();
 
@@ -193,11 +222,11 @@ void ApplicationLayer::Render()
     DrawContentBrowser();
 }
 
-void ApplicationLayer::DrawTitleBar(float a_TitleBarHeight)
+void ApplicationLayer::DrawTitleBar(float titleBarHeight)
 {
     const ImGuiViewport* l_MainViewport = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(l_MainViewport->Pos);
-    ImGui::SetNextWindowSize(ImVec2(l_MainViewport->Size.x, a_TitleBarHeight));
+    ImGui::SetNextWindowSize(ImVec2(l_MainViewport->Size.x, titleBarHeight));
     ImGui::SetNextWindowViewport(l_MainViewport->ID);
 
     ImGuiWindowFlags l_TitleFlags = ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoTitleBar |
@@ -289,6 +318,20 @@ void ApplicationLayer::DrawSceneViewport()
         const ImTextureID l_TextureID = reinterpret_cast<ImTextureID>(l_RenderedTexture);
         ImGui::Image(l_TextureID, l_Available, ImVec2(0.0f, 1.0f), ImVec2(1.0f, 0.0f));
 
+        if (ImGui::BeginDragDropTarget())
+        {
+            if (const ImGuiPayload* l_Payload = ImGui::AcceptDragDropPayload(s_ModelPayloadId))
+            {
+                const char* l_PathData = static_cast<const char*>(l_Payload->Data);
+                if (l_PathData != nullptr)
+                {
+                    // Double-clicking a model in the browser mirrors the drag/drop behaviour by reusing the same handler.
+                    HandleModelDrop(std::filesystem::path{ l_PathData });
+                }
+            }
+            ImGui::EndDragDropTarget();
+        }
+
         // Synchronise the gizmo rect with the viewport so user input maps correctly to the rendered image.
         ImGuizmo::SetDrawlist();
         ImGuizmo::SetOrthographic(false);
@@ -361,23 +404,71 @@ void ApplicationLayer::DrawContentBrowser()
         return;
     }
 
-    ImGui::TextWrapped("Content cached from: %s", m_ContentRoot.string().c_str());
+    ImGui::TextWrapped("Content root: %s", m_ContentRoot.string().c_str());
     if (ImGui::Button("Refresh"))
     {
         RefreshDirectoryCache();
     }
+
     ImGui::SameLine();
-    ImGui::TextDisabled("Assets update live when pressing F5.");
+    const bool l_CanNavigateUp = !m_CurrentContentDirectory.empty() && m_CurrentContentDirectory != m_ContentRoot;
+    if (!l_CanNavigateUp)
+    {
+        ImGui::BeginDisabled();
+    }
+    if (ImGui::Button("Up"))
+    {
+        NavigateToDirectory(m_CurrentContentDirectory.parent_path());
+    }
+    if (!l_CanNavigateUp)
+    {
+        ImGui::EndDisabled();
+    }
+    ImGui::SameLine();
+    ImGui::TextDisabled("%s", m_CurrentContentDirectory.string().c_str());
 
     ImGui::Separator();
+    ImGui::TextWrapped("Double-click a folder to browse it or drag supported models into the viewport to import them.");
 
     for (const std::filesystem::directory_entry& l_Entry : m_ContentEntries)
     {
-        const std::string l_Label = l_Entry.path().filename().string();
-        ImGui::Selectable(l_Label.c_str(), false);
+        const std::filesystem::path& l_Path = l_Entry.path();
+        const bool l_IsDirectory = l_Entry.is_directory();
+        const bool l_IsModelFile = !l_IsDirectory && IsModelFile(l_Path);
+        const std::string l_PathString = l_Path.string();
+        std::string l_Label = l_Path.filename().string();
+        if (l_IsDirectory)
+        {
+            l_Label += "/";
+        }
+
+        ImGui::PushID(l_PathString.c_str());
+        const bool l_Selected = ImGui::Selectable(l_Label.c_str(), false, ImGuiSelectableFlags_AllowDoubleClick);
+        if (l_Selected)
+        {
+            if (l_IsDirectory)
+            {
+                if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+                {
+                    NavigateToDirectory(l_Path);
+                }
+            }
+            else if (l_IsModelFile && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+            {
+                HandleModelDrop(l_Path);
+            }
+        }
+
+        if (l_IsModelFile && ImGui::BeginDragDropSource())
+        {
+            ImGui::SetDragDropPayload(s_ModelPayloadId, l_PathString.c_str(), l_PathString.size() + 1);
+            ImGui::TextUnformatted(l_Label.c_str());
+            ImGui::EndDragDropSource();
+        }
+        ImGui::PopID();
     }
 
-    ImGui::TextWrapped("TODO: Thumbnails and drag-and-drop asset instancing would streamline level creation.");
+    ImGui::TextWrapped("Future work: async thumbnail generation and asset metadata will make browsing richer.");
 
     ImGui::End();
 }
@@ -386,30 +477,232 @@ void ApplicationLayer::RefreshDirectoryCache()
 {
     m_ContentEntries.clear();
 
-    if (m_ContentRoot.empty())
+    if (m_CurrentContentDirectory.empty())
     {
         return;
     }
 
+    std::error_code l_StatusError{};
+    if (!std::filesystem::exists(m_CurrentContentDirectory, l_StatusError) || l_StatusError)
+    {
+        if (!m_ContentRoot.empty() && m_CurrentContentDirectory != m_ContentRoot)
+        {
+            m_CurrentContentDirectory = m_ContentRoot;
+            RefreshDirectoryCache();
+        }
+        else
+        {
+            TR_CORE_WARN("Content directory '{}' is unavailable: {}", m_CurrentContentDirectory.string(), l_StatusError.message());
+        }
+        return;
+    }
+
     std::error_code l_Error{};
-    for (const std::filesystem::directory_entry& l_Entry : std::filesystem::directory_iterator(m_ContentRoot, l_Error))
+    for (const std::filesystem::directory_entry& l_Entry : std::filesystem::directory_iterator(m_CurrentContentDirectory, l_Error))
     {
         m_ContentEntries.push_back(l_Entry);
     }
 
     if (l_Error)
     {
-        // Logically we would forward this to the engine logger, but avoiding dependencies keeps this layer self-contained for now.
+        TR_CORE_WARN("Failed to enumerate '{}': {}", m_CurrentContentDirectory.string(), l_Error.message());
+
         return;
     }
 
     std::sort(m_ContentEntries.begin(), m_ContentEntries.end(),
-        [](const std::filesystem::directory_entry& a_Lhs, const std::filesystem::directory_entry& a_Rhs)
+        [](const std::filesystem::directory_entry& lhs, const std::filesystem::directory_entry& rhs)
         {
-            if (a_Lhs.is_directory() == a_Rhs.is_directory())
+            if (lhs.is_directory() == rhs.is_directory())
             {
-                return a_Lhs.path().filename().string() < a_Rhs.path().filename().string();
+                return lhs.path().filename().string() < rhs.path().filename().string();
             }
-            return a_Lhs.is_directory() && !a_Rhs.is_directory();
+            return lhs.is_directory() && !rhs.is_directory();
         });
+}
+
+void ApplicationLayer::NavigateToDirectory(const std::filesystem::path& directory)
+{
+    if (directory.empty())
+    {
+        return;
+    }
+
+    std::error_code l_StatusError{};
+    if (!std::filesystem::exists(directory, l_StatusError) || l_StatusError)
+    {
+        TR_CORE_WARN("Cannot navigate to missing directory '{}': {}", directory.string(), l_StatusError.message());
+        return;
+    }
+
+    std::error_code l_TypeError{};
+    if (!std::filesystem::is_directory(directory, l_TypeError) || l_TypeError)
+    {
+        TR_CORE_WARN("Navigation target '{}' is not a directory: {}", directory.string(), l_TypeError.message());
+        return;
+    }
+
+    if (!IsPathInsideContentRoot(directory))
+    {
+        TR_CORE_WARN("Blocked navigation outside of content root: {}", directory.string());
+        return;
+    }
+
+    std::error_code l_CanonicalError{};
+    std::filesystem::path l_Target = std::filesystem::weakly_canonical(directory, l_CanonicalError);
+    if (l_CanonicalError)
+    {
+        l_Target = directory;
+    }
+
+    if (m_CurrentContentDirectory == l_Target)
+    {
+        return;
+    }
+
+    m_CurrentContentDirectory = l_Target;
+    RefreshDirectoryCache();
+}
+
+bool ApplicationLayer::IsModelFile(const std::filesystem::path& filePath) const
+{
+    if (m_ModelExtensions.empty())
+    {
+        return false;
+    }
+
+    std::string l_Extension = filePath.extension().string();
+    std::transform(l_Extension.begin(), l_Extension.end(), l_Extension.begin(), [](unsigned char a_Character)
+        {
+            return static_cast<char>(std::tolower(a_Character));
+        });
+
+    return m_ModelExtensions.find(l_Extension) != m_ModelExtensions.end();
+}
+
+void ApplicationLayer::HandleModelDrop(const std::filesystem::path& modelPath)
+{
+    if (modelPath.empty())
+    {
+        return;
+    }
+
+    if (!IsModelFile(modelPath))
+    {
+        TR_CORE_WARN("Ignored unsupported asset '{}'", modelPath.string());
+        return;
+    }
+
+    std::error_code l_ExistsError{};
+    if (!std::filesystem::exists(modelPath, l_ExistsError) || l_ExistsError)
+    {
+        TR_CORE_WARN("Dropped model '{}' is unavailable: {}", modelPath.string(), l_ExistsError.message());
+        return;
+    }
+
+    const std::string l_ModelPathString = modelPath.string();
+    Trident::Loader::ModelData l_ModelData = Trident::Loader::ModelLoader::Load(l_ModelPathString);
+    if (l_ModelData.Meshes.empty())
+    {
+        TR_CORE_WARN("Model '{}' did not produce any meshes", l_ModelPathString);
+        return;
+    }
+
+    const size_t l_FirstNewMeshIndex = m_LoadedMeshes.size();
+    const size_t l_MaterialOffset = m_LoadedMaterials.size();
+
+    for (auto& l_Mesh : l_ModelData.Meshes)
+    {
+        if (l_Mesh.MaterialIndex >= 0)
+        {
+            l_Mesh.MaterialIndex += static_cast<int>(l_MaterialOffset);
+        }
+    }
+
+    m_LoadedMeshes.reserve(m_LoadedMeshes.size() + l_ModelData.Meshes.size());
+    for (auto& l_Mesh : l_ModelData.Meshes)
+    {
+        m_LoadedMeshes.push_back(std::move(l_Mesh));
+    }
+
+    m_LoadedMaterials.reserve(m_LoadedMaterials.size() + l_ModelData.Materials.size());
+    for (auto& l_Material : l_ModelData.Materials)
+    {
+        m_LoadedMaterials.push_back(std::move(l_Material));
+    }
+
+    Trident::ECS::Entity l_FirstNewEntity = s_InvalidEntity;
+    if (m_Registry != nullptr)
+    {
+        const std::string l_BaseName = modelPath.stem().string();
+        const size_t l_NewMeshCount = m_LoadedMeshes.size() - l_FirstNewMeshIndex;
+
+        for (size_t l_Index = 0; l_Index < l_NewMeshCount; ++l_Index)
+        {
+            const size_t l_GlobalMeshIndex = l_FirstNewMeshIndex + l_Index;
+            Trident::ECS::Entity l_Entity = m_Registry->CreateEntity();
+            m_Registry->AddComponent<Trident::Transform>(l_Entity, Trident::Transform{});
+            Trident::MeshComponent& l_MeshComponent = m_Registry->AddComponent<Trident::MeshComponent>(l_Entity);
+            l_MeshComponent.m_MeshIndex = l_GlobalMeshIndex;
+
+            Trident::TagComponent& l_TagComponent = m_Registry->AddComponent<Trident::TagComponent>(l_Entity);
+            if (l_NewMeshCount == 1)
+            {
+                l_TagComponent.m_Tag = l_BaseName;
+            }
+            else
+            {
+                l_TagComponent.m_Tag = l_BaseName + " [" + std::to_string(l_Index) + "]";
+            }
+
+            if (l_FirstNewEntity == s_InvalidEntity)
+            {
+                l_FirstNewEntity = l_Entity;
+            }
+        }
+    }
+
+    Trident::Startup::GetRenderer().UploadMesh(m_LoadedMeshes, m_LoadedMaterials);
+
+    if (l_FirstNewEntity != s_InvalidEntity)
+    {
+        m_SelectedEntity = l_FirstNewEntity;
+    }
+
+    TR_CORE_INFO("Imported model '{}' ({} meshes)", l_ModelPathString, l_ModelData.Meshes.size());
+
+    // Future improvement: stream geometry and textures incrementally so complex scenes avoid redundant uploads.
+}
+
+bool ApplicationLayer::IsPathInsideContentRoot(const std::filesystem::path& directory) const
+{
+    if (m_ContentRoot.empty())
+    {
+        return true;
+    }
+
+    std::error_code l_RootError{};
+    const std::filesystem::path l_RootCanonical = std::filesystem::weakly_canonical(m_ContentRoot, l_RootError);
+    if (l_RootError)
+    {
+        return false;
+    }
+
+    std::error_code l_TargetError{};
+    const std::filesystem::path l_TargetCanonical = std::filesystem::weakly_canonical(directory, l_TargetError);
+    if (l_TargetError)
+    {
+        return false;
+    }
+
+    auto l_TargetIt = l_TargetCanonical.begin();
+    for (auto l_RootIt = l_RootCanonical.begin(); l_RootIt != l_RootCanonical.end(); ++l_RootIt, ++l_TargetIt)
+    {
+        if (l_TargetIt == l_TargetCanonical.end() || *l_TargetIt != *l_RootIt)
+        {
+            return false;
+        }
+    }
+
+    return true;
 }
