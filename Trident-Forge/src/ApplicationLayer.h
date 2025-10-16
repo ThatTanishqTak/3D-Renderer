@@ -4,6 +4,7 @@
 
 #include "Panels/ViewportPanel.h"
 #include "Panels/ContentBrowserPanel.h"
+#include "Panels/SceneHierarchyPanel.h"
 
 
 class ApplicationLayer : public Trident::Layer
@@ -30,4 +31,5 @@ public:
 private:
     ViewportPanel m_ViewportPanel;
     ContentBrowserPanel m_ContentBrowserPanel;
+    SceneHierarchyPanel m_SceneHierarchyPanel;
 };

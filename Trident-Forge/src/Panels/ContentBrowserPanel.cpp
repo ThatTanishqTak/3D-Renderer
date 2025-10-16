@@ -116,7 +116,8 @@ void ContentBrowserPanel::Render()
 
     // Collect entries so folders appear before files and everything is alphabetised.
     std::error_code l_IteratorError{};
-    for (std::filesystem::directory_iterator it_Entry{ m_CurrentDirectory, l_IteratorError }; !l_IteratorError && it_Entry != std::filesystem::directory_iterator{}; it_Entry.increment(l_IteratorError))
+    for (std::filesystem::directory_iterator it_Entry{ m_CurrentDirectory, l_IteratorError }; !l_IteratorError && it_Entry != std::filesystem::directory_iterator{}; 
+        it_Entry.increment(l_IteratorError))
     {
         if (l_IteratorError)
         {
