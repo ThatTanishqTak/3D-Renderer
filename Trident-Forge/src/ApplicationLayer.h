@@ -1,15 +1,27 @@
 ﻿#pragma once
 
-#include "Application.h"
+#include "Layer/Layer.h"
 
-class ApplicationLayer
+class ApplicationLayer : public Trident::Layer
 {
 public:
-	void Initialize();
-	void Shutdown();
+    /**
+     * Prepare application-specific resources (scenes, editor state, etc.).
+     */
+    void Initialize() override;
+    /**
+     * Release resources acquired during Initialize().
+     */
+    void Shutdown() override;
 
-	void Update();
-	void Render();
+    /**
+     * Execute per-frame simulation such as tools or gameplay logic.
+     */
+    void Update() override;
+    /**
+     * Submit draw calls and UI for the current frame.
+     */
+    void Render() override;
 
 private:
 

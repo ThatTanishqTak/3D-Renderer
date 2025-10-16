@@ -1,12 +1,18 @@
 // Application entry point for Trident-Forge
 
 #include "Application.h"
+#include "ApplicationLayer.h"
+
+#include <memory>
 
 int main()
 {
     try
     {
-        Trident::Application l_App;
+        auto a_ApplicationLayer = std::make_unique<ApplicationLayer>();
+        // TODO: Support stacking multiple layers or toggling editor/runtime selections here.
+
+        Trident::Application l_App(std::move(a_ApplicationLayer));
 
         l_App.Run();
     }

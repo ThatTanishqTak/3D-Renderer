@@ -3,11 +3,17 @@
 #include "Renderer/RenderCommand.h"
 #include "Events/ApplicationEvents.h"
 
+#include <utility>
 #include <stdexcept>
 
 namespace Trident
 {
-    Application::Application()
+    Application::Application() : Application(nullptr)
+    {
+
+    }
+
+    Application::Application(std::unique_ptr<Layer> layer) : m_ActiveLayer(std::move(layer))
     {
         Trident::Utilities::Log::Init();
 
@@ -57,6 +63,12 @@ namespace Trident
         // Share the ImGui layer with the renderer so it can route draw commands and
         // lifetime events appropriately.
         Startup::GetRenderer().SetImGuiLayer(m_ImGuiLayer.get());
+
+        // Once the renderer is configured, the active layer can allocate gameplay/editor resources safely.
+        if (m_ActiveLayer)
+        {
+            m_ActiveLayer->Initialize();
+        }
     }
 
     void Application::Run()
@@ -74,6 +86,12 @@ namespace Trident
         Utilities::Time::Update();
 
         m_Window->PollEvents();
+
+        // Update the active layer after input/events so it can react to the latest state.
+        if (m_ActiveLayer)
+        {
+            m_ActiveLayer->Update();
+        }
     }
 
     void Application::Render()
@@ -81,6 +99,12 @@ namespace Trident
         if (m_ImGuiLayer)
         {
             m_ImGuiLayer->BeginFrame();
+        }
+
+        // Allow the gameplay/editor layer to submit draw data before the UI finalises the frame.
+        if (m_ActiveLayer)
+        {
+            m_ActiveLayer->Render();
         }
 
         if (m_ImGuiLayer)
@@ -117,6 +141,13 @@ namespace Trident
 
         m_HasShutdown = true;
 
+        // Ask the active layer to release its resources while the renderer context is still valid.
+        if (m_ActiveLayer)
+        {
+            m_ActiveLayer->Shutdown();
+            m_ActiveLayer.reset();
+        }
+
         // Tear down ImGui and detach it from the renderer so command buffers do not try
         // to access freed UI state.
         if (m_ImGuiLayer)
@@ -132,5 +163,22 @@ namespace Trident
         // flushed.
         m_Startup.reset();
         m_Window.reset();
+    }
+
+    void Application::SetActiveLayer(std::unique_ptr<Layer> layer)
+    {
+        // Ensure any previous layer unwinds before we replace it to avoid dangling GPU handles.
+        if (m_ActiveLayer && m_Startup)
+        {
+            m_ActiveLayer->Shutdown();
+        }
+
+        m_ActiveLayer = std::move(layer);
+
+        // If the engine is already initialised (e.g., during hot-reload), boot the new layer immediately.
+        if (m_ActiveLayer && m_Startup)
+        {
+            m_ActiveLayer->Initialize();
+        }
     }
 }

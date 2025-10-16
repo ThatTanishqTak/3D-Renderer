@@ -12,6 +12,7 @@ struct ApplicationSpecifications
 
 #include "Window/Window.h"
 #include "Application/Startup.h"
+#include "Layer/Layer.h"
 #include "Events/Events.h"
 #include "UI/ImGuiLayer.h"
 
@@ -21,6 +22,7 @@ namespace Trident
     {
     public:
         Application();
+        explicit Application(std::unique_ptr<Layer> layer);
         ~Application();
 
         void Inititialize();
@@ -28,6 +30,11 @@ namespace Trident
 
         void Run();
         void OnEvent(Events& event);
+
+        /**
+         * Allows hosts to swap in their own layer before Run() executes, keeping the core engine agnostic of gameplay code.
+         */
+        void SetActiveLayer(std::unique_ptr<Layer> layer);
 
     private:
         void Update();
@@ -38,6 +45,7 @@ namespace Trident
         std::unique_ptr<Startup> m_Startup;
         std::unique_ptr<Window> m_Window;
         std::unique_ptr<UI::ImGuiLayer> m_ImGuiLayer;
+        std::unique_ptr<Layer> m_ActiveLayer;
         bool m_HasShutdown = false;
         bool m_IsRunning = true;
     };
