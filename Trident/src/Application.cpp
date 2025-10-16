@@ -34,10 +34,10 @@ namespace Trident
         m_Specifications.Title = "Trident-Forge";
 
         m_Window = std::make_unique<Window>(m_Specifications);
-        m_Window->SetEventCallback([this](Events& l_Event)
+        m_Window->SetEventCallback([this](Events& event)
             {
                 // Route every GLFW callback through the Application entry point so systems can react.
-                OnEvent(l_Event);
+                OnEvent(event);
             });
         m_Startup = std::make_unique<Startup>(*m_Window);
 
@@ -120,9 +120,9 @@ namespace Trident
         // Dispatch events by type so only the relevant handler executes and other listeners remain extendable.
         EventDispatcher l_Dispatcher(event);
 
-        l_Dispatcher.Dispatch<WindowCloseEvent>([this](WindowCloseEvent& l_Event)
+        l_Dispatcher.Dispatch<WindowCloseEvent>([this](WindowCloseEvent& event)
             {
-                (void)l_Event;
+                (void)event;
 
                 m_IsRunning = false;
 
