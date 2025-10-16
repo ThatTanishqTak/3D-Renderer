@@ -2,7 +2,9 @@
 
 void ApplicationLayer::Initialize()
 {
-
+    // Wire up the gizmo state so the viewport and inspector remain in sync.
+    m_ViewportPanel.SetGizmoState(&m_GizmoState);
+    m_InspectorPanel.SetGizmoState(&m_GizmoState);
 }
 
 void ApplicationLayer::Shutdown()

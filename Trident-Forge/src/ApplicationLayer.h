@@ -6,6 +6,7 @@
 #include "Panels/ContentBrowserPanel.h"
 #include "Panels/SceneHierarchyPanel.h"
 #include "Panels/InspectorPanel.h"
+#include "Panels/GizmoState.h"
 
 class ApplicationLayer : public Trident::Layer
 {
@@ -29,6 +30,7 @@ public:
     void Render() override;
 
 private:
+    GizmoState m_GizmoState;
     ViewportPanel m_ViewportPanel;
     ContentBrowserPanel m_ContentBrowserPanel;
     SceneHierarchyPanel m_SceneHierarchyPanel;

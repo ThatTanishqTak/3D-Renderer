@@ -5,6 +5,7 @@
 
 #include "Renderer/RenderCommand.h"
 #include "ECS/Entity.h"
+#include "GizmoState.h"
 
 namespace ImGuizmo
 {
@@ -17,7 +18,7 @@ namespace ImGuizmo
 class ViewportPanel
 {
 public:
-    // Constructor initialises gizmo defaults so the panel is immediately interactive.
+    // Constructor initialises default state so the panel is immediately interactive.
     ViewportPanel();
     // Called once per frame so the panel can prepare state prior to rendering widgets.
     void Update();
@@ -25,6 +26,8 @@ public:
     void Render();
     // Allows external systems to provide the camera that should drive the viewport.
     void SetCameraEntity(Trident::ECS::Entity cameraEntity);
+    // Provides a handle to the shared gizmo state so UI panels can coordinate behaviour.
+    void SetGizmoState(GizmoState* gizmoState);
 
 private:
     // Persistent identifier used when asking the renderer for a viewport.
@@ -39,8 +42,6 @@ private:
     bool m_IsCameraControlEnabled = false;
     // Camera entity currently driving the viewport render target.
     Trident::ECS::Entity m_ActiveCameraEntity = 0;
-    // Tracks which transform operation the gizmo should perform this frame.
-    ImGuizmo::OPERATION m_GizmoOperation;
-    // Toggles between local and world space so users can align transformations accurately.
-    ImGuizmo::MODE m_GizmoMode;
+    // Shared gizmo configuration so this panel stays in sync with inspector controls.
+    GizmoState* m_GizmoState = nullptr;
 };

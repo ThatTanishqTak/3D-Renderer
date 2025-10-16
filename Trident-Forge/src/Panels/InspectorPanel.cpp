@@ -6,6 +6,7 @@
 #include "ECS/Components/TransformComponent.h"
 
 #include <imgui.h>
+#include <ImGuizmo.h>
 
 #include <algorithm>
 #include <array>
@@ -18,6 +19,23 @@
 void InspectorPanel::SetSelectedEntity(Trident::ECS::Entity entity)
 {
     m_SelectedEntity = entity;
+    if (m_GizmoState != nullptr)
+    {
+        const bool l_HasSelection = m_SelectedEntity != std::numeric_limits<Trident::ECS::Entity>::max();
+        m_GizmoState->SetSelectionActive(l_HasSelection);
+    }
+}
+
+void InspectorPanel::SetGizmoState(GizmoState* gizmoState)
+{
+    // Hold onto the shared gizmo state so radio buttons can drive the viewport overlay.
+    m_GizmoState = gizmoState;
+
+    if (m_GizmoState != nullptr)
+    {
+        const bool l_HasSelection = m_SelectedEntity != std::numeric_limits<Trident::ECS::Entity>::max();
+        m_GizmoState->SetSelectionActive(l_HasSelection);
+    }
 }
 
 void InspectorPanel::Update()
@@ -35,6 +53,10 @@ void InspectorPanel::Update()
     {
         // Clear the cached selection so the inspector avoids dereferencing stale components.
         m_SelectedEntity = std::numeric_limits<Trident::ECS::Entity>::max();
+        if (m_GizmoState != nullptr)
+        {
+            m_GizmoState->SetSelectionActive(false);
+        }
     }
 }
 
@@ -43,13 +65,20 @@ void InspectorPanel::Render()
     if (!ImGui::Begin("Inspector"))
     {
         ImGui::End();
+
         return;
     }
 
     if (m_SelectedEntity == std::numeric_limits<Trident::ECS::Entity>::max())
     {
         ImGui::TextWrapped("Select an entity from the Scene Hierarchy to inspect its components.");
+        if (m_GizmoState != nullptr)
+        {
+            // Ensure the viewport hides the gizmo if the selection was cleared while the window was collapsed.
+            m_GizmoState->SetSelectionActive(false);
+        }
         ImGui::End();
+
         return;
     }
 
@@ -100,5 +129,42 @@ void InspectorPanel::DrawTransformComponent(Trident::ECS::Registry& registry)
         ImGui::DragFloat3("Position", glm::value_ptr(l_Transform.Position), 0.1f, -10000.0f, 10000.0f, "%.2f");
         ImGui::DragFloat3("Rotation", glm::value_ptr(l_Transform.Rotation), 0.1f, -360.0f, 360.0f, "%.2f");
         ImGui::DragFloat3("Scale", glm::value_ptr(l_Transform.Scale), 0.01f, 0.0f, 1000.0f, "%.2f");
+
+        if (m_GizmoState != nullptr)
+        {
+            ImGui::Separator();
+            ImGui::TextDisabled("Gizmo Controls");
+
+            // Mirror the viewport radio buttons here so users can change the active operation from the inspector.
+            if (ImGui::RadioButton("Translate", m_GizmoState->GetOperation() == ImGuizmo::TRANSLATE))
+            {
+                m_GizmoState->SetOperation(ImGuizmo::TRANSLATE);
+            }
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Rotate", m_GizmoState->GetOperation() == ImGuizmo::ROTATE))
+            {
+                m_GizmoState->SetOperation(ImGuizmo::ROTATE);
+            }
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Scale", m_GizmoState->GetOperation() == ImGuizmo::SCALE))
+            {
+                m_GizmoState->SetOperation(ImGuizmo::SCALE);
+            }
+
+            ImGui::SameLine();
+            ImGui::TextDisabled("TODO: Snapping / Pivot");
+
+            if (ImGui::RadioButton("Local", m_GizmoState->GetMode() == ImGuizmo::LOCAL))
+            {
+                m_GizmoState->SetMode(ImGuizmo::LOCAL);
+            }
+            ImGui::SameLine();
+            if (ImGui::RadioButton("World", m_GizmoState->GetMode() == ImGuizmo::WORLD))
+            {
+                m_GizmoState->SetMode(ImGuizmo::WORLD);
+            }
+
+            // Future opportunity: expose snapping controls once the engine supports grid-aligned editing.
+        }
     }
 }

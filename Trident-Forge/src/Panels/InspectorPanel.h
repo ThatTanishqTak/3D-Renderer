@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ECS/Entity.h"
+#include "GizmoState.h"
 
 #include <limits>
 
@@ -24,6 +25,8 @@ public:
     // Accept the entity from the hierarchy before Update() runs so the
     // inspector can validate it against the registry.
     void SetSelectedEntity(Trident::ECS::Entity entity);
+    // Provide access to the shared gizmo state so the inspector can drive configuration widgets.
+    void SetGizmoState(GizmoState* gizmoState);
     // Verify the selection is still valid and avoid dereferencing stale data.
     void Update();
     // Draw the inspector window and surface component-specific widgets.
@@ -37,4 +40,6 @@ private:
 
     // Sentinel used to represent the absence of a valid selection.
     Trident::ECS::Entity m_SelectedEntity = std::numeric_limits<Trident::ECS::Entity>::max();
+    // Shared gizmo configuration that mirrors the viewport overlay behaviour.
+    GizmoState* m_GizmoState = nullptr;
 };
