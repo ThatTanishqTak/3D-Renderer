@@ -2744,6 +2744,12 @@ namespace Trident
         vkUnmapMemory(Startup::GetDevice(), m_MaterialUniformBuffersMemory[currentImage]);
     }
 
+    void Renderer::SetSelectedEntity(ECS::Entity entity)
+    {
+        // Store the inspector's active entity so gizmo updates reference the same transform as the UI selection.
+        m_Entity = entity;
+    }
+
     void Renderer::SetTransform(const Transform& props)
     {
         if (m_Registry)

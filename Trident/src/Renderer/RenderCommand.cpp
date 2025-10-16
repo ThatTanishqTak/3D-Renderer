@@ -40,6 +40,12 @@ namespace Trident
         Startup::GetRenderer().SetViewportCamera(cameraEntity);
     }
 
+    void RenderCommand::SetSelectedEntity(ECS::Entity entity)
+    {
+        // Forward the selection so the renderer tracks the same entity as the editor panels when drawing gizmos.
+        Startup::GetRenderer().SetSelectedEntity(entity);
+    }
+
     void RenderCommand::SetClearColor(const glm::vec4& color)
     {
         // Forward the request so the renderer updates its cached clear colour immediately.

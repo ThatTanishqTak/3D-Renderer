@@ -117,6 +117,8 @@ namespace Trident
         void SetTransform(const Transform& props);
         void SetViewport(const ViewportInfo& info);
         void SetViewportCamera(ECS::Entity cameraEntity);
+        // Cache the inspector's selection so gizmo transforms lock onto the same entity as the editor UI.
+        void SetSelectedEntity(ECS::Entity entity);
 
         Transform GetTransform() const;
         ViewportInfo GetViewport() const { return m_Viewport; }

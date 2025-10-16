@@ -1,6 +1,7 @@
 #include "InspectorPanel.h"
 
 #include "Application/Startup.h"
+#include "Renderer/RenderCommand.h"
 #include "ECS/Registry.h"
 #include "ECS/Components/TagComponent.h"
 #include "ECS/Components/TransformComponent.h"
@@ -19,9 +20,12 @@
 void InspectorPanel::SetSelectedEntity(Trident::ECS::Entity entity)
 {
     m_SelectedEntity = entity;
+    const bool l_HasSelection = m_SelectedEntity != std::numeric_limits<Trident::ECS::Entity>::max();
+
+    // Forward the current selection to the renderer so its gizmo logic targets the active inspector entity.
+    Trident::RenderCommand::SetSelectedEntity(m_SelectedEntity);
     if (m_GizmoState != nullptr)
     {
-        const bool l_HasSelection = m_SelectedEntity != std::numeric_limits<Trident::ECS::Entity>::max();
         m_GizmoState->SetSelectionActive(l_HasSelection);
     }
 }
@@ -53,6 +57,7 @@ void InspectorPanel::Update()
     {
         // Clear the cached selection so the inspector avoids dereferencing stale components.
         m_SelectedEntity = std::numeric_limits<Trident::ECS::Entity>::max();
+        Trident::RenderCommand::SetSelectedEntity(m_SelectedEntity);
         if (m_GizmoState != nullptr)
         {
             m_GizmoState->SetSelectionActive(false);

@@ -17,6 +17,8 @@ namespace Trident
         static void SetTransform(const Transform& props);
         static void SetViewport(const ViewportInfo& info);
         static void SetViewportCamera(ECS::Entity cameraEntity);
+        // Allow tooling to update the renderer's selected entity so gizmos operate on the expected transform.
+        static void SetSelectedEntity(ECS::Entity entity);
         // Mirror Renderer::SetClearColor so editor widgets can adjust the background tone live.
         static void SetClearColor(const glm::vec4& color);
         static void AppendMeshes(std::vector<Geometry::Mesh> meshes, std::vector<Geometry::Material> materials);
