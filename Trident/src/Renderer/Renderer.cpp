@@ -2402,7 +2402,9 @@ namespace Trident
         {
             TR_CORE_CRITICAL("Failed to record command buffer!");
 
-            return EXIT_FAILURE;
+            // Abort the frame so the caller can handle the failure gracefully instead of terminating the process.
+
+            return false;
         }
 
         return true;
@@ -2434,7 +2436,9 @@ namespace Trident
         {
             TR_CORE_CRITICAL("Failed to submit draw command buffer!");
 
-            return EXIT_FAILURE;
+            // Notify the caller that the queue submission failed so the frame can be skipped cleanly.
+
+            return false;
         }
 
         if (vkGetFenceStatus(Startup::GetDevice(), m_ResourceFence) == VK_NOT_READY)
@@ -2448,6 +2452,9 @@ namespace Trident
         if (vkQueueSubmit(Startup::GetGraphicsQueue(), 1, &l_FenceSubmit, m_ResourceFence) != VK_SUCCESS)
         {
             TR_CORE_CRITICAL("Failed to submit resource fence");
+            // Allow the caller to decide how to recover from a failed fence submission.
+
+            return false;
         }
 
         return true;

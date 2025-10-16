@@ -4,6 +4,7 @@
 #include "Core/Utilities.h"
 
 #include <algorithm>
+#include <stdexcept>
 
 namespace Trident
 {
@@ -132,6 +133,7 @@ namespace Trident
 
     uint32_t Buffers::FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties)
     {
+        // Gather the available memory types so we can select a compatible one for the requested usage.
         VkPhysicalDeviceMemoryProperties l_MemoryProperties;
         vkGetPhysicalDeviceMemoryProperties(Startup::GetPhysicalDevice(), &l_MemoryProperties);
 
@@ -143,9 +145,11 @@ namespace Trident
             }
         }
 
-        TR_CORE_CRITICAL("Failed to find suitable memory type");
+        // Log detailed diagnostics before signaling failure so future investigations know what was requested.
+        TR_CORE_CRITICAL("Failed to find suitable memory type (typeFilter = 0x{:x}, properties = 0x{:x})", static_cast<uint64_t>(typeFilter), static_cast<uint64_t>(properties));
 
-        return EXIT_FAILURE;
+        // Signal the failure so callers can handle the situation gracefully instead of using an invalid index.
+        throw std::runtime_error("Failed to find suitable memory type");
     }
 
     //----------------------------------------------------------------------------------------------------------------------------------------------------------//
@@ -176,7 +180,26 @@ namespace Trident
 
         VkMemoryAllocateInfo l_AllocateInfo{ VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO };
         l_AllocateInfo.allocationSize = l_MemoryRequirements.size;
-        l_AllocateInfo.memoryTypeIndex = FindMemoryType(l_MemoryRequirements.memoryTypeBits, properties);
+        try
+        {
+            // Attempt to locate a compatible memory type for the buffer allocation.
+            l_AllocateInfo.memoryTypeIndex = FindMemoryType(l_MemoryRequirements.memoryTypeBits, properties);
+        }
+        catch (const std::runtime_error& l_Error)
+        {
+            TR_CORE_CRITICAL("{}", l_Error.what());
+
+            // Clean up the partially created buffer to avoid leaking resources.
+            if (buffer != VK_NULL_HANDLE)
+            {
+                vkDestroyBuffer(Startup::GetDevice(), buffer, nullptr);
+                buffer = VK_NULL_HANDLE;
+            }
+
+            bufferMemory = VK_NULL_HANDLE;
+
+            return;
+        }
 
         l_Result = vkAllocateMemory(Startup::GetDevice(), &l_AllocateInfo, nullptr, &bufferMemory);
         if (l_Result != VK_SUCCESS)
