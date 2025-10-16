@@ -25,6 +25,9 @@ public:
     void Update();
     // Draw the entity list inside an ImGui window and respond to user selection.
     void Render();
+    // Expose the currently focused entity so companion panels (e.g. the inspector)
+    // can surface component data without duplicating hierarchy logic.
+    Trident::ECS::Entity GetSelectedEntity() const;
 
 private:
     // Helper that renders a single entity row, including tag display and selection logic.

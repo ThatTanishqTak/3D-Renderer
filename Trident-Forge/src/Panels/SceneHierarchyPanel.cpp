@@ -58,6 +58,11 @@ void SceneHierarchyPanel::Render()
     ImGui::End();
 }
 
+Trident::ECS::Entity SceneHierarchyPanel::GetSelectedEntity() const
+{
+    return m_SelectedEntity;
+}
+
 void SceneHierarchyPanel::DrawEntityNode(Trident::ECS::Entity entity, Trident::ECS::Registry& registry)
 {
     std::string l_DisplayName = "Entity " + std::to_string(entity);
