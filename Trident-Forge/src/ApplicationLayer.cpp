@@ -8,9 +8,12 @@
 #include "Loader/ModelLoader.h"
 #include "Renderer/RenderCommand.h"
 
+#include <imgui.h>
+
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
+#include <cmath>
 #include <iterator>
 
 void ApplicationLayer::Initialize()
@@ -18,6 +21,12 @@ void ApplicationLayer::Initialize()
     // Wire up the gizmo state so the viewport and inspector remain in sync.
     m_ViewportPanel.SetGizmoState(&m_GizmoState);
     m_InspectorPanel.SetGizmoState(&m_GizmoState);
+
+    // Route drag-and-drop payloads originating inside the editor back into the shared import path.
+    m_ViewportPanel.SetAssetDropHandler([this](const std::vector<std::string>& droppedPaths)
+        {
+            ImportDroppedAssets(droppedPaths);
+        });
 }
 
 void ApplicationLayer::Shutdown()
@@ -56,14 +65,21 @@ void ApplicationLayer::OnEvent(Trident::Events& event)
 
 bool ApplicationLayer::HandleFileDrop(Trident::FileDropEvent& event)
 {
-    if (!m_ViewportPanel.IsHovered())
+    ImGuiIO& l_IO = ImGui::GetIO();
+    const bool l_HasMousePosition = std::isfinite(l_IO.MousePos.x) && std::isfinite(l_IO.MousePos.y);
+    const bool l_IsWithinViewport = l_HasMousePosition && m_ViewportPanel.ContainsPoint(l_IO.MousePos);
+
+    if (!m_ViewportPanel.IsHovered() && !l_IsWithinViewport)
     {
         // Ignore drops that land outside the viewport so accidental drags do not spawn entities.
         return false;
     }
+    return ImportDroppedAssets(event.GetPaths());
+}
 
-    const std::vector<std::string>& l_DroppedPaths = event.GetPaths();
-    if (l_DroppedPaths.empty())
+bool ApplicationLayer::ImportDroppedAssets(const std::vector<std::string>& droppedPaths)
+{
+    if (droppedPaths.empty())
     {
         return false;
     }
@@ -78,7 +94,7 @@ bool ApplicationLayer::HandleFileDrop(Trident::FileDropEvent& event)
     std::vector<Trident::Geometry::Material> l_ImportedMaterials{};
     bool l_ImportedAny = false;
 
-    for (const std::string& it_Path : l_DroppedPaths)
+    for (const std::string& it_Path : droppedPaths)
     {
         std::filesystem::path l_PathView{ it_Path };
         std::string l_Extension = l_PathView.extension().string();

@@ -16,14 +16,14 @@ namespace Trident
     Application::Application(std::unique_ptr<Layer> layer) : m_ActiveLayer(std::move(layer))
     {
         Trident::Utilities::Log::Init();
+        Trident::Utilities::Time::Init();
 
         Inititialize();
     }
 
     Application::~Application()
     {
-        // Ensure editor and UI resources tear down cleanly even if the host forgets to
-        // call Shutdown explicitly.
+        // Ensure editor and UI resources tear down cleanly even if the host forgets to call Shutdown explicitly.
         Shutdown();
     }
 
@@ -43,8 +43,7 @@ namespace Trident
 
         RenderCommand::Init();
 
-        // Bootstrap the ImGui layer once the renderer is ready so editor widgets can
-        // access the graphics context safely.
+        // Bootstrap the ImGui layer once the renderer is ready so editor widgets can access the graphics context safely.
         m_ImGuiLayer = std::make_unique<UI::ImGuiLayer>();
 
         const QueueFamilyIndices l_QueueFamilyIndices = Startup::GetQueueFamilyIndices();
@@ -60,8 +59,7 @@ namespace Trident
         m_ImGuiLayer->Init(m_Window->GetNativeWindow(), Startup::GetInstance(), Startup::GetPhysicalDevice(), Startup::GetDevice(), l_QueueFamilyIndices.GraphicsFamily.value(),
             l_GraphicsQueue, Startup::GetRenderer().GetRenderPass(), static_cast<uint32_t>(Startup::GetRenderer().GetImageCount()), Startup::GetRenderer().GetCommandPool());
 
-        // Share the ImGui layer with the renderer so it can route draw commands and
-        // lifetime events appropriately.
+        // Share the ImGui layer with the renderer so it can route draw commands and lifetime events appropriately.
         Startup::GetRenderer().SetImGuiLayer(m_ImGuiLayer.get());
 
         // Once the renderer is configured, the active layer can allocate gameplay/editor resources safely.
@@ -140,6 +138,8 @@ namespace Trident
 
     void Application::Shutdown()
     {
+        TR_CORE_INFO("-------SHUTTING DOWN APPLICATION-------");
+
         if (m_HasShutdown)
         {
             return;
@@ -165,10 +165,11 @@ namespace Trident
 
         RenderCommand::Shutdown();
 
-        // Release window and startup scaffolding last so Vulkan resources are already
-        // flushed.
+        // Release window and startup scaffolding last so Vulkan resources are already flushed.
         m_Startup.reset();
         m_Window.reset();
+
+        TR_CORE_INFO("-------APPLICATION SHUTDOWN COMPLETE-------");
     }
 
     void Application::SetActiveLayer(std::unique_ptr<Layer> layer)
@@ -181,7 +182,7 @@ namespace Trident
 
         m_ActiveLayer = std::move(layer);
 
-        // If the engine is already initialised (e.g., during hot-reload), boot the new layer immediately.
+        // If the engine is already initialised boot the new layer immediately.
         if (m_ActiveLayer && m_Startup)
         {
             m_ActiveLayer->Initialize();

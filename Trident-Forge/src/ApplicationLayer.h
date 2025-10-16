@@ -9,6 +9,9 @@
 #include "Panels/InspectorPanel.h"
 #include "Panels/GizmoState.h"
 
+#include <string>
+#include <vector>
+
 class ApplicationLayer : public Trident::Layer
 {
 public:
@@ -36,6 +39,7 @@ public:
 
 private:
     bool HandleFileDrop(Trident::FileDropEvent& event);
+    bool ImportDroppedAssets(const std::vector<std::string>& droppedPaths);
 
 private:
     GizmoState m_GizmoState;

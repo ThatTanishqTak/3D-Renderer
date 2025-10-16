@@ -193,6 +193,18 @@ void ContentBrowserPanel::DrawEntryGrid(const std::vector<std::filesystem::direc
                 // Placeholder for future interactions such as selection or drag-and-drop.
             }
 
+            if (!highlightAsFolder)
+            {
+                // Allow files to be dragged into other panels, such as the viewport, for quick import operations.
+                if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
+                {
+                    const std::string l_PathString = l_Path.string();
+                    ImGui::SetDragDropPayload("CONTENT_BROWSER_ITEM", l_PathString.c_str(), l_PathString.size() + 1);
+                    ImGui::TextUnformatted(l_Name.c_str());
+                    ImGui::EndDragDropSource();
+                }
+            }
+
             if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
             {
                 if (highlightAsFolder)

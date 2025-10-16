@@ -3,6 +3,8 @@
 #include <ImGuizmo.h>
 #include <glm/gtc/type_ptr.hpp>
 
+#include <utility>
+
 namespace
 {
     glm::mat4 ComposeMatrixFromTransform(const Trident::Transform& a_Transform)
@@ -86,6 +88,11 @@ void ViewportPanel::Render()
     if (l_NewViewportSize.x > 0.0f && l_NewViewportSize.y > 0.0f)
     {
         const ImVec2 l_ViewportPos = ImGui::GetCursorScreenPos();
+        
+        // Persist the on-screen bounds of the viewport so drag-and-drop handlers can
+        // later determine whether a file drop landed inside the rendered image.
+        m_ViewportBoundsMin = l_ViewportPos;
+        m_ViewportBoundsMax = ImVec2(l_ViewportPos.x + l_ContentRegion.x, l_ViewportPos.y + l_ContentRegion.y);
 
         // Reconfigure the renderer whenever the viewport size changes.
         if (l_NewViewportSize != m_CachedViewportSize)
@@ -107,6 +114,24 @@ void ViewportPanel::Render()
             ImGuizmo::BeginFrame();
             // Draw the viewport texture. UVs are flipped vertically so the render target appears correct.
             ImGui::Image(reinterpret_cast<ImTextureID>(l_Descriptor), l_ContentRegion, ImVec2(0.0f, 1.0f), ImVec2(1.0f, 0.0f));
+            if (ImGui::BeginDragDropTarget())
+            {
+                const ImGuiPayload* l_Payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM");
+                if (l_Payload != nullptr && l_Payload->Data != nullptr && l_Payload->DataSize > 0)
+                {
+                    const char* l_PathData = static_cast<const char*>(l_Payload->Data);
+                    std::string l_PathString{ l_PathData, l_PathData + (l_Payload->DataSize - 1) };
+
+                    if (m_OnAssetDrop)
+                    {
+                        std::vector<std::string> l_DroppedPaths{};
+                        l_DroppedPaths.emplace_back(std::move(l_PathString));
+                        m_OnAssetDrop(l_DroppedPaths);
+                    }
+                    // TODO: Support batched payloads once the content browser exposes multi-selection drags.
+                }
+                ImGui::EndDragDropTarget();
+            }
             // Configure ImGuizmo so it renders directly on top of the viewport image.
             ImGuizmo::SetDrawlist(ImGui::GetWindowDrawList());
             ImGuizmo::SetRect(l_ViewportPos.x, l_ViewportPos.y, l_ContentRegion.x, l_ContentRegion.y);
@@ -143,6 +168,10 @@ void ViewportPanel::Render()
     }
     else
     {
+        // When the viewport is hidden or collapsed we clear the cached bounds so stale
+        // rectangles do not report false positives for drag-and-drop hit tests.
+        m_ViewportBoundsMin = ImVec2(0.0f, 0.0f);
+        m_ViewportBoundsMax = ImVec2(0.0f, 0.0f);
         // TODO: Account for multi-viewport/HiDPI scaling adjustments before submitting viewport info.
     }
 
@@ -166,4 +195,25 @@ void ViewportPanel::SetGizmoState(GizmoState* gizmoState)
 {
     // Cache the shared gizmo configuration so the viewport can react to inspector changes.
     m_GizmoState = gizmoState;
+}
+
+void ViewportPanel::SetAssetDropHandler(std::function<void(const std::vector<std::string>&)> assetDropHandler)
+{
+    // Store the callback so the application layer can process accepted payloads.
+    m_OnAssetDrop = std::move(assetDropHandler);
+}
+
+bool ViewportPanel::ContainsPoint(const ImVec2& point) const
+{
+    // Use the cached ImGui rectangle to verify if a screen-space point lies within the viewport.
+    const bool l_HasValidBounds = (m_ViewportBoundsMax.x > m_ViewportBoundsMin.x) && (m_ViewportBoundsMax.y > m_ViewportBoundsMin.y);
+    if (!l_HasValidBounds)
+    {
+        return false;
+    }
+
+    const bool l_WithinHorizontal = (point.x >= m_ViewportBoundsMin.x) && (point.x <= m_ViewportBoundsMax.x);
+    const bool l_WithinVertical = (point.y >= m_ViewportBoundsMin.y) && (point.y <= m_ViewportBoundsMax.y);
+
+    return l_WithinHorizontal && l_WithinVertical;
 }
