@@ -13,6 +13,7 @@ struct ApplicationSpecifications
 #include "Window/Window.h"
 #include "Application/Startup.h"
 #include "Events/Events.h"
+#include "UI/ImGuiLayer.h"
 
 namespace Trident
 {
@@ -20,6 +21,7 @@ namespace Trident
     {
     public:
         Application();
+        ~Application();
 
         void Inititialize();
         void Shutdown();
@@ -35,6 +37,8 @@ namespace Trident
         ApplicationSpecifications m_Specifications;
         std::unique_ptr<Startup> m_Startup;
         std::unique_ptr<Window> m_Window;
+        std::unique_ptr<UI::ImGuiLayer> m_ImGuiLayer;
+        bool m_HasShutdown = false;
         bool m_IsRunning = true;
     };
 }
