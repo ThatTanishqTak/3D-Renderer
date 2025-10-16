@@ -256,11 +256,45 @@ namespace Trident
 
     void Renderer::UploadMesh(const std::vector<Geometry::Mesh>& meshes, const std::vector<Geometry::Material>& materials)
     {
-        // Ensure no GPU operations are using the old buffers
-        vkWaitForFences(Startup::GetDevice(), 1, &m_ResourceFence, VK_TRUE, UINT64_MAX);
-
-        // Cache the material table so that future shading passes can evaluate PBR parameters
+        // Persist the latest geometry so subsequent drag-and-drop operations can rebuild GPU buffers without reloading from disk.
+        m_GeometryCache = meshes;
         m_Materials = materials;
+
+        UploadMeshFromCache();
+    }
+
+    void Renderer::AppendMeshes(std::vector<Geometry::Mesh> meshes, std::vector<Geometry::Material> materials)
+    {
+        if (meshes.empty())
+        {
+            return;
+        }
+
+        const size_t l_OldMaterialCount = m_Materials.size();
+        m_GeometryCache.reserve(m_GeometryCache.size() + meshes.size());
+
+        for (Geometry::Mesh& it_Mesh : meshes)
+        {
+            if (it_Mesh.MaterialIndex >= 0)
+            {
+                it_Mesh.MaterialIndex += static_cast<int32_t>(l_OldMaterialCount);
+            }
+            m_GeometryCache.emplace_back(std::move(it_Mesh));
+        }
+
+        m_Materials.reserve(m_Materials.size() + materials.size());
+        for (Geometry::Material& it_Material : materials)
+        {
+            m_Materials.emplace_back(std::move(it_Material));
+        }
+
+        UploadMeshFromCache();
+    }
+
+    void Renderer::UploadMeshFromCache()
+    {
+        // Ensure no GPU operations are using the old buffers before reallocating resources.
+        vkWaitForFences(Startup::GetDevice(), 1, &m_ResourceFence, VK_TRUE, UINT64_MAX);
 
         if (m_VertexBuffer != VK_NULL_HANDLE)
         {
@@ -277,12 +311,14 @@ namespace Trident
             m_IndexCount = 0;
         }
 
+        const auto& l_Meshes = m_GeometryCache;
+
         size_t l_VertexCount = 0;
         size_t l_IndexCount = 0;
-        for (const auto& l_Mesh : meshes)
+        for (const auto& it_Mesh : l_Meshes)
         {
-            l_VertexCount += l_Mesh.Vertices.size();
-            l_IndexCount += l_Mesh.Indices.size();
+            l_VertexCount += it_Mesh.Vertices.size();
+            l_IndexCount += it_Mesh.Indices.size();
         }
 
         if (l_VertexCount > m_MaxVertexCount)
@@ -299,46 +335,52 @@ namespace Trident
         uint32_t l_Offset = 0;
         size_t l_VertOffset = 0;
         size_t l_IndexOffset = 0;
-        for (const auto& l_Mesh : meshes)
+        for (const auto& it_Mesh : l_Meshes)
         {
-            std::copy(l_Mesh.Vertices.begin(), l_Mesh.Vertices.end(), m_StagingVertices.get() + l_VertOffset);
-            for (auto index : l_Mesh.Indices)
+            std::copy(it_Mesh.Vertices.begin(), it_Mesh.Vertices.end(), m_StagingVertices.get() + l_VertOffset);
+            for (auto index : it_Mesh.Indices)
             {
                 m_StagingIndices[l_IndexOffset++] = index + l_Offset;
             }
-            l_VertOffset += l_Mesh.Vertices.size();
-            l_Offset += static_cast<uint32_t>(l_Mesh.Vertices.size());
+            l_VertOffset += it_Mesh.Vertices.size();
+            l_Offset += static_cast<uint32_t>(it_Mesh.Vertices.size());
         }
 
         std::vector<Vertex> l_AllVertices(m_StagingVertices.get(), m_StagingVertices.get() + l_VertexCount);
         std::vector<uint32_t> l_AllIndices(m_StagingIndices.get(), m_StagingIndices.get() + l_IndexCount);
 
         // Upload the combined geometry once per load so every mesh can share the same GPU buffers.
-        m_Buffers.CreateVertexBuffer(l_AllVertices, m_Commands.GetOneTimePool(), m_VertexBuffer, m_VertexBufferMemory);
-        m_Buffers.CreateIndexBuffer(l_AllIndices, m_Commands.GetOneTimePool(), m_IndexBuffer, m_IndexBufferMemory, m_IndexCount);
+        if (!l_AllVertices.empty())
+        {
+            m_Buffers.CreateVertexBuffer(l_AllVertices, m_Commands.GetOneTimePool(), m_VertexBuffer, m_VertexBufferMemory);
+        }
+        if (!l_AllIndices.empty())
+        {
+            m_Buffers.CreateIndexBuffer(l_AllIndices, m_Commands.GetOneTimePool(), m_IndexBuffer, m_IndexBufferMemory, m_IndexCount);
+        }
 
         // Record the uploaded index count so the command buffer draw guard can validate pending draws.
         m_IndexCount = static_cast<uint32_t>(l_IndexCount);
 
         // Cache draw metadata for each mesh so render submissions can address shared buffers safely.
         m_MeshDrawInfo.clear();
-        m_MeshDrawInfo.reserve(meshes.size());
+        m_MeshDrawInfo.reserve(l_Meshes.size());
 
         uint32_t l_FirstIndexCursor = 0;
         int32_t l_BaseVertexCursor = 0;
-        for (size_t l_MeshIndex = 0; l_MeshIndex < meshes.size(); ++l_MeshIndex)
+        for (size_t l_MeshIndex = 0; l_MeshIndex < l_Meshes.size(); ++l_MeshIndex)
         {
-            const auto& l_Mesh = meshes[l_MeshIndex];
+            const auto& it_Mesh = l_Meshes[l_MeshIndex];
             MeshDrawInfo l_DrawInfo{};
             l_DrawInfo.m_FirstIndex = l_FirstIndexCursor;
-            l_DrawInfo.m_IndexCount = static_cast<uint32_t>(l_Mesh.Indices.size());
+            l_DrawInfo.m_IndexCount = static_cast<uint32_t>(it_Mesh.Indices.size());
             l_DrawInfo.m_BaseVertex = l_BaseVertexCursor;
-            l_DrawInfo.m_MaterialIndex = l_Mesh.MaterialIndex;
+            l_DrawInfo.m_MaterialIndex = it_Mesh.MaterialIndex;
 
             m_MeshDrawInfo.push_back(l_DrawInfo);
 
             l_FirstIndexCursor += l_DrawInfo.m_IndexCount;
-            l_BaseVertexCursor += static_cast<int32_t>(l_Mesh.Vertices.size());
+            l_BaseVertexCursor += static_cast<int32_t>(it_Mesh.Vertices.size());
         }
 
         // Clear any cached draw list so the next frame rebuilds commands using the fresh offsets.
@@ -368,7 +410,7 @@ namespace Trident
             }
         }
 
-        m_ModelCount = meshes.size();
+        m_ModelCount = l_Meshes.size();
         m_TriangleCount = l_IndexCount / 3;
 
         TR_CORE_INFO("Scene info - Models: {} Triangles: {} Materials: {}", m_ModelCount, m_TriangleCount, m_Materials.size());

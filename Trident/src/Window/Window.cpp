@@ -7,6 +7,8 @@
 #include "Events/KeyEvents.h"
 #include "Events/MouseEvents.h"
 
+#include <vector>
+
 namespace Trident
 {
     Window::Window(const ApplicationSpecifications& specs)
@@ -174,6 +176,41 @@ namespace Trident
                 WindowData& l_Data = *static_cast<WindowData*>(glfwGetWindowUserPointer(window));
 
                 MouseScrolledEvent l_Event(static_cast<float>(xOffset), static_cast<float>(yOffset));
+
+                if (l_Data.m_EventCallback)
+                {
+                    l_Data.m_EventCallback(l_Event);
+                }
+            });
+
+        glfwSetDropCallback(m_Window, [](GLFWwindow* window, int pathCount, const char** paths)
+            {
+                WindowData& l_Data = *static_cast<WindowData*>(glfwGetWindowUserPointer(window));
+
+                std::vector<std::string> l_NormalizedPaths{};
+                l_NormalizedPaths.reserve(static_cast<size_t>(pathCount));
+
+                for (int it_Path = 0; it_Path < pathCount; ++it_Path)
+                {
+                    const char* l_RawPath = (paths && paths[it_Path]) ? paths[it_Path] : nullptr;
+                    if (!l_RawPath)
+                    {
+                        continue;
+                    }
+
+                    std::string l_Normalized = Utilities::FileManagement::NormalizePath(l_RawPath);
+                    if (!l_Normalized.empty())
+                    {
+                        l_NormalizedPaths.push_back(std::move(l_Normalized));
+                    }
+                }
+
+                if (l_NormalizedPaths.empty())
+                {
+                    return;
+                }
+
+                FileDropEvent l_Event(std::move(l_NormalizedPaths));
 
                 if (l_Data.m_EventCallback)
                 {

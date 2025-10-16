@@ -46,6 +46,12 @@ namespace Trident
         Startup::GetRenderer().SetClearColor(color);
     }
 
+    void RenderCommand::AppendMeshes(std::vector<Geometry::Mesh> meshes, std::vector<Geometry::Material> materials)
+    {
+        // Hand the mesh data off to the renderer so it can merge GPU buffers with existing geometry.
+        Startup::GetRenderer().AppendMeshes(std::move(meshes), std::move(materials));
+    }
+
     Transform RenderCommand::GetTransform()
     {
         return Startup::GetRenderer().GetTransform();
@@ -80,5 +86,10 @@ namespace Trident
     {
         // Provide callers with the renderer's clear colour so UI widgets can display the current setting.
         return Startup::GetRenderer().GetClearColor();
+    }
+
+    size_t RenderCommand::GetModelCount()
+    {
+        return Startup::GetRenderer().GetModelCount();
     }
 }

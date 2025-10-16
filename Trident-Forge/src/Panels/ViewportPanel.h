@@ -28,6 +28,8 @@ public:
     void SetCameraEntity(Trident::ECS::Entity cameraEntity);
     // Provides a handle to the shared gizmo state so UI panels can coordinate behaviour.
     void SetGizmoState(GizmoState* gizmoState);
+    // Exposes whether the viewport is hovered so external systems can gate drag-and-drop behaviour.
+    bool IsHovered() const { return m_IsHovered; }
 
 private:
     // Persistent identifier used when asking the renderer for a viewport.

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Events/Events.h"
+
 namespace Trident
 {
     /**
@@ -30,5 +32,13 @@ namespace Trident
          * Called every frame after Update so the layer can record draw commands.
          */
         virtual void Render() = 0;
+
+        /**
+         * Called whenever the engine receives an event, allowing layers to react to input and window callbacks.
+         */
+        virtual void OnEvent(Events& event)
+        {
+            (void)event;
+        }
     };
 }

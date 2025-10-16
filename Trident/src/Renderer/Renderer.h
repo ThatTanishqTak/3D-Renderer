@@ -75,6 +75,7 @@ namespace Trident
 
         void RecreateSwapchain();
         void UploadMesh(const std::vector<Geometry::Mesh>& meshes, const std::vector<Geometry::Material>& materials);
+        void AppendMeshes(std::vector<Geometry::Mesh> meshes, std::vector<Geometry::Material> materials);
         void UploadTexture(const Loader::TextureData& texture);
         void SetImGuiLayer(UI::ImGuiLayer* layer);
 
@@ -225,6 +226,7 @@ namespace Trident
         uint32_t m_SpriteIndexCount = 0;                    ///< Number of indices issued per sprite draw.
         std::vector<MeshDrawInfo> m_MeshDrawInfo;           ///< Cached draw metadata for each uploaded mesh.
         std::vector<MeshDrawCommand> m_MeshDrawCommands;    ///< Mesh draw list gathered per-frame from the ECS registry.
+        std::vector<Geometry::Mesh> m_GeometryCache;        ///< CPU-side copy of uploaded meshes for incremental rebuilds.
 
         // Storage for ImGui textures (such as file icons) so their Vulkan resources
         // remain valid until the renderer explicitly destroys them.
@@ -300,6 +302,7 @@ namespace Trident
         void CreateDescriptorSets();
 
         void UpdateUniformBuffer(uint32_t currentImage);
+        void UploadMeshFromCache();
 
         bool AcquireNextImage(uint32_t& imageIndex, VkFence inFlightFence);
         bool RecordCommandBuffer(uint32_t imageIndex);

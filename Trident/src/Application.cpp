@@ -129,6 +129,12 @@ namespace Trident
                 return true;
             });
 
+        if (m_ActiveLayer)
+        {
+            // Forward the event to the active layer so editor tooling and gameplay can react to callbacks such as file drops.
+            m_ActiveLayer->OnEvent(event);
+        }
+
         // Future event types (input, window focus, etc.) can be dispatched here without modifying the callback wiring.
     }
 

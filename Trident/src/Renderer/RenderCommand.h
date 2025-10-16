@@ -19,6 +19,7 @@ namespace Trident
         static void SetViewportCamera(ECS::Entity cameraEntity);
         // Mirror Renderer::SetClearColor so editor widgets can adjust the background tone live.
         static void SetClearColor(const glm::vec4& color);
+        static void AppendMeshes(std::vector<Geometry::Mesh> meshes, std::vector<Geometry::Material> materials);
 
         static Transform GetTransform();
         static ViewportInfo GetViewport();
@@ -28,5 +29,6 @@ namespace Trident
         static size_t GetCurrentFrame();
         // Expose the active clear colour so UI panels can stay in sync with renderer preferences.
         static glm::vec4 GetClearColor();
+        static size_t GetModelCount();
     };
 }
