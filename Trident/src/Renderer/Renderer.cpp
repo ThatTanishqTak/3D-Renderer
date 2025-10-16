@@ -1854,14 +1854,18 @@ namespace Trident
 
         if (l_Result == VK_ERROR_OUT_OF_DATE_KHR)
         {
+            // The swapchain is no longer compatible with the window surface; rebuild and skip this frame.
+            TR_CORE_WARN("Swapchain out of date detected during AcquireNextImage, recreating and skipping frame");
             RecreateSwapchain();
+
+            return false;
         }
 
-        else if (l_Result != VK_SUCCESS && l_Result != VK_SUBOPTIMAL_KHR)
+        if (l_Result != VK_SUCCESS && l_Result != VK_SUBOPTIMAL_KHR)
         {
             TR_CORE_CRITICAL("Failed to acquire swap chain image!");
 
-            return EXIT_FAILURE;
+            return false;
         }
 
         VkFence& l_ImageFence = m_Commands.GetImageInFlight(imageIndex);
