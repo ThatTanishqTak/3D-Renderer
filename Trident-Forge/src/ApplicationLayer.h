@@ -3,6 +3,7 @@
 #include "Layer/Layer.h"
 
 #include "Panels/ViewportPanel.h"
+#include "Panels/ContentBrowserPanel.h"
 
 
 class ApplicationLayer : public Trident::Layer
@@ -28,4 +29,5 @@ public:
 
 private:
     ViewportPanel m_ViewportPanel;
+    ContentBrowserPanel m_ContentBrowserPanel;
 };
