@@ -81,9 +81,9 @@ void EditorCamera::UpdatePan(const glm::vec2& mouseDelta, float deltaTime)
     m_PanSmoothingTimer = m_SmoothingReset;
 }
 
-void EditorCamera::UpdateDolly(float a_ScrollDelta, float deltaTime)
+void EditorCamera::UpdateDolly(float scrollDelta, float deltaTime)
 {
-    if (a_ScrollDelta == 0.0f)
+    if (scrollDelta == 0.0f)
     {
         m_DollySmoothingTimer = std::max(m_DollySmoothingTimer - deltaTime, 0.0f);
 
@@ -93,7 +93,7 @@ void EditorCamera::UpdateDolly(float a_ScrollDelta, float deltaTime)
     if (m_Projection == ProjectionType::Orthographic)
     {
         // Scale the orthographic volume instead of changing the orbit radius to mimic DCC behaviour.
-        const float l_ScaleFactor = std::exp(a_ScrollDelta * 0.08f);
+        const float l_ScaleFactor = std::exp(scrollDelta * 0.08f);
         const float l_MinimumSize = 0.01f;
         const float l_MaximumSize = 10000.0f;
         m_OrthographicSize = std::clamp(m_OrthographicSize * l_ScaleFactor, l_MinimumSize, l_MaximumSize);
@@ -103,7 +103,7 @@ void EditorCamera::UpdateDolly(float a_ScrollDelta, float deltaTime)
     }
 
     // Positive deltas increase the distance while negative deltas close toward the pivot.
-    const float l_DollyOffset = a_ScrollDelta * m_DollySpeed * std::max(m_OrbitDistance, 0.001f) * deltaTime;
+    const float l_DollyOffset = scrollDelta * m_DollySpeed * std::max(m_OrbitDistance, 0.001f) * deltaTime;
     m_OrbitDistance = std::max(m_OrbitDistance + l_DollyOffset, 0.05f);
     m_Position = m_OrbitPivot - (m_Forward * m_OrbitDistance);
     m_DollySmoothingTimer = m_SmoothingReset;
@@ -135,22 +135,22 @@ void EditorCamera::UpdateMouseLook(const glm::vec2& mouseDelta, float deltaTime)
     m_OrbitSmoothingTimer = m_SmoothingReset;
 }
 
-void EditorCamera::UpdateFly(const glm::vec3& a_LocalDirection, float deltaTime, bool a_BoostActive)
+void EditorCamera::UpdateFly(const glm::vec3& localDirection, float deltaTime, bool boostActive)
 {
-    if (a_LocalDirection.x == 0.0f && a_LocalDirection.y == 0.0f && a_LocalDirection.z == 0.0f)
+    if (localDirection.x == 0.0f && localDirection.y == 0.0f && localDirection.z == 0.0f)
     {
         m_FlySmoothingTimer = std::max(m_FlySmoothingTimer - deltaTime, 0.0f);
         return;
     }
 
-    glm::vec3 l_Translation = (m_Right * a_LocalDirection.x) + (m_Forward * a_LocalDirection.y) + (s_WorldUp * a_LocalDirection.z);
+    glm::vec3 l_Translation = (m_Right * localDirection.x) + (m_Forward * localDirection.y) + (s_WorldUp * localDirection.z);
     if (glm::length(l_Translation) > 0.0f)
     {
         l_Translation = glm::normalize(l_Translation);
     }
 
     float l_Speed = m_FlySpeed;
-    if (a_BoostActive)
+    if (boostActive)
     {
         l_Speed *= m_SpeedBoostMultiplier;
     }
@@ -160,18 +160,18 @@ void EditorCamera::UpdateFly(const glm::vec3& a_LocalDirection, float deltaTime,
     m_FlySmoothingTimer = m_SmoothingReset;
 }
 
-void EditorCamera::SetOrbitPivot(const glm::vec3& a_PivotPosition)
+void EditorCamera::SetOrbitPivot(const glm::vec3& pivotPosition)
 {
     const glm::vec3 l_CurrentOffset = m_Position - m_OrbitPivot;
-    m_OrbitPivot = a_PivotPosition;
+    m_OrbitPivot = pivotPosition;
     m_Position = m_OrbitPivot + l_CurrentOffset;
     m_OrbitDistance = std::max(glm::length(l_CurrentOffset), 0.05f);
 }
 
-void EditorCamera::FrameTarget(const glm::vec3& a_TargetPosition, float a_Distance)
+void EditorCamera::FrameTarget(const glm::vec3& targetPosition, float distance)
 {
-    m_OrbitPivot = a_TargetPosition;
-    m_OrbitDistance = std::max(a_Distance, 0.05f);
+    m_OrbitPivot = targetPosition;
+    m_OrbitDistance = std::max(distance, 0.05f);
 
     // Aim directly at the target so the frame centres the selection.
     glm::vec3 l_Direction = glm::normalize(m_OrbitPivot - m_Position);
@@ -187,14 +187,14 @@ void EditorCamera::FrameTarget(const glm::vec3& a_TargetPosition, float a_Distan
     m_Position = m_OrbitPivot - (m_Forward * m_OrbitDistance);
 }
 
-void EditorCamera::AdjustFlySpeed(float a_ScrollDelta)
+void EditorCamera::AdjustFlySpeed(float scrollDelta)
 {
-    if (a_ScrollDelta == 0.0f)
+    if (scrollDelta == 0.0f)
     {
         return;
     }
 
-    const float l_Scale = 1.0f + (0.1f * a_ScrollDelta);
+    const float l_Scale = 1.0f + (0.1f * scrollDelta);
     m_FlySpeed = std::clamp(m_FlySpeed * l_Scale, 0.1f, 500.0f);
 }
 
@@ -203,12 +203,12 @@ void EditorCamera::SetFlySpeed(float a_Speed)
     m_FlySpeed = std::clamp(a_Speed, 0.1f, 500.0f);
 }
 
-void EditorCamera::SyncToRuntimeCamera(const glm::vec3& a_Position, float a_YawDegrees, float a_PitchDegrees, float a_FieldOfViewDegrees)
+void EditorCamera::SyncToRuntimeCamera(const glm::vec3& position, float yawDegrees, float pitchDegrees, float fieldOfViewDegrees)
 {
-    m_Position = a_Position;
-    m_YawDegrees = a_YawDegrees;
-    m_PitchDegrees = a_PitchDegrees;
-    m_FieldOfViewDegrees = a_FieldOfViewDegrees;
+    m_Position = position;
+    m_YawDegrees = yawDegrees;
+    m_PitchDegrees = pitchDegrees;
+    m_FieldOfViewDegrees = fieldOfViewDegrees;
     ClampPitch();
     UpdateCachedVectors();
 
@@ -225,16 +225,16 @@ void EditorCamera::UpdateRenderCamera()
     Trident::RenderCommand::SetViewportProjection(m_Projection, m_OrthographicSize);
 }
 
-void EditorCamera::SnapToDirection(const glm::vec3& a_TargetForward, const glm::vec3& a_PreferredUp)
+void EditorCamera::SnapToDirection(const glm::vec3& targetForward, const glm::vec3& preferredUp)
 {
-    const glm::vec3 l_NormalisedForward = glm::normalize(a_TargetForward);
+    const glm::vec3 l_NormalisedForward = glm::normalize(targetForward);
     if (glm::length(l_NormalisedForward) < 0.0001f)
     {
         // Degenerate input leave the camera unmodified to avoid erratic jumps.
         return;
     }
 
-    glm::vec3 l_DesiredUp = glm::normalize(a_PreferredUp);
+    glm::vec3 l_DesiredUp = glm::normalize(preferredUp);
     if (glm::length(l_DesiredUp) < 0.0001f || std::abs(glm::dot(l_DesiredUp, l_NormalisedForward)) > 0.999f)
     {
         // When the provided up vector is unusable, fall back to the cached camera up axis.
@@ -268,15 +268,15 @@ void EditorCamera::SnapToDirection(const glm::vec3& a_TargetForward, const glm::
     UpdateRenderCamera();
 }
 
-void EditorCamera::SetProjection(ProjectionType a_Projection)
+void EditorCamera::SetProjection(ProjectionType projection)
 {
-    if (m_Projection == a_Projection)
+    if (m_Projection == projection)
     {
         return;
     }
 
-    m_Projection = a_Projection;
-    Trident::Camera::SetProjection(a_Projection);
+    m_Projection = projection;
+    Trident::Camera::SetProjection(projection);
     if (m_Projection == ProjectionType::Orthographic)
     {
         // Derive a reasonable starting frustum from the current orbit radius so the snap feels natural.
@@ -300,11 +300,11 @@ void EditorCamera::ToggleProjection()
     }
 }
 
-void EditorCamera::SetOrthographicSize(float a_Size)
+void EditorCamera::SetOrthographicSize(float size)
 {
     const float l_MinimumSize = 0.01f;
     const float l_MaximumSize = 10000.0f;
-    m_OrthographicSize = std::clamp(a_Size, l_MinimumSize, l_MaximumSize);
+    m_OrthographicSize = std::clamp(size, l_MinimumSize, l_MaximumSize);
     Trident::Camera::SetOrthographicSize(m_OrthographicSize);
 }
 
