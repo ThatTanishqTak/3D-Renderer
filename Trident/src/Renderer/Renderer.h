@@ -130,8 +130,10 @@ namespace Trident
         glm::mat4 GetViewportViewMatrix() const;
         glm::mat4 GetViewportProjectionMatrix() const;
 
-        Camera& GetCamera() { return m_Camera; }
-        const Camera& GetCamera() const { return m_Camera; }
+        Camera& GetCamera() { return *m_Camera; }
+        const Camera& GetCamera() const { return *m_Camera; }
+        Camera* TryGetCamera() { return m_Camera.get(); }
+        const Camera* TryGetCamera() const { return m_Camera.get(); }
 
         // Access to the CPU-side material cache so editor widgets can tweak shading values.
         std::vector<Geometry::Material>& GetMaterials() { return m_Materials; }
@@ -269,7 +271,7 @@ namespace Trident
         ECS::Entity m_Entity = 0;
         ECS::Registry* m_Registry = nullptr;
         ViewportInfo m_Viewport{};
-        Camera m_Camera{};
+        std::unique_ptr<Camera> m_Camera;
         Skybox m_Skybox{};
 
         UI::ImGuiLayer* m_ImGuiLayer = nullptr;

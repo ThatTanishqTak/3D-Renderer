@@ -64,12 +64,18 @@ namespace Trident
             // Bail out gracefully if the renderer has not finished initialising yet; the editor will retry next frame.
             return;
         }
-        Camera& l_Camera = l_Renderer->GetCamera();
+        Camera* l_Camera = l_Renderer->TryGetCamera();
 
-        l_Camera.SetPosition(position);
-        l_Camera.SetYaw(yawDegrees);
-        l_Camera.SetPitch(pitchDegrees);
-        l_Camera.SetFOV(fieldOfViewDegrees);
+        if (!l_Camera)
+        {
+            // The renderer has not initialised its internal camera yet; retry on the next frame.
+            return;
+        }
+
+        l_Camera->SetPosition(position);
+        l_Camera->SetYaw(yawDegrees);
+        l_Camera->SetPitch(pitchDegrees);
+        l_Camera->SetFOV(fieldOfViewDegrees);
     }
 
     void RenderCommand::SetSelectedEntity(ECS::Entity entity)

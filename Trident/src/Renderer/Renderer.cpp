@@ -1,6 +1,7 @@
 ﻿#include "Renderer/Renderer.h"
 
 #include "Application/Startup.h"
+#include "Camera/RuntimeCamera.h"
 
 #include "ECS/Components/TransformComponent.h"
 #include "Geometry/Mesh.h"
@@ -20,6 +21,7 @@
 #include <filesystem>
 #include <limits>
 #include <ctime>
+#include <memory>
 #include <system_error>
 
 #include <glm/gtc/matrix_transform.hpp>
@@ -97,7 +99,7 @@ namespace Trident
         // Prepare shared quad geometry so every sprite draw can reference the same GPU buffers.
         BuildSpriteGeometry();
 
-        m_Camera = Camera(Startup::GetWindow().GetNativeWindow());
+        m_Camera = std::make_unique<RuntimeCamera>(Startup::GetWindow().GetNativeWindow());
 
         m_Viewport.Position = { 0.0f, 0.0f };
         m_Viewport.Size = { static_cast<float>(m_Swapchain.GetExtent().width), static_cast<float>(m_Swapchain.GetExtent().height) };
@@ -201,7 +203,10 @@ namespace Trident
 
         Utilities::Allocation::ResetFrame();
         ProcessReloadEvents();
-        m_Camera.Update(Utilities::Time::GetDeltaTime());
+        if (m_Camera)
+        {
+            m_Camera->Update(Utilities::Time::GetDeltaTime());
+        }
 
         // Allow developers to tweak GLSL and get instant feedback without restarting the app.
         if (m_Pipeline.ReloadIfNeeded(m_Swapchain))
@@ -929,20 +934,26 @@ namespace Trident
     void Renderer::SetViewportProjection(ProjectionType projection, float orthographicSize)
     {
         // Keep the internal editor camera synchronised with tooling requests so viewports render the expected projection.
-        m_Camera.SetProjection(projection);
-        m_Camera.SetOrthographicSize(orthographicSize);
+        if (m_Camera)
+        {
+            m_Camera->SetProjection(projection);
+            m_Camera->SetOrthographicSize(orthographicSize);
+        }
     }
 
     Renderer::CameraSnapshot Renderer::ResolveViewportCamera() const
     {
         CameraSnapshot l_Snapshot{};
-        l_Snapshot.View = m_Camera.GetViewMatrix();
-        l_Snapshot.Position = m_Camera.GetPosition();
-        l_Snapshot.FieldOfView = m_Camera.GetFOV();
-        l_Snapshot.NearClip = m_Camera.GetNearClip();
-        l_Snapshot.FarClip = m_Camera.GetFarClip();
-        l_Snapshot.Projection = m_Camera.GetProjection();
-        l_Snapshot.OrthographicSize = m_Camera.GetOrthographicSize();
+        if (m_Camera)
+        {
+            l_Snapshot.View = m_Camera->GetViewMatrix();
+            l_Snapshot.Position = m_Camera->GetPosition();
+            l_Snapshot.FieldOfView = m_Camera->GetFOV();
+            l_Snapshot.NearClip = m_Camera->GetNearClip();
+            l_Snapshot.FarClip = m_Camera->GetFarClip();
+            l_Snapshot.Projection = m_Camera->GetProjection();
+            l_Snapshot.OrthographicSize = m_Camera->GetOrthographicSize();
+        }
         l_Snapshot.OverrideAspectRatio = false;
         l_Snapshot.UseCustomProjection = false;
 

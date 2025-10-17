@@ -16,29 +16,39 @@ namespace
 
 EditorCamera::EditorCamera()
 {
+    // Start slightly elevated looking toward the origin for a helpful default editor view.
+    SetPosition(glm::vec3{ 0.0f, -5.0f, 3.0f });
+    // Provide a generous orthographic extent so the editor begins with a wide framing.
+    SetOrthographicSize(20.0f);
     // Ensure the cached forward/right/up vectors reflect the initial yaw/pitch setup.
     UpdateCachedVectors();
     // Position the camera so the renderer picks up the default editor viewpoint immediately.
     UpdateRenderCamera();
 }
 
-void EditorCamera::SetInvertLook(bool a_InvertLook)
+void EditorCamera::Update(float deltaTime)
 {
-    m_InvertLook = a_InvertLook;
+    (void)deltaTime;
+    // Editor camera updates are event driven; no per-frame work is required yet.
 }
 
-void EditorCamera::UpdateOrbit(const glm::vec2& a_MouseDelta, float a_DeltaTime)
+void EditorCamera::SetInvertLook(bool invertLook)
 {
-    const bool l_HasMovement = (a_MouseDelta.x != 0.0f) || (a_MouseDelta.y != 0.0f);
+    m_InvertLook = invertLook;
+}
+
+void EditorCamera::UpdateOrbit(const glm::vec2& mouseDelta, float deltaTime)
+{
+    const bool l_HasMovement = (mouseDelta.x != 0.0f) || (mouseDelta.y != 0.0f);
     if (!l_HasMovement)
     {
         // Decay the smoothing timer so future interpolation hooks can blend back to rest.
-        m_OrbitSmoothingTimer = std::max(m_OrbitSmoothingTimer - a_DeltaTime, 0.0f);
+        m_OrbitSmoothingTimer = std::max(m_OrbitSmoothingTimer - deltaTime, 0.0f);
         return;
     }
 
-    float l_YawDelta = a_MouseDelta.x * m_MouseSensitivity;
-    float l_PitchDelta = a_MouseDelta.y * m_MouseSensitivity;
+    float l_YawDelta = mouseDelta.x * m_MouseSensitivity;
+    float l_PitchDelta = mouseDelta.y * m_MouseSensitivity;
     if (!m_InvertLook)
     {
         l_PitchDelta = -l_PitchDelta;
@@ -54,28 +64,28 @@ void EditorCamera::UpdateOrbit(const glm::vec2& a_MouseDelta, float a_DeltaTime)
     m_OrbitSmoothingTimer = m_SmoothingReset;
 }
 
-void EditorCamera::UpdatePan(const glm::vec2& a_MouseDelta, float a_DeltaTime)
+void EditorCamera::UpdatePan(const glm::vec2& mouseDelta, float deltaTime)
 {
-    const bool l_HasMovement = (a_MouseDelta.x != 0.0f) || (a_MouseDelta.y != 0.0f);
+    const bool l_HasMovement = (mouseDelta.x != 0.0f) || (mouseDelta.y != 0.0f);
     if (!l_HasMovement)
     {
-        m_PanSmoothingTimer = std::max(m_PanSmoothingTimer - a_DeltaTime, 0.0f);
+        m_PanSmoothingTimer = std::max(m_PanSmoothingTimer - deltaTime, 0.0f);
         return;
     }
 
     // Scale pan speed by the current orbit distance so precision improves when zoomed in.
     const float l_DistanceScale = std::max(m_OrbitDistance, 0.001f);
-    glm::vec3 l_Delta = (-a_MouseDelta.x * m_Right + a_MouseDelta.y * m_Up) * m_PanSpeed * l_DistanceScale * a_DeltaTime;
+    glm::vec3 l_Delta = (-mouseDelta.x * m_Right + mouseDelta.y * m_Up) * m_PanSpeed * l_DistanceScale * deltaTime;
     m_Position += l_Delta;
     m_OrbitPivot += l_Delta;
     m_PanSmoothingTimer = m_SmoothingReset;
 }
 
-void EditorCamera::UpdateDolly(float a_ScrollDelta, float a_DeltaTime)
+void EditorCamera::UpdateDolly(float a_ScrollDelta, float deltaTime)
 {
     if (a_ScrollDelta == 0.0f)
     {
-        m_DollySmoothingTimer = std::max(m_DollySmoothingTimer - a_DeltaTime, 0.0f);
+        m_DollySmoothingTimer = std::max(m_DollySmoothingTimer - deltaTime, 0.0f);
 
         return;
     }
@@ -93,23 +103,23 @@ void EditorCamera::UpdateDolly(float a_ScrollDelta, float a_DeltaTime)
     }
 
     // Positive deltas increase the distance while negative deltas close toward the pivot.
-    const float l_DollyOffset = a_ScrollDelta * m_DollySpeed * std::max(m_OrbitDistance, 0.001f) * a_DeltaTime;
+    const float l_DollyOffset = a_ScrollDelta * m_DollySpeed * std::max(m_OrbitDistance, 0.001f) * deltaTime;
     m_OrbitDistance = std::max(m_OrbitDistance + l_DollyOffset, 0.05f);
     m_Position = m_OrbitPivot - (m_Forward * m_OrbitDistance);
     m_DollySmoothingTimer = m_SmoothingReset;
 }
 
-void EditorCamera::UpdateMouseLook(const glm::vec2& a_MouseDelta, float a_DeltaTime)
+void EditorCamera::UpdateMouseLook(const glm::vec2& mouseDelta, float deltaTime)
 {
-    const bool l_HasMovement = (a_MouseDelta.x != 0.0f) || (a_MouseDelta.y != 0.0f);
+    const bool l_HasMovement = (mouseDelta.x != 0.0f) || (mouseDelta.y != 0.0f);
     if (!l_HasMovement)
     {
-        m_OrbitSmoothingTimer = std::max(m_OrbitSmoothingTimer - a_DeltaTime, 0.0f);
+        m_OrbitSmoothingTimer = std::max(m_OrbitSmoothingTimer - deltaTime, 0.0f);
         return;
     }
 
-    float l_YawDelta = a_MouseDelta.x * m_MouseSensitivity;
-    float l_PitchDelta = a_MouseDelta.y * m_MouseSensitivity;
+    float l_YawDelta = mouseDelta.x * m_MouseSensitivity;
+    float l_PitchDelta = mouseDelta.y * m_MouseSensitivity;
     if (!m_InvertLook)
     {
         l_PitchDelta = -l_PitchDelta;
@@ -125,11 +135,11 @@ void EditorCamera::UpdateMouseLook(const glm::vec2& a_MouseDelta, float a_DeltaT
     m_OrbitSmoothingTimer = m_SmoothingReset;
 }
 
-void EditorCamera::UpdateFly(const glm::vec3& a_LocalDirection, float a_DeltaTime, bool a_BoostActive)
+void EditorCamera::UpdateFly(const glm::vec3& a_LocalDirection, float deltaTime, bool a_BoostActive)
 {
     if (a_LocalDirection.x == 0.0f && a_LocalDirection.y == 0.0f && a_LocalDirection.z == 0.0f)
     {
-        m_FlySmoothingTimer = std::max(m_FlySmoothingTimer - a_DeltaTime, 0.0f);
+        m_FlySmoothingTimer = std::max(m_FlySmoothingTimer - deltaTime, 0.0f);
         return;
     }
 
@@ -145,7 +155,7 @@ void EditorCamera::UpdateFly(const glm::vec3& a_LocalDirection, float a_DeltaTim
         l_Speed *= m_SpeedBoostMultiplier;
     }
 
-    m_Position += l_Translation * l_Speed * a_DeltaTime;
+    m_Position += l_Translation * l_Speed * deltaTime;
     m_OrbitPivot = m_Position + (m_Forward * m_OrbitDistance);
     m_FlySmoothingTimer = m_SmoothingReset;
 }
@@ -220,7 +230,7 @@ void EditorCamera::SnapToDirection(const glm::vec3& a_TargetForward, const glm::
     const glm::vec3 l_NormalisedForward = glm::normalize(a_TargetForward);
     if (glm::length(l_NormalisedForward) < 0.0001f)
     {
-        // Degenerate input – leave the camera unmodified to avoid erratic jumps.
+        // Degenerate input leave the camera unmodified to avoid erratic jumps.
         return;
     }
 
@@ -266,11 +276,13 @@ void EditorCamera::SetProjection(ProjectionType a_Projection)
     }
 
     m_Projection = a_Projection;
+    Trident::Camera::SetProjection(a_Projection);
     if (m_Projection == ProjectionType::Orthographic)
     {
         // Derive a reasonable starting frustum from the current orbit radius so the snap feels natural.
         const float l_DefaultSize = std::max(m_OrbitDistance * 2.0f, 0.1f);
         m_OrthographicSize = std::max(m_OrthographicSize, l_DefaultSize);
+        Trident::Camera::SetOrthographicSize(m_OrthographicSize);
     }
 
     UpdateRenderCamera();
@@ -293,27 +305,18 @@ void EditorCamera::SetOrthographicSize(float a_Size)
     const float l_MinimumSize = 0.01f;
     const float l_MaximumSize = 10000.0f;
     m_OrthographicSize = std::clamp(a_Size, l_MinimumSize, l_MaximumSize);
-}
-
-void EditorCamera::ClampPitch()
-{
-    m_PitchDegrees = std::clamp(m_PitchDegrees, -89.0f, 89.0f);
+    Trident::Camera::SetOrthographicSize(m_OrthographicSize);
 }
 
 void EditorCamera::UpdateCachedVectors()
 {
-    const float l_CosPitch = glm::cos(glm::radians(m_PitchDegrees));
-    glm::vec3 l_Forward{};
-    l_Forward.x = glm::cos(glm::radians(m_YawDegrees)) * l_CosPitch;
-    l_Forward.y = glm::sin(glm::radians(m_YawDegrees)) * l_CosPitch;
-    l_Forward.z = glm::sin(glm::radians(m_PitchDegrees));
+    // Reuse the shared helper to maintain parity with the runtime controller's yaw/pitch logic.
+    UpdateCachedDirectionsFromAngles();
 
-    m_Forward = glm::normalize(l_Forward);
-    m_Right = glm::normalize(glm::cross(m_Forward, s_WorldUp));
     if (glm::length(m_Right) < 0.0001f)
     {
         // When the forward vector aligns with world up we fallback to a canonical right.
         m_Right = glm::vec3{ 1.0f, 0.0f, 0.0f };
+        m_Up = glm::normalize(glm::cross(m_Right, m_Forward));
     }
-    m_Up = glm::normalize(glm::cross(m_Right, m_Forward));
 }

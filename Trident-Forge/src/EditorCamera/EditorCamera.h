@@ -3,6 +3,7 @@
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
 
+#include "Camera/Camera.h"
 #include "Camera/CameraComponent.h"
 
 // Bring the renderer's projection type into the editor scope so the controller
@@ -12,10 +13,12 @@ using ProjectionType = Trident::ProjectionType;
 // The EditorCamera encapsulates editor-specific camera behaviour such as orbiting,
 // panning, dollying, and free-flight controls. The controller keeps a mirror of the
 // renderer camera state so UI code can operate independently of runtime entities.
-class EditorCamera
+class EditorCamera : public Trident::Camera
 {
 public:
     EditorCamera();
+
+    void Update(float a_DeltaTime) override;
 
     // Configure whether vertical mouse motion should be inverted when mousing-look or orbiting.
     void SetInvertLook(bool a_InvertLook);
@@ -63,22 +66,13 @@ public:
 
     ProjectionType GetProjection() const { return m_Projection; }
     bool IsOrthographic() const { return m_Projection == ProjectionType::Orthographic; }
-    void SetProjection(ProjectionType a_Projection);
+    void SetProjection(ProjectionType a_Projection) override;
     void ToggleProjection();
     float GetOrthographicSize() const { return m_OrthographicSize; }
-    void SetOrthographicSize(float a_Size);
+    void SetOrthographicSize(float a_Size) override;
 
 private:
-    void ClampPitch();
     void UpdateCachedVectors();
-
-    glm::vec3 m_Position{ 0.0f, -5.0f, 3.0f }; // Start slightly elevated looking toward the origin.
-    float m_YawDegrees = 90.0f;
-    float m_PitchDegrees = -25.0f;
-
-    glm::vec3 m_Forward{ 0.0f, 1.0f, 0.0f };
-    glm::vec3 m_Right{ 1.0f, 0.0f, 0.0f };
-    glm::vec3 m_Up{ 0.0f, 0.0f, 1.0f };
 
     glm::vec3 m_OrbitPivot{ 0.0f, 0.0f, 0.0f };
     float m_OrbitDistance = 8.0f;
@@ -88,10 +82,6 @@ private:
     float m_DollySpeed = 6.0f;
     float m_FlySpeed = 5.0f;
     float m_SpeedBoostMultiplier = 4.0f;
-    float m_FieldOfViewDegrees = 45.0f;
-    ProjectionType m_Projection = ProjectionType::Perspective;
-    float m_OrthographicSize = 20.0f;
-
     bool m_InvertLook = false;
 
     // Simple timers that allow future smoothing/interpolation improvements.
