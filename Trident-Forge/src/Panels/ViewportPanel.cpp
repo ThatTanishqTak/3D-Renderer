@@ -209,8 +209,9 @@ void ViewportPanel::Render()
         {
             // Reset ImGuizmo's per-frame state before drawing the viewport so overlays start cleanly.
             ImGuizmo::BeginFrame();
-            // Draw the viewport texture. UVs are flipped vertically so the render target appears correct.
-            ImGui::Image(reinterpret_cast<ImTextureID>(l_Descriptor), l_ContentRegion, ImVec2(0.0f, 1.0f), ImVec2(1.0f, 0.0f));
+            // Draw the viewport texture using standard UV orientation. The renderer already flips the projection
+            // matrix for Vulkan, so the off-screen image is stored upright and does not require an additional flip.
+            ImGui::Image(reinterpret_cast<ImTextureID>(l_Descriptor), l_ContentRegion, ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f));
             if (ImGui::BeginDragDropTarget())
             {
                 const ImGuiPayload* l_Payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM");
