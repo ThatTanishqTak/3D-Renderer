@@ -43,14 +43,29 @@ namespace Trident
     void RenderCommand::SetViewportProjection(ProjectionType projection, float orthographicSize)
     {
         // Forward the requested projection so the renderer's editor camera mirrors UI state immediately.
-        Startup::GetRenderer().SetViewportProjection(projection, orthographicSize);
+        Renderer* l_Renderer = Startup::TryGetRenderer();
+
+        if (!l_Renderer)
+        {
+            // Defer the update until the renderer finishes constructing so we never touch the camera before it exists.
+            return;
+        }
+
+        l_Renderer->SetViewportProjection(projection, orthographicSize);
     }
 
     void RenderCommand::UpdateEditorCamera(const glm::vec3& position, float yawDegrees, float pitchDegrees, float fieldOfViewDegrees)
     {
         // Copy the provided transform into the renderer's built-in editor camera so gizmos and viewports stay aligned.
-        Renderer& l_Renderer = Startup::GetRenderer();
-        Camera& l_Camera = l_Renderer.GetCamera();
+        Renderer* l_Renderer = Startup::TryGetRenderer();
+
+        if (!l_Renderer)
+        {
+            // Bail out gracefully if the renderer has not finished initialising yet; the editor will retry next frame.
+            return;
+        }
+        Camera& l_Camera = l_Renderer->GetCamera();
+
         l_Camera.SetPosition(position);
         l_Camera.SetYaw(yawDegrees);
         l_Camera.SetPitch(pitchDegrees);

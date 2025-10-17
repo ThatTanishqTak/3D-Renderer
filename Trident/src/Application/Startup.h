@@ -35,7 +35,13 @@ namespace Trident
         static QueueFamilyIndices GetQueueFamilyIndices() { return Get().m_QueueFamilyIndices; }
         static Window& GetWindow() { return Get().m_Window; }
         static Renderer& GetRenderer() { return Get().m_Renderer; }
+        static Renderer* TryGetRenderer()
+        {
+            // Expose a safe pointer for callers that may run before the singleton has finished constructing.
+            return s_Instance ? &s_Instance->m_Renderer : nullptr;
+        }
         static ECS::Registry& GetRegistry() { return Get().m_Registry; }
+        static bool HasInstance() { return s_Instance != nullptr; }
 
     private:
         void Initialize();
