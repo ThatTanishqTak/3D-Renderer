@@ -6,8 +6,10 @@
 #include <functional>
 #include <string>
 #include <vector>
+#include <limits>
 
 #include "Renderer/RenderCommand.h"
+#include "../EditorCamera/EditorCamera.h"
 #include "ECS/Entity.h"
 #include "GizmoState.h"
 
@@ -32,6 +34,8 @@ public:
     void SetCameraEntity(Trident::ECS::Entity cameraEntity);
     // Provides a handle to the shared gizmo state so UI panels can coordinate behaviour.
     void SetGizmoState(GizmoState* gizmoState);
+    // Allow the viewport to react when the hierarchy/inspector selection changes.
+    void SetSelectedEntity(Trident::ECS::Entity selectedEntity);
     // Allows editor systems to react when assets are dropped onto the viewport image.
     void SetAssetDropHandler(std::function<void(const std::vector<std::string>&)> assetDropHandler);
     // Exposes whether the viewport is hovered so external systems can gate drag-and-drop behaviour.
@@ -55,8 +59,23 @@ private:
     bool m_IsCameraControlEnabled = false;
     // Camera entity currently driving the viewport render target.
     Trident::ECS::Entity m_ActiveCameraEntity = 0;
+    // Tracks the entity selected in the hierarchy/inspector for pivot updates.
+    Trident::ECS::Entity m_SelectedEntity = std::numeric_limits<Trident::ECS::Entity>::max();
+    // Cache the previous entity so pivot updates only trigger on changes.
+    Trident::ECS::Entity m_PreviousSelectedEntity = std::numeric_limits<Trident::ECS::Entity>::max();
     // Shared gizmo configuration so this panel stays in sync with inspector controls.
     GizmoState* m_GizmoState = nullptr;
     // Callback invoked whenever a drag-and-drop payload is released over the viewport image.
     std::function<void(const std::vector<std::string>&)> m_OnAssetDrop{};
+    // Editor-side camera controller responsible for scene view navigation.
+    EditorCamera m_CameraController;
+
+    // Helper that reacts to selection changes and keeps the orbit pivot aligned.
+    void UpdateCameraPivotFromSelection();
+    // Process input each frame while the viewport has focus/hover.
+    void HandleCameraInput(const ImGuiIO& io);
+    // Frame the current selection or world origin when the user presses the focus key.
+    void FrameSelection();
+    // Copy the runtime camera transform into the editor controller when requested.
+    void SyncRuntimeCameraToEditor();
 };

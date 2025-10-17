@@ -126,43 +126,43 @@ namespace Trident
         return glm::lookAt(m_Position, m_Position + m_Front, m_Up);
     }
 
-    void Camera::SetPosition(const glm::vec3& a_Position)
+    void Camera::SetPosition(const glm::vec3& position)
     {
         // Allow editor tooling to translate the camera without depending on input events.
-        m_Position = a_Position;
+        m_Position = position;
     }
 
-    void Camera::SetYaw(float a_Yaw)
+    void Camera::SetYaw(float yaw)
     {
         // Update the horizontal angle so editor tweaks immediately affect the view direction.
-        m_Yaw = a_Yaw;
+        m_Yaw = yaw;
         UpdateVectors();
     }
 
-    void Camera::SetPitch(float a_Pitch)
+    void Camera::SetPitch(float pitch)
     {
         // Clamp vertical rotation to avoid flipping the camera upside down while editing.
-        m_Pitch = std::clamp(a_Pitch, -89.0f, 89.0f);
+        m_Pitch = std::clamp(pitch, -89.0f, 89.0f);
         UpdateVectors();
     }
 
-    void Camera::SetFOV(float a_FOVDegrees)
+    void Camera::SetFOV(float fovDegrees)
     {
         // Keep the field of view within a comfortable perspective range for editors.
-        m_FOV = std::clamp(a_FOVDegrees, 1.0f, 120.0f);
+        m_FOV = std::clamp(fovDegrees, 1.0f, 120.0f);
     }
 
-    void Camera::SetNearClip(float a_NearClip)
+    void Camera::SetNearClip(float nearClip)
     {
         // Prevent an invalid projection by ensuring the near plane stays in front of the camera.
-        float l_ClampedNear = std::clamp(a_NearClip, 0.001f, m_FarClip - 0.001f);
+        float l_ClampedNear = std::clamp(nearClip, 0.001f, m_FarClip - 0.001f);
         m_NearClip = l_ClampedNear;
     }
 
-    void Camera::SetFarClip(float a_FarClip)
+    void Camera::SetFarClip(float farClip)
     {
         // Keep the far plane sorted after the near plane while allowing deep draw distances.
         float l_MinFar = m_NearClip + 0.001f;
-        m_FarClip = std::max(a_FarClip, l_MinFar);
+        m_FarClip = std::max(farClip, l_MinFar);
     }
 }

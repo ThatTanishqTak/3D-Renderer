@@ -40,6 +40,17 @@ namespace Trident
         Startup::GetRenderer().SetViewportCamera(cameraEntity);
     }
 
+    void RenderCommand::UpdateEditorCamera(const glm::vec3& position, float yawDegrees, float pitchDegrees, float fieldOfViewDegrees)
+    {
+        // Copy the provided transform into the renderer's built-in editor camera so gizmos and viewports stay aligned.
+        Renderer& l_Renderer = Startup::GetRenderer();
+        Camera& l_Camera = l_Renderer.GetCamera();
+        l_Camera.SetPosition(position);
+        l_Camera.SetYaw(yawDegrees);
+        l_Camera.SetPitch(pitchDegrees);
+        l_Camera.SetFOV(fieldOfViewDegrees);
+    }
+
     void RenderCommand::SetSelectedEntity(ECS::Entity entity)
     {
         // Forward the selection so the renderer tracks the same entity as the editor panels when drawing gizmos.
