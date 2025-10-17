@@ -5,6 +5,10 @@
 
 #include "Camera/CameraComponent.h"
 
+// Bring the renderer's projection type into the editor scope so the controller
+// can mirror runtime camera settings without repeating the namespace prefix.
+using ProjectionType = Trident::ProjectionType;
+
 // The EditorCamera encapsulates editor-specific camera behaviour such as orbiting,
 // panning, dollying, and free-flight controls. The controller keeps a mirror of the
 // renderer camera state so UI code can operate independently of runtime entities.

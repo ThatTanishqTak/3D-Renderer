@@ -87,16 +87,20 @@ namespace
         glm::vec3 Direction{ 0.0f };
     };
 
+    // Precompute the corner directions for the scene gizmo cube. Calling glm::normalize
+    // inside a constexpr context fails with MSVC, so we manually expand the normalised
+    // components for the axis-aligned diagonals.
+    constexpr float s_CornerAxisComponent = 0.57735026919f; // 1 / sqrt(3).
     constexpr std::array<SceneGizmoCorner, 8> s_SceneGizmoCorners
     {
-        SceneGizmoCorner{ 6, glm::normalize(glm::vec3{ 1.0f, 1.0f, 1.0f }) },
-        SceneGizmoCorner{ 5, glm::normalize(glm::vec3{ 1.0f, -1.0f, 1.0f }) },
-        SceneGizmoCorner{ 7, glm::normalize(glm::vec3{ -1.0f, 1.0f, 1.0f }) },
-        SceneGizmoCorner{ 4, glm::normalize(glm::vec3{ -1.0f, -1.0f, 1.0f }) },
-        SceneGizmoCorner{ 2, glm::normalize(glm::vec3{ 1.0f, 1.0f, -1.0f }) },
-        SceneGizmoCorner{ 1, glm::normalize(glm::vec3{ 1.0f, -1.0f, -1.0f }) },
-        SceneGizmoCorner{ 3, glm::normalize(glm::vec3{ -1.0f, 1.0f, -1.0f }) },
-        SceneGizmoCorner{ 0, glm::normalize(glm::vec3{ -1.0f, -1.0f, -1.0f }) }
+        SceneGizmoCorner{ 6, glm::vec3{ s_CornerAxisComponent, s_CornerAxisComponent, s_CornerAxisComponent } },
+        SceneGizmoCorner{ 5, glm::vec3{ s_CornerAxisComponent, -s_CornerAxisComponent, s_CornerAxisComponent } },
+        SceneGizmoCorner{ 7, glm::vec3{ -s_CornerAxisComponent, s_CornerAxisComponent, s_CornerAxisComponent } },
+        SceneGizmoCorner{ 4, glm::vec3{ -s_CornerAxisComponent, -s_CornerAxisComponent, s_CornerAxisComponent } },
+        SceneGizmoCorner{ 2, glm::vec3{ s_CornerAxisComponent, s_CornerAxisComponent, -s_CornerAxisComponent } },
+        SceneGizmoCorner{ 1, glm::vec3{ s_CornerAxisComponent, -s_CornerAxisComponent, -s_CornerAxisComponent } },
+        SceneGizmoCorner{ 3, glm::vec3{ -s_CornerAxisComponent, s_CornerAxisComponent, -s_CornerAxisComponent } },
+        SceneGizmoCorner{ 0, glm::vec3{ -s_CornerAxisComponent, -s_CornerAxisComponent, -s_CornerAxisComponent } }
     };
 
     bool IsPointInsideTriangle(const ImVec2& a_Point, const ImVec2& a_A, const ImVec2& a_B, const ImVec2& c)
