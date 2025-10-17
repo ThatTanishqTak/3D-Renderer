@@ -1,6 +1,8 @@
 #include "Camera.h"
 
 #include "Core/Utilities.h"
+#include "Events/KeyCodes.h"
+#include "Events/MouseCodes.h"
 #include <glm/gtc/matrix_transform.hpp>
 
 #include <algorithm>
@@ -26,42 +28,44 @@ namespace Trident
             return;
         }
 
-        bool l_RightMouse = glfwGetMouseButton(m_Window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
+        // Poll using engine key codes so the camera is ready for the centralized input service.
+        // TODO: Forward these lookups through the shared Input helper once it exists to keep editor/runtime parity.
+        bool l_RightMouse = glfwGetMouseButton(m_Window, (Trident::Mouse::ButtonRight)) == GLFW_PRESS;
 
         if (l_RightMouse)
         {
             float l_Speed = m_MoveSpeed;
-            if (glfwGetKey(m_Window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(m_Window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS)
+            if (glfwGetKey(m_Window, Trident::Key::LeftShift == GLFW_PRESS) || glfwGetKey(m_Window, Trident::Key::RightShift == GLFW_PRESS))
             {
                 l_Speed *= m_SpeedMultiplier;
             }
 
-            if (glfwGetKey(m_Window, GLFW_KEY_W) == GLFW_PRESS)
+            if (glfwGetKey(m_Window, Trident::Key::W) == GLFW_PRESS)
             {
                 m_Position += m_Front * l_Speed * deltaTime;
             }
 
-            if (glfwGetKey(m_Window, GLFW_KEY_S) == GLFW_PRESS)
+            if (glfwGetKey(m_Window, Trident::Key::S) == GLFW_PRESS)
             {
                 m_Position -= m_Front * l_Speed * deltaTime;
             }
 
-            if (glfwGetKey(m_Window, GLFW_KEY_A) == GLFW_PRESS)
+            if (glfwGetKey(m_Window, Trident::Key::A) == GLFW_PRESS)
             {
                 m_Position -= m_Right * l_Speed * deltaTime;
             }
 
-            if (glfwGetKey(m_Window, GLFW_KEY_D) == GLFW_PRESS)
+            if (glfwGetKey(m_Window, Trident::Key::D) == GLFW_PRESS)
             {
                 m_Position += m_Right * l_Speed * deltaTime;
             }
 
-            if (glfwGetKey(m_Window, GLFW_KEY_Q) == GLFW_PRESS)
+            if (glfwGetKey(m_Window, Trident::Key::Q) == GLFW_PRESS)
             {
                 m_Position += m_Up * l_Speed * deltaTime;
             }
 
-            if (glfwGetKey(m_Window, GLFW_KEY_E) == GLFW_PRESS)
+            if (glfwGetKey(m_Window, Trident::Key::E) == GLFW_PRESS)
             {
                 m_Position -= m_Up * l_Speed * deltaTime;
             }

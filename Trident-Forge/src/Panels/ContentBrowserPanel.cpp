@@ -1,5 +1,7 @@
 #include "ContentBrowserPanel.h"
 
+#include "Events/MouseCodes.h"
+
 #include <imgui.h>
 
 #include <algorithm>
@@ -205,8 +207,10 @@ void ContentBrowserPanel::DrawEntryGrid(const std::vector<std::filesystem::direc
                 }
             }
 
-            if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+            // Use engine mouse codes so the content browser respects the centralised input mappings.
+            if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(Trident::Mouse::ButtonLeft))
             {
+                // TODO: Replace this direct double-click check with a shared helper once the input module exposes one.
                 if (highlightAsFolder)
                 {
                     m_CurrentDirectory = l_Path;

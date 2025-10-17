@@ -1,6 +1,7 @@
 #include "UI/FileDialog.h"
 
 #include "Application/Startup.h"
+#include "Events/MouseCodes.h"
 #include "Loader/TextureLoader.h"
 #include "Renderer/Renderer.h"
 
@@ -242,7 +243,8 @@ namespace Trident
                         {
                             if (l_IsDirectory)
                             {
-                                if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+                                // Use the engine-defined mouse codes so editor interactions stay aligned with the input system.
+                                if (ImGui::IsMouseDoubleClicked(Trident::Mouse::ButtonLeft))
                                 {
                                     s_CurrentDirectory /= l_Name;
                                 }
@@ -255,7 +257,8 @@ namespace Trident
                                     l_Matches = l_Entry.path().extension() == extension;
                                 }
 
-                                if (l_Matches && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+                                // TODO: Route this double-click handling through a shared helper once the input module provides one.
+                                if (l_Matches && ImGui::IsMouseDoubleClicked(Trident::Mouse::ButtonLeft))
                                 {
                                     path = l_Entry.path().string();
                                     l_FileChosen = true;

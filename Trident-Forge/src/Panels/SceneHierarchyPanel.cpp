@@ -1,6 +1,7 @@
 #include "SceneHierarchyPanel.h"
 
 #include "Application/Startup.h"
+#include "Events/MouseCodes.h"
 #include "ECS/Components/TagComponent.h"
 #include "ECS/Registry.h"
 
@@ -46,7 +47,8 @@ void SceneHierarchyPanel::Render()
     }
 
     // Allow deselection by clicking an empty portion of the window.
-    if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+    // Use engine mouse codes so hierarchy deselection honours the shared input layer.
+    if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(Trident::Mouse::ButtonLeft))
     {
         const bool l_ClickedItem = ImGui::IsAnyItemHovered();
         if (!l_ClickedItem)
@@ -83,8 +85,10 @@ void SceneHierarchyPanel::DrawEntityNode(Trident::ECS::Entity entity, Trident::E
 
     const bool l_NodeOpen = ImGui::TreeNodeEx(reinterpret_cast<void*>(static_cast<uintptr_t>(entity)), l_NodeFlags, "%s", l_DisplayName.c_str());
 
-    if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
+    // Engine mouse codes keep selection interactions consistent with the rest of the editor.
+    if (ImGui::IsItemClicked(Trident::Mouse::ButtonLeft))
     {
+        // TODO: When the input module exposes shared helpers, route click and double-click handling through them.
         m_SelectedEntity = entity;
     }
 
