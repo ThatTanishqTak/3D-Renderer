@@ -926,6 +926,13 @@ namespace Trident
         m_ViewportCamera = cameraEntity;
     }
 
+    void Renderer::SetViewportProjection(ProjectionType projection, float orthographicSize)
+    {
+        // Keep the internal editor camera synchronised with tooling requests so viewports render the expected projection.
+        m_Camera.SetProjection(projection);
+        m_Camera.SetOrthographicSize(orthographicSize);
+    }
+
     Renderer::CameraSnapshot Renderer::ResolveViewportCamera() const
     {
         CameraSnapshot l_Snapshot{};
@@ -934,7 +941,8 @@ namespace Trident
         l_Snapshot.FieldOfView = m_Camera.GetFOV();
         l_Snapshot.NearClip = m_Camera.GetNearClip();
         l_Snapshot.FarClip = m_Camera.GetFarClip();
-        l_Snapshot.Projection = ProjectionType::Perspective;
+        l_Snapshot.Projection = m_Camera.GetProjection();
+        l_Snapshot.OrthographicSize = m_Camera.GetOrthographicSize();
         l_Snapshot.OverrideAspectRatio = false;
         l_Snapshot.UseCustomProjection = false;
 

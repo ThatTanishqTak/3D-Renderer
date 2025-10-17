@@ -78,4 +78,6 @@ private:
     void FrameSelection();
     // Copy the runtime camera transform into the editor controller when requested.
     void SyncRuntimeCameraToEditor();
+    // Draws the scene orientation gizmo and reports whether the overlay captured input this frame.
+    bool RenderSceneGizmoOverlay(const ImVec2& viewportPos, const ImVec2& viewportSize);
 };

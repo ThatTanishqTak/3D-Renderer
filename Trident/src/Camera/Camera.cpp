@@ -165,4 +165,17 @@ namespace Trident
         float l_MinFar = m_NearClip + 0.001f;
         m_FarClip = std::max(farClip, l_MinFar);
     }
+
+    void Camera::SetProjection(ProjectionType a_Projection)
+    {
+        // Persist the preferred projection so editor widgets and the renderer resolve the same frustum type.
+        m_Projection = a_Projection;
+    }
+
+    void Camera::SetOrthographicSize(float a_Size)
+    {
+        // Prevent a degenerate frustum by clamping the orthographic extent to a small positive value.
+        const float l_MinimumSize = 0.001f;
+        m_OrthographicSize = std::max(a_Size, l_MinimumSize);
+    }
 }

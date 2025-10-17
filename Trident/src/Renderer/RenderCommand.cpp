@@ -40,6 +40,12 @@ namespace Trident
         Startup::GetRenderer().SetViewportCamera(cameraEntity);
     }
 
+    void RenderCommand::SetViewportProjection(ProjectionType projection, float orthographicSize)
+    {
+        // Forward the requested projection so the renderer's editor camera mirrors UI state immediately.
+        Startup::GetRenderer().SetViewportProjection(projection, orthographicSize);
+    }
+
     void RenderCommand::UpdateEditorCamera(const glm::vec3& position, float yawDegrees, float pitchDegrees, float fieldOfViewDegrees)
     {
         // Copy the provided transform into the renderer's built-in editor camera so gizmos and viewports stay aligned.

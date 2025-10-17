@@ -7,6 +7,7 @@
 #include <glm/gtc/constants.hpp>
 
 #include <algorithm>
+#include <cmath>
 
 namespace
 {
@@ -75,6 +76,19 @@ void EditorCamera::UpdateDolly(float a_ScrollDelta, float a_DeltaTime)
     if (a_ScrollDelta == 0.0f)
     {
         m_DollySmoothingTimer = std::max(m_DollySmoothingTimer - a_DeltaTime, 0.0f);
+
+        return;
+    }
+
+    if (m_Projection == ProjectionType::Orthographic)
+    {
+        // Scale the orthographic volume instead of changing the orbit radius to mimic DCC behaviour.
+        const float l_ScaleFactor = std::exp(a_ScrollDelta * 0.08f);
+        const float l_MinimumSize = 0.01f;
+        const float l_MaximumSize = 10000.0f;
+        m_OrthographicSize = std::clamp(m_OrthographicSize * l_ScaleFactor, l_MinimumSize, l_MaximumSize);
+        m_DollySmoothingTimer = m_SmoothingReset;
+
         return;
     }
 
@@ -198,6 +212,87 @@ void EditorCamera::UpdateRenderCamera()
 {
     // Push the latest editor camera transform into the renderer's default camera slot.
     Trident::RenderCommand::UpdateEditorCamera(m_Position, m_YawDegrees, m_PitchDegrees, m_FieldOfViewDegrees);
+    Trident::RenderCommand::SetViewportProjection(m_Projection, m_OrthographicSize);
+}
+
+void EditorCamera::SnapToDirection(const glm::vec3& a_TargetForward, const glm::vec3& a_PreferredUp)
+{
+    const glm::vec3 l_NormalisedForward = glm::normalize(a_TargetForward);
+    if (glm::length(l_NormalisedForward) < 0.0001f)
+    {
+        // Degenerate input – leave the camera unmodified to avoid erratic jumps.
+        return;
+    }
+
+    glm::vec3 l_DesiredUp = glm::normalize(a_PreferredUp);
+    if (glm::length(l_DesiredUp) < 0.0001f || std::abs(glm::dot(l_DesiredUp, l_NormalisedForward)) > 0.999f)
+    {
+        // When the provided up vector is unusable, fall back to the cached camera up axis.
+        l_DesiredUp = m_Up;
+        if (std::abs(glm::dot(l_DesiredUp, l_NormalisedForward)) > 0.999f)
+        {
+            l_DesiredUp = s_WorldUp;
+        }
+    }
+
+    const glm::vec3 l_Right = glm::normalize(glm::cross(l_NormalisedForward, l_DesiredUp));
+    const glm::vec3 l_ReprojectedUp = glm::normalize(glm::cross(l_Right, l_NormalisedForward));
+
+    m_YawDegrees = glm::degrees(std::atan2(l_NormalisedForward.y, l_NormalisedForward.x));
+    m_PitchDegrees = glm::degrees(std::asin(glm::clamp(l_NormalisedForward.z, -1.0f, 1.0f)));
+    ClampPitch();
+    UpdateCachedVectors();
+
+    // Overwrite the cached axes with the recomputed orthonormal basis so gizmos remain stable even at singularities.
+    m_Forward = l_NormalisedForward;
+    m_Right = l_Right;
+    m_Up = l_ReprojectedUp;
+
+    m_Position = m_OrbitPivot - (m_Forward * m_OrbitDistance);
+
+    m_OrbitSmoothingTimer = 0.0f;
+    m_PanSmoothingTimer = 0.0f;
+    m_DollySmoothingTimer = 0.0f;
+    m_FlySmoothingTimer = 0.0f;
+
+    UpdateRenderCamera();
+}
+
+void EditorCamera::SetProjection(ProjectionType a_Projection)
+{
+    if (m_Projection == a_Projection)
+    {
+        return;
+    }
+
+    m_Projection = a_Projection;
+    if (m_Projection == ProjectionType::Orthographic)
+    {
+        // Derive a reasonable starting frustum from the current orbit radius so the snap feels natural.
+        const float l_DefaultSize = std::max(m_OrbitDistance * 2.0f, 0.1f);
+        m_OrthographicSize = std::max(m_OrthographicSize, l_DefaultSize);
+    }
+
+    UpdateRenderCamera();
+}
+
+void EditorCamera::ToggleProjection()
+{
+    if (m_Projection == ProjectionType::Perspective)
+    {
+        SetProjection(ProjectionType::Orthographic);
+    }
+    else
+    {
+        SetProjection(ProjectionType::Perspective);
+    }
+}
+
+void EditorCamera::SetOrthographicSize(float a_Size)
+{
+    const float l_MinimumSize = 0.01f;
+    const float l_MaximumSize = 10000.0f;
+    m_OrthographicSize = std::clamp(a_Size, l_MinimumSize, l_MaximumSize);
 }
 
 void EditorCamera::ClampPitch()

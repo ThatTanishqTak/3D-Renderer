@@ -3,6 +3,8 @@
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
 
+#include "Camera/CameraComponent.h"
+
 // The EditorCamera encapsulates editor-specific camera behaviour such as orbiting,
 // panning, dollying, and free-flight controls. The controller keeps a mirror of the
 // renderer camera state so UI code can operate independently of runtime entities.
@@ -49,6 +51,19 @@ public:
     float GetPitch() const { return m_PitchDegrees; }
     float GetFieldOfView() const { return m_FieldOfViewDegrees; }
 
+    const glm::vec3& GetForward() const { return m_Forward; }
+    const glm::vec3& GetRight() const { return m_Right; }
+    const glm::vec3& GetUp() const { return m_Up; }
+
+    void SnapToDirection(const glm::vec3& a_TargetForward, const glm::vec3& a_PreferredUp);
+
+    ProjectionType GetProjection() const { return m_Projection; }
+    bool IsOrthographic() const { return m_Projection == ProjectionType::Orthographic; }
+    void SetProjection(ProjectionType a_Projection);
+    void ToggleProjection();
+    float GetOrthographicSize() const { return m_OrthographicSize; }
+    void SetOrthographicSize(float a_Size);
+
 private:
     void ClampPitch();
     void UpdateCachedVectors();
@@ -70,6 +85,8 @@ private:
     float m_FlySpeed = 5.0f;
     float m_SpeedBoostMultiplier = 4.0f;
     float m_FieldOfViewDegrees = 45.0f;
+    ProjectionType m_Projection = ProjectionType::Perspective;
+    float m_OrthographicSize = 20.0f;
 
     bool m_InvertLook = false;
 

@@ -15,6 +15,9 @@
 #include <utility>
 #include <algorithm>
 #include <cmath>
+#include <array>
+#include <numeric>
+#include <limits>
 
 namespace
 {
@@ -45,6 +48,72 @@ namespace
         l_Result.Scale = { l_Scale[0], l_Scale[1], l_Scale[2] };
 
         return l_Result;
+    }
+
+    constexpr std::array<glm::vec3, 8> s_SceneGizmoVertices
+    {
+        glm::vec3{ -0.5f, -0.5f, -0.5f },
+        glm::vec3{ 0.5f, -0.5f, -0.5f },
+        glm::vec3{ 0.5f, 0.5f, -0.5f },
+        glm::vec3{ -0.5f, 0.5f, -0.5f },
+        glm::vec3{ -0.5f, -0.5f, 0.5f },
+        glm::vec3{ 0.5f, -0.5f, 0.5f },
+        glm::vec3{ 0.5f, 0.5f, 0.5f },
+        glm::vec3{ -0.5f, 0.5f, 0.5f }
+    };
+
+    struct SceneGizmoFace
+    {
+        std::array<int32_t, 4> Indices{};
+        glm::vec3 Normal{ 0.0f };
+        glm::vec3 Direction{ 0.0f };
+        ImU32 Color = IM_COL32_WHITE;
+        const char* Label = nullptr;
+    };
+
+    constexpr std::array<SceneGizmoFace, 6> s_SceneGizmoFaces
+    {
+        SceneGizmoFace{ { 4, 5, 6, 7 }, glm::vec3{ 0.0f, 1.0f, 0.0f }, glm::vec3{ 0.0f, 1.0f, 0.0f }, IM_COL32(129, 199, 132, 255), "+Y" },
+        SceneGizmoFace{ { 0, 1, 2, 3 }, glm::vec3{ 0.0f, -1.0f, 0.0f }, glm::vec3{ 0.0f, -1.0f, 0.0f }, IM_COL32(56, 142, 60, 200), "-Y" },
+        SceneGizmoFace{ { 1, 5, 6, 2 }, glm::vec3{ 1.0f, 0.0f, 0.0f }, glm::vec3{ 1.0f, 0.0f, 0.0f }, IM_COL32(229, 115, 115, 255), "+X" },
+        SceneGizmoFace{ { 0, 3, 7, 4 }, glm::vec3{ -1.0f, 0.0f, 0.0f }, glm::vec3{ -1.0f, 0.0f, 0.0f }, IM_COL32(183, 28, 28, 220), "-X" },
+        SceneGizmoFace{ { 3, 2, 6, 7 }, glm::vec3{ 0.0f, 0.0f, 1.0f }, glm::vec3{ 0.0f, 0.0f, 1.0f }, IM_COL32(100, 181, 246, 255), "+Z" },
+        SceneGizmoFace{ { 0, 1, 5, 4 }, glm::vec3{ 0.0f, 0.0f, -1.0f }, glm::vec3{ 0.0f, 0.0f, -1.0f }, IM_COL32(21, 101, 192, 220), "-Z" }
+    };
+
+    struct SceneGizmoCorner
+    {
+        int32_t VertexIndex = 0;
+        glm::vec3 Direction{ 0.0f };
+    };
+
+    constexpr std::array<SceneGizmoCorner, 8> s_SceneGizmoCorners
+    {
+        SceneGizmoCorner{ 6, glm::normalize(glm::vec3{ 1.0f, 1.0f, 1.0f }) },
+        SceneGizmoCorner{ 5, glm::normalize(glm::vec3{ 1.0f, -1.0f, 1.0f }) },
+        SceneGizmoCorner{ 7, glm::normalize(glm::vec3{ -1.0f, 1.0f, 1.0f }) },
+        SceneGizmoCorner{ 4, glm::normalize(glm::vec3{ -1.0f, -1.0f, 1.0f }) },
+        SceneGizmoCorner{ 2, glm::normalize(glm::vec3{ 1.0f, 1.0f, -1.0f }) },
+        SceneGizmoCorner{ 1, glm::normalize(glm::vec3{ 1.0f, -1.0f, -1.0f }) },
+        SceneGizmoCorner{ 3, glm::normalize(glm::vec3{ -1.0f, 1.0f, -1.0f }) },
+        SceneGizmoCorner{ 0, glm::normalize(glm::vec3{ -1.0f, -1.0f, -1.0f }) }
+    };
+
+    bool IsPointInsideTriangle(const ImVec2& a_Point, const ImVec2& a_A, const ImVec2& a_B, const ImVec2& c)
+    {
+        const float l_Denominator = ((a_B.y - c.y) * (a_A.x - c.x)) + ((c.x - a_B.x) * (a_A.y - c.y));
+        const float l_MinArea = std::numeric_limits<float>::epsilon();
+        if (std::abs(l_Denominator) <= l_MinArea)
+        {
+            return false;
+        }
+
+        const float l_W1 = ((a_B.y - c.y) * (a_Point.x - c.x) + (c.x - a_B.x) * (a_Point.y - c.y)) / l_Denominator;
+        const float l_W2 = ((c.y - a_A.y) * (a_Point.x - c.x) + (a_A.x - c.x) * (a_Point.y - c.y)) / l_Denominator;
+        const float l_W3 = 1.0f - l_W1 - l_W2;
+
+        const float l_Epsilon = -0.0001f;
+        return (l_W1 >= l_Epsilon) && (l_W2 >= l_Epsilon) && (l_W3 >= l_Epsilon);
     }
 }
 
@@ -172,7 +241,8 @@ void ViewportPanel::Render()
                 glm::mat4 l_ModelMatrix = ComposeMatrixFromTransform(l_CurrentTransform);
 
                 // Drive the gizmo and push edits back into the renderer when the user drags the handles.
-                if (ImGuizmo::Manipulate(glm::value_ptr(l_ViewMatrix), glm::value_ptr(l_ProjectionMatrix), m_GizmoState->GetOperation(), m_GizmoState->GetMode(), glm::value_ptr(l_ModelMatrix)))
+                if (ImGuizmo::Manipulate(glm::value_ptr(l_ViewMatrix), glm::value_ptr(l_ProjectionMatrix), m_GizmoState->GetOperation(), m_GizmoState->GetMode(), 
+                    glm::value_ptr(l_ModelMatrix)))
                 {
                     const Trident::Transform l_UpdatedTransform = DecomposeMatrixToTransform(l_ModelMatrix);
                     Trident::RenderCommand::SetTransform(l_UpdatedTransform);
@@ -183,6 +253,11 @@ void ViewportPanel::Render()
                 {
                     m_IsCameraControlEnabled = false;
                 }
+            }
+            const bool l_SceneGizmoCapturedInput = RenderSceneGizmoOverlay(l_ViewportPos, l_ContentRegion);
+            if (l_SceneGizmoCapturedInput)
+            {
+                m_IsCameraControlEnabled = false;
             }
         }
         else
@@ -231,6 +306,246 @@ void ViewportPanel::SetAssetDropHandler(std::function<void(const std::vector<std
 {
     // Store the callback so the application layer can process accepted payloads.
     m_OnAssetDrop = std::move(assetDropHandler);
+}
+
+bool ViewportPanel::RenderSceneGizmoOverlay(const ImVec2& viewportPos, const ImVec2& viewportSize)
+{
+    ImDrawList* l_DrawList = ImGui::GetWindowDrawList();
+    if (l_DrawList == nullptr)
+    {
+        return false;
+    }
+
+    const float l_Margin = 16.0f;
+    const float l_MaxHorizontal = viewportSize.x - (l_Margin * 2.0f);
+    const float l_MaxVertical = viewportSize.y - (l_Margin * 2.0f);
+    const float l_MinimumSize = 60.0f;
+    if (l_MaxHorizontal < l_MinimumSize || l_MaxVertical < l_MinimumSize)
+    {
+        return false;
+    }
+
+    const float l_TotalSize = std::min(110.0f, std::min(l_MaxHorizontal, l_MaxVertical));
+    const ImVec2 l_GizmoMin{ viewportPos.x + viewportSize.x - l_TotalSize - l_Margin, viewportPos.y + l_Margin };
+    const ImVec2 l_GizmoMax{ l_GizmoMin.x + l_TotalSize, l_GizmoMin.y + l_TotalSize };
+
+    const float l_ModeReservedHeight = std::min(22.0f, l_TotalSize * 0.3f);
+    const float l_ModeSpacing = 4.0f;
+    const float l_CubeHeight = std::max(l_TotalSize - l_ModeReservedHeight - l_ModeSpacing, 10.0f);
+    const ImVec2 l_CubeMin{ l_GizmoMin.x, l_GizmoMin.y };
+    const ImVec2 l_CubeMax{ l_GizmoMax.x, l_GizmoMin.y + l_CubeHeight };
+    const ImVec2 l_Center{ (l_CubeMin.x + l_CubeMax.x) * 0.5f, (l_CubeMin.y + l_CubeMax.y) * 0.5f };
+    const float l_Radius = std::max((l_CubeHeight * 0.5f) - 8.0f, 4.0f);
+
+    // Background panel to keep the cube readable regardless of the underlying scene.
+    l_DrawList->AddRectFilled(l_GizmoMin, l_GizmoMax, IM_COL32(24, 26, 30, 220), 8.0f);
+    l_DrawList->AddRect(l_GizmoMin, l_GizmoMax, IM_COL32(180, 180, 190, 80), 8.0f);
+
+    const glm::vec3 l_Right = glm::normalize(m_CameraController.GetRight());
+    const glm::vec3 l_Up = glm::normalize(m_CameraController.GetUp());
+    const glm::vec3 l_Forward = glm::normalize(m_CameraController.GetForward());
+    const glm::mat3 l_CameraBasis{ l_Right, l_Up, l_Forward };
+    const glm::mat3 l_WorldToCamera = glm::transpose(l_CameraBasis);
+
+    std::array<ImVec2, s_SceneGizmoVertices.size()> l_Project{};
+    std::array<float, s_SceneGizmoVertices.size()> l_Depths{};
+    for (size_t it_Index = 0; it_Index < s_SceneGizmoVertices.size(); ++it_Index)
+    {
+        const glm::vec3& l_Vertex = s_SceneGizmoVertices[it_Index];
+        const glm::vec3 l_CameraSpace = l_WorldToCamera * l_Vertex;
+        const glm::vec3 l_Normalised = l_CameraSpace * 2.0f; // Normalise cube extents to [-1, 1].
+        const float l_Depth = glm::clamp(l_Normalised.z, -1.0f, 1.0f);
+        const float l_DepthScale = 0.65f + (l_Depth * 0.35f);
+        const ImVec2 l_Offset{ l_Normalised.x * l_Radius * l_DepthScale, -l_Normalised.y * l_Radius * l_DepthScale };
+
+        l_Project[it_Index] = ImVec2(l_Center.x + l_Offset.x, l_Center.y + l_Offset.y);
+        l_Depths[it_Index] = l_Depth;
+    }
+
+    struct FaceRenderState
+    {
+        const SceneGizmoFace* Face = nullptr;
+        std::array<ImVec2, 4> Points{};
+        float Depth = 0.0f;
+        ImVec2 Center{ 0.0f, 0.0f };
+        bool FacingCamera = false;
+    };
+
+    std::array<FaceRenderState, s_SceneGizmoFaces.size()> l_Faces{};
+    for (size_t it_Index = 0; it_Index < s_SceneGizmoFaces.size(); ++it_Index)
+    {
+        const SceneGizmoFace& l_Face = s_SceneGizmoFaces[it_Index];
+        FaceRenderState& l_State = l_Faces[it_Index];
+        l_State.Face = &l_Face;
+
+        float l_DepthSum = 0.0f;
+        ImVec2 l_CenterAccumulator{ 0.0f, 0.0f };
+        for (size_t it_Corner = 0; it_Corner < l_Face.Indices.size(); ++it_Corner)
+        {
+            const int32_t l_VertexIndex = l_Face.Indices[it_Corner];
+            l_State.Points[it_Corner] = l_Project[static_cast<size_t>(l_VertexIndex)];
+            l_DepthSum += l_Depths[static_cast<size_t>(l_VertexIndex)];
+            l_CenterAccumulator.x += l_State.Points[it_Corner].x;
+            l_CenterAccumulator.y += l_State.Points[it_Corner].y;
+        }
+
+        l_State.Depth = l_DepthSum / static_cast<float>(l_Face.Indices.size());
+        l_State.Center.x = l_CenterAccumulator.x / static_cast<float>(l_Face.Indices.size());
+        l_State.Center.y = l_CenterAccumulator.y / static_cast<float>(l_Face.Indices.size());
+        l_State.FacingCamera = glm::dot(l_Face.Normal, l_Forward) >= 0.0f;
+    }
+
+    std::array<size_t, s_SceneGizmoFaces.size()> l_DrawOrder{};
+    std::iota(l_DrawOrder.begin(), l_DrawOrder.end(), 0);
+    std::sort(l_DrawOrder.begin(), l_DrawOrder.end(), [&l_Faces](size_t a_Left, size_t a_Right)
+        {
+            return l_Faces[a_Left].Depth < l_Faces[a_Right].Depth;
+        });
+
+    const ImGuiIO& l_IO = ImGui::GetIO();
+    const ImVec2 l_MousePos = l_IO.MousePos;
+    const bool l_MouseInside = (l_MousePos.x >= l_GizmoMin.x) && (l_MousePos.x <= l_GizmoMax.x) && (l_MousePos.y >= l_GizmoMin.y) && (l_MousePos.y <= l_GizmoMax.y);
+
+    const SceneGizmoFace* l_HoveredFace = nullptr;
+    if (l_MouseInside)
+    {
+        for (auto it_Iterator = l_DrawOrder.rbegin(); it_Iterator != l_DrawOrder.rend(); ++it_Iterator)
+        {
+            FaceRenderState& l_State = l_Faces[*it_Iterator];
+            if (!l_State.FacingCamera)
+            {
+                continue;
+            }
+
+            const bool l_InFirstTriangle = IsPointInsideTriangle(l_MousePos, l_State.Points[0], l_State.Points[1], l_State.Points[2]);
+            const bool l_InSecondTriangle = IsPointInsideTriangle(l_MousePos, l_State.Points[0], l_State.Points[2], l_State.Points[3]);
+            if (l_InFirstTriangle || l_InSecondTriangle)
+            {
+                l_HoveredFace = l_State.Face;
+                break;
+            }
+        }
+    }
+
+    const SceneGizmoCorner* l_HoveredCorner = nullptr;
+    if (l_MouseInside)
+    {
+        const float l_CornerRadius = 10.0f;
+        float l_BestDistance = l_CornerRadius * l_CornerRadius;
+        for (const SceneGizmoCorner& it_Corner : s_SceneGizmoCorners)
+        {
+            const ImVec2 l_CornerPos = l_Project[static_cast<size_t>(it_Corner.VertexIndex)];
+            const float l_DeltaX = l_MousePos.x - l_CornerPos.x;
+            const float l_DeltaY = l_MousePos.y - l_CornerPos.y;
+            const float l_Distance = (l_DeltaX * l_DeltaX) + (l_DeltaY * l_DeltaY);
+            if (l_Distance < l_BestDistance)
+            {
+                l_BestDistance = l_Distance;
+                l_HoveredCorner = &it_Corner;
+            }
+        }
+    }
+
+    bool l_InputCaptured = false;
+
+    for (size_t it_Index : l_DrawOrder)
+    {
+        FaceRenderState& l_State = l_Faces[it_Index];
+        const bool l_IsHovered = (l_State.Face == l_HoveredFace) && (l_HoveredCorner == nullptr);
+
+        ImVec4 l_FaceColor = ImGui::ColorConvertU32ToFloat4(l_State.Face->Color);
+        const float l_DepthInfluence = 0.6f + (glm::clamp(l_State.Depth, -1.0f, 1.0f) * 0.25f);
+        l_FaceColor.x *= l_DepthInfluence;
+        l_FaceColor.y *= l_DepthInfluence;
+        l_FaceColor.z *= l_DepthInfluence;
+        l_FaceColor.w = l_State.FacingCamera ? 0.90f : 0.30f;
+        if (l_IsHovered)
+        {
+            l_FaceColor.x = std::min(l_FaceColor.x * 1.2f, 1.0f);
+            l_FaceColor.y = std::min(l_FaceColor.y * 1.2f, 1.0f);
+            l_FaceColor.z = std::min(l_FaceColor.z * 1.2f, 1.0f);
+            l_FaceColor.w = 1.0f;
+        }
+
+        const ImU32 l_FillColor = ImGui::ColorConvertFloat4ToU32(l_FaceColor);
+        l_DrawList->AddConvexPolyFilled(l_State.Points.data(), static_cast<int>(l_State.Points.size()), l_FillColor);
+        l_DrawList->AddPolyline(l_State.Points.data(), static_cast<int>(l_State.Points.size()), IM_COL32(15, 15, 18, 200), true, 1.2f);
+
+        if (l_State.Face->Label != nullptr)
+        {
+            const ImVec2 l_TextSize = ImGui::CalcTextSize(l_State.Face->Label);
+            const ImVec2 l_TextPos{ l_State.Center.x - (l_TextSize.x * 0.5f), l_State.Center.y - (l_TextSize.y * 0.5f) };
+            const ImU32 l_TextColor = l_IsHovered ? IM_COL32(255, 255, 255, 255) : (l_State.FacingCamera ? IM_COL32(235, 235, 240, 235) : IM_COL32(180, 180, 190, 100));
+            l_DrawList->AddText(l_TextPos, l_TextColor, l_State.Face->Label);
+        }
+    }
+
+    for (const SceneGizmoCorner& it_Corner : s_SceneGizmoCorners)
+    {
+        const ImVec2 l_CornerPos = l_Project[static_cast<size_t>(it_Corner.VertexIndex)];
+        const float l_Depth = glm::clamp(l_Depths[static_cast<size_t>(it_Corner.VertexIndex)], -1.0f, 1.0f);
+        ImVec4 l_Color = ImVec4(0.75f, 0.75f, 0.78f, 0.45f + (std::max(0.0f, l_Depth) * 0.45f));
+        const bool l_IsHovered = (&it_Corner == l_HoveredCorner);
+        if (l_IsHovered)
+        {
+            l_Color = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
+        }
+
+        const ImU32 l_FillColor = ImGui::ColorConvertFloat4ToU32(l_Color);
+        l_DrawList->AddCircleFilled(l_CornerPos, 5.5f, l_FillColor, 12);
+        l_DrawList->AddCircle(l_CornerPos, 5.5f, IM_COL32(20, 22, 26, 220), 12, 1.0f);
+    }
+
+    if (l_HoveredCorner != nullptr || l_HoveredFace != nullptr)
+    {
+        l_InputCaptured = true;
+        ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+        if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+        {
+            if (l_HoveredCorner != nullptr)
+            {
+                m_CameraController.SnapToDirection(l_HoveredCorner->Direction, glm::vec3{ 0.0f, 0.0f, 1.0f });
+            }
+            else if (l_HoveredFace != nullptr)
+            {
+                const glm::vec3 l_UpHint = (std::abs(l_HoveredFace->Direction.z) > 0.9f) ? glm::vec3{ 0.0f, 1.0f, 0.0f } : glm::vec3{ 0.0f, 0.0f, 1.0f };
+                m_CameraController.SnapToDirection(l_HoveredFace->Direction, l_UpHint);
+            }
+        }
+    }
+
+    const ImVec2 l_ModeMin{ l_GizmoMin.x + 8.0f, l_CubeMax.y + 4.0f };
+    const ImVec2 l_ModeMax{ l_GizmoMax.x - 8.0f, l_GizmoMax.y - 6.0f };
+    const bool l_ModeHovered = (l_MousePos.x >= l_ModeMin.x) && (l_MousePos.x <= l_ModeMax.x) && (l_MousePos.y >= l_ModeMin.y) && (l_MousePos.y <= l_ModeMax.y);
+    if (l_ModeHovered)
+    {
+        l_InputCaptured = true;
+        ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+        if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+        {
+            m_CameraController.ToggleProjection();
+        }
+    }
+
+    ImVec4 l_ModeColor = m_CameraController.IsOrthographic() ? ImVec4(0.22f, 0.44f, 0.90f, 0.85f) : ImVec4(0.28f, 0.30f, 0.36f, 0.85f);
+    if (l_ModeHovered)
+    {
+        l_ModeColor.x = std::min(l_ModeColor.x * 1.1f, 1.0f);
+        l_ModeColor.y = std::min(l_ModeColor.y * 1.1f, 1.0f);
+        l_ModeColor.z = std::min(l_ModeColor.z * 1.1f, 1.0f);
+        l_ModeColor.w = 1.0f;
+    }
+
+    l_DrawList->AddRectFilled(l_ModeMin, l_ModeMax, ImGui::ColorConvertFloat4ToU32(l_ModeColor), 4.0f);
+    l_DrawList->AddRect(l_ModeMin, l_ModeMax, IM_COL32(200, 200, 210, 120), 4.0f);
+
+    const char* l_ModeLabel = m_CameraController.IsOrthographic() ? "Orthographic" : "Perspective";
+    const ImVec2 l_ModeTextSize = ImGui::CalcTextSize(l_ModeLabel);
+    const ImVec2 l_ModeTextPos{ (l_ModeMin.x + l_ModeMax.x - l_ModeTextSize.x) * 0.5f, (l_ModeMin.y + l_ModeMax.y - l_ModeTextSize.y) * 0.5f };
+    const ImU32 l_ModeTextColor = IM_COL32(245, 245, 250, 240);
+    l_DrawList->AddText(l_ModeTextPos, l_ModeTextColor, l_ModeLabel);
+
+    return l_InputCaptured;
 }
 
 bool ViewportPanel::ContainsPoint(const ImVec2& point) const
