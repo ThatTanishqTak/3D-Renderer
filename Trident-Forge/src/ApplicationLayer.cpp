@@ -18,6 +18,7 @@
 #include <iterator>
 #include <limits>
 
+#include <glm/gtx/norm.hpp>
 #include <glm/geometric.hpp>
 #include <glm/vec3.hpp>
 
@@ -288,7 +289,7 @@ void ApplicationLayer::UpdateEditorCamera(float a_DeltaTime)
         l_Translation += l_Forward * (l_IO.MouseWheel * m_MouseZoomSpeed);
     }
 
-    if (glm::length(l_Translation) > std::numeric_limits<float>::epsilon())
+    if (glm::length2(l_Translation) > std::numeric_limits<float>::epsilon())
     {
         glm::vec3 l_Position = m_EditorCamera.GetPosition();
         l_Position += l_Translation;
