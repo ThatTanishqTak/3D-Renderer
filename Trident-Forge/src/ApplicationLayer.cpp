@@ -8,6 +8,8 @@
 #include "Loader/ModelLoader.h"
 #include "Renderer/RenderCommand.h"
 #include "Core/Utilities.h"
+#include "Events/KeyEvents.h"
+#include "Events/MouseEvents.h"
 
 #include <imgui.h>
 
@@ -84,13 +86,129 @@ void ApplicationLayer::OnEvent(Trident::Events& event)
         {
             return HandleFileDrop(dropEvent);
         });
+
+    l_Dispatcher.Dispatch<Trident::MouseMovedEvent>([this](Trident::MouseMovedEvent& a_MouseEvent)
+        {
+            const glm::vec2 l_NewPosition{ a_MouseEvent.GetX(), a_MouseEvent.GetY() };
+
+            if (!m_HasCursorPosition)
+            {
+                // Seed the cursor state the first time we receive input so subsequent deltas are relative to a real position.
+                m_CurrentCursorPosition = l_NewPosition;
+                m_HasCursorPosition = true;
+                m_PendingCursorDelta = glm::vec2{ 0.0f, 0.0f };
+                return false;
+            }
+
+            const glm::vec2 l_Delta = l_NewPosition - m_CurrentCursorPosition;
+            m_PendingCursorDelta += l_Delta;
+            m_CurrentCursorPosition = l_NewPosition;
+
+            return false;
+        });
+    l_Dispatcher.Dispatch<Trident::MouseScrolledEvent>([this](Trident::MouseScrolledEvent& a_ScrollEvent)
+        {
+            // Accumulate scroll input so the update loop can apply it once per frame.
+            m_PendingScrollDelta += a_ScrollEvent.GetYOffset();
+            return false;
+        });
+    l_Dispatcher.Dispatch<Trident::MouseButtonPressedEvent>([this](Trident::MouseButtonPressedEvent& a_MouseButtonEvent)
+        {
+            if (a_MouseButtonEvent.GetMouseButton() == Trident::Mouse::ButtonRight)
+            {
+                m_IsRightMouseButtonDown = true;
+                m_ResetRotateOrbitReference = true;
+                m_PendingCursorDelta = glm::vec2{ 0.0f, 0.0f };
+            }
+            return false;
+        });
+    l_Dispatcher.Dispatch<Trident::MouseButtonReleasedEvent>([this](Trident::MouseButtonReleasedEvent& a_MouseButtonEvent)
+        {
+            if (a_MouseButtonEvent.GetMouseButton() == Trident::Mouse::ButtonRight)
+            {
+                m_IsRightMouseButtonDown = false;
+                m_IsRotateOrbitActive = false;
+                m_ResetRotateOrbitReference = true;
+            }
+            return false;
+        });
+    l_Dispatcher.Dispatch<Trident::KeyPressedEvent>([this](Trident::KeyPressedEvent& a_KeyEvent)
+        {
+            const Trident::KeyCode l_Key = a_KeyEvent.GetKeyCode();
+            switch (l_Key)
+            {
+            case Trident::Key::W:
+                m_IsKeyWDown = true;
+                break;
+            case Trident::Key::A:
+                m_IsKeyADown = true;
+                break;
+            case Trident::Key::S:
+                m_IsKeySDown = true;
+                break;
+            case Trident::Key::D:
+                m_IsKeyDDown = true;
+                break;
+            case Trident::Key::Q:
+                m_IsKeyQDown = true;
+                break;
+            case Trident::Key::E:
+                m_IsKeyEDown = true;
+                break;
+            case Trident::Key::LeftShift:
+            case Trident::Key::RightShift:
+                m_IsShiftDown = true;
+                break;
+            default:
+                break;
+            }
+            return false;
+        });
+    l_Dispatcher.Dispatch<Trident::KeyReleasedEvent>([this](Trident::KeyReleasedEvent& a_KeyEvent)
+        {
+            const Trident::KeyCode l_Key = a_KeyEvent.GetKeyCode();
+            switch (l_Key)
+            {
+            case Trident::Key::W:
+                m_IsKeyWDown = false;
+                break;
+            case Trident::Key::A:
+                m_IsKeyADown = false;
+                break;
+            case Trident::Key::S:
+                m_IsKeySDown = false;
+                break;
+            case Trident::Key::D:
+                m_IsKeyDDown = false;
+                break;
+            case Trident::Key::Q:
+                m_IsKeyQDown = false;
+                break;
+            case Trident::Key::E:
+                m_IsKeyEDown = false;
+                break;
+            case Trident::Key::LeftShift:
+                m_IsShiftDown = false;
+                break;
+            default:
+                break;
+            }
+            return false;
+        });
 }
 
 bool ApplicationLayer::HandleFileDrop(Trident::FileDropEvent& event)
 {
-    ImGuiIO& l_IO = ImGui::GetIO();
-    const bool l_HasMousePosition = std::isfinite(l_IO.MousePos.x) && std::isfinite(l_IO.MousePos.y);
-    const bool l_IsWithinViewport = l_HasMousePosition && m_ViewportPanel.ContainsPoint(l_IO.MousePos);
+    // File drops arrive via the engine event queue, so rely on the cached cursor
+    // position sourced from MouseMovedEvent instead of querying ImGui directly.
+    const bool l_HasMousePosition = m_HasCursorPosition && std::isfinite(m_CurrentCursorPosition.x) && std::isfinite(m_CurrentCursorPosition.y);
+    if (!l_HasMousePosition)
+    {
+        return false;
+    }
+
+    const ImVec2 l_MousePosition{ m_CurrentCursorPosition.x, m_CurrentCursorPosition.y };
+    const bool l_IsWithinViewport = m_ViewportPanel.ContainsPoint(l_MousePosition);
 
     if (!m_ViewportPanel.IsHovered() && !l_IsWithinViewport)
     {
@@ -185,14 +303,12 @@ bool ApplicationLayer::ImportDroppedAssets(const std::vector<std::string>& dropp
 
 void ApplicationLayer::UpdateEditorCamera(float deltaTime)
 {
-    // Gather the latest ImGui IO snapshot so we can determine whether the editor should consume controls this frame.
-    ImGuiIO& l_IO = ImGui::GetIO();
-
-    // If ImGui intends to capture mouse or keyboard input we avoid touching the camera to respect focused widgets.
-    if (l_IO.WantCaptureMouse || l_IO.WantCaptureKeyboard)
+    // Guard against stale state before the window system has provided any cursor coordinates.
+    if (!m_HasCursorPosition)
     {
-        m_IsRotateOrbitActive = false;
-        m_ResetRotateOrbitReference = true;
+        m_PendingCursorDelta = glm::vec2{ 0.0f, 0.0f };
+        m_PendingScrollDelta = 0.0f;
+
         return;
     }
 
@@ -202,6 +318,9 @@ void ApplicationLayer::UpdateEditorCamera(float deltaTime)
     {
         m_IsRotateOrbitActive = false;
         m_ResetRotateOrbitReference = true;
+        m_IsRightMouseButtonDown = false;
+        m_PendingCursorDelta = glm::vec2{ 0.0f, 0.0f };
+        m_PendingScrollDelta = 0.0f;
 
         return;
     }
@@ -209,24 +328,24 @@ void ApplicationLayer::UpdateEditorCamera(float deltaTime)
     // Store the cursor location so the next drag can start without a large delta jump when the button is pressed.
     if (m_ResetRotateOrbitReference)
     {
-        m_LastCursorPosition = { l_IO.MousePos.x, l_IO.MousePos.y };
+        m_LastCursorPosition = m_CurrentCursorPosition;
         m_ResetRotateOrbitReference = false;
     }
 
-    const bool l_IsRotating = l_IO.MouseDown[ImGuiMouseButton_Right];
+    const bool l_IsRotating = m_IsRightMouseButtonDown;
     if (l_IsRotating)
     {
         // Mark the drag active so key handling below knows to treat WASD/QE as fly controls.
         m_IsRotateOrbitActive = true;
 
         // Convert the mouse delta into yaw/pitch adjustments to orbit around the focus point.
-        const float l_YawDelta = l_IO.MouseDelta.x * m_MouseRotationSpeed;
-        const float l_PitchDelta = l_IO.MouseDelta.y * m_MouseRotationSpeed;
+        const float l_YawDelta = m_PendingCursorDelta.x * m_MouseRotationSpeed;
+        const float l_PitchDelta = m_PendingCursorDelta.y * m_MouseRotationSpeed;
         m_EditorYawDegrees += l_YawDelta;
         m_EditorPitchDegrees = std::clamp(m_EditorPitchDegrees - l_PitchDelta, -89.0f, 89.0f);
 
         m_EditorCamera.SetRotation({ m_EditorPitchDegrees, m_EditorYawDegrees, 0.0f });
-        m_LastCursorPosition = { l_IO.MousePos.x, l_IO.MousePos.y };
+        m_LastCursorPosition = m_CurrentCursorPosition;
     }
     else if (m_IsRotateOrbitActive)
     {
@@ -247,46 +366,45 @@ void ApplicationLayer::UpdateEditorCamera(float deltaTime)
 
     glm::vec3 l_Translation{ 0.0f };
 
-    // Determine the frame's delta time from the engine clock so motion stays frame-rate independent.
-    const float l_FrameDelta = Trident::Utilities::Time::GetDeltaTime();
-    (void)deltaTime; // The explicit parameter remains for future callers that provide custom deltas.
+    // Determine the frame's delta time from the caller so motion stays frame-rate independent.
+    const float l_FrameDelta = std::max(deltaTime, 0.0f);
 
     // Allow faster motion when shift is held so large scenes are easier to traverse.
-    const float l_SpeedMultiplier = l_IO.KeyShift ? m_CameraBoostMultiplier : 1.0f;
+    const float l_SpeedMultiplier = m_IsShiftDown ? m_CameraBoostMultiplier : 1.0f;
     const float l_MoveStep = m_CameraMoveSpeed * l_SpeedMultiplier * l_FrameDelta;
 
     // WASD drive forward/backward and strafing relative to the camera heading.
-    if (l_IsRotating && ImGui::IsKeyDown(ImGuiKey_W))
+    if (l_IsRotating && m_IsKeyWDown)
     {
         l_Translation += l_Forward * l_MoveStep;
     }
-    if (l_IsRotating && ImGui::IsKeyDown(ImGuiKey_S))
+    if (l_IsRotating && m_IsKeySDown)
     {
         l_Translation -= l_Forward * l_MoveStep;
     }
-    if (l_IsRotating && ImGui::IsKeyDown(ImGuiKey_D))
+    if (l_IsRotating && m_IsKeyDDown)
     {
         l_Translation += l_Right * l_MoveStep;
     }
-    if (l_IsRotating && ImGui::IsKeyDown(ImGuiKey_A))
+    if (l_IsRotating && m_IsKeyADown)
     {
         l_Translation -= l_Right * l_MoveStep;
     }
 
     // QE provide vertical movement for fly navigation when orbiting with the mouse.
-    if (l_IsRotating && ImGui::IsKeyDown(ImGuiKey_E))
+    if (l_IsRotating && m_IsKeyEDown)
     {
         l_Translation += l_WorldUp * l_MoveStep;
     }
-    if (l_IsRotating && ImGui::IsKeyDown(ImGuiKey_Q))
+    if (l_IsRotating && m_IsKeyQDown)
     {
         l_Translation -= l_WorldUp * l_MoveStep;
     }
 
     // Mouse wheel dolly adjusts the camera distance even without a key press to speed up framing.
-    if (std::abs(l_IO.MouseWheel) > std::numeric_limits<float>::epsilon())
+    if (std::abs(m_PendingScrollDelta) > std::numeric_limits<float>::epsilon())
     {
-        l_Translation += l_Forward * (l_IO.MouseWheel * m_MouseZoomSpeed);
+        l_Translation += l_Forward * (m_PendingScrollDelta * m_MouseZoomSpeed);
     }
 
     if (glm::length2(l_Translation) > std::numeric_limits<float>::epsilon())
@@ -297,4 +415,6 @@ void ApplicationLayer::UpdateEditorCamera(float deltaTime)
     }
 
     // TODO: Integrate ViewportPanel::FrameSelection via a dedicated focus key to snap the camera to selections with smoothing.
+    m_PendingCursorDelta = glm::vec2{ 0.0f, 0.0f };
+    m_PendingScrollDelta = 0.0f;
 }
