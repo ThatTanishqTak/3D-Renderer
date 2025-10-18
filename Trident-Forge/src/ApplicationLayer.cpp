@@ -23,7 +23,6 @@
 #include <glm/gtx/norm.hpp>
 #include <glm/geometric.hpp>
 
-// ---- Utility local helpers ----
 static inline float DegToRad(float deg) { return deg * 0.017453292519943295769f; }
 
 void ApplicationLayer::Initialize()
@@ -394,27 +393,78 @@ void ApplicationLayer::UpdateEditorCamera(float deltaTime)
     // Recompute basis from targets
     glm::vec3 l_TargetForward = ForwardFromYawPitch(m_TargetYawDegrees, m_TargetPitchDegrees);
     glm::vec3 l_TargetRight = glm::normalize(glm::cross(l_TargetForward, l_WorldUp));
-    if (!std::isfinite(l_TargetRight.x)) l_TargetRight = { 1.0f, 0.0f, 0.0f };
-    glm::vec3 tgtUp = glm::normalize(glm::cross(l_TargetRight, l_TargetForward));
+    if (!std::isfinite(l_TargetRight.x))
+    {
+        l_TargetRight = { 1.0f, 0.0f, 0.0f };
+    }
+    glm::vec3 l_TargetUp = glm::normalize(glm::cross(l_TargetRight, l_TargetForward));
+
+    const auto l_IsFiniteVec3 = [](const glm::vec3& a_Value) -> bool
+        {
+            return std::isfinite(a_Value.x) && std::isfinite(a_Value.y) && std::isfinite(a_Value.z);
+        };
+
+    // Read the actual camera orientation so translational motion follows what the user currently sees on screen.
+    glm::vec3 l_CurrentForward = m_EditorCamera.GetForwardDirection();
+    if (!l_IsFiniteVec3(l_CurrentForward))
+    {
+        l_CurrentForward = l_TargetForward;
+    }
+
+    glm::vec3 l_CurrentRight = glm::normalize(glm::cross(l_CurrentForward, l_WorldUp));
+    if (!l_IsFiniteVec3(l_CurrentRight))
+    {
+        l_CurrentRight = l_TargetRight;
+    }
+
+    glm::vec3 l_CurrentUp = glm::normalize(glm::cross(l_CurrentRight, l_CurrentForward));
+    if (!l_IsFiniteVec3(l_CurrentUp))
+    {
+        l_CurrentUp = l_TargetUp;
+    }
 
     float speedMult = m_IsShiftDown ? m_CameraBoostMultiplier : 1.0f;
     float l_MoveStep = m_CameraMoveSpeed * speedMult * l_DeltaTime;
 
     if (l_FlyMode)
     {
-        if (m_IsKeyWDown) m_TargetPosition += l_TargetForward * l_MoveStep;
-        if (m_IsKeySDown) m_TargetPosition -= l_TargetForward * l_MoveStep;
-        if (m_IsKeyDDown) m_TargetPosition += l_TargetRight * l_MoveStep;
-        if (m_IsKeyADown) m_TargetPosition -= l_TargetRight * l_MoveStep;
-        if (m_IsKeyEDown) m_TargetPosition += l_WorldUp * l_MoveStep;
-        if (m_IsKeyQDown) m_TargetPosition -= l_WorldUp * l_MoveStep;
+        // Use the camera's smoothed forward/right vectors so WASD motion stays in lockstep with the rendered view.
+        if (m_IsKeyWDown)
+        {
+            m_TargetPosition += l_CurrentForward * l_MoveStep;
+        }
+
+        if (m_IsKeySDown)
+        {
+            m_TargetPosition -= l_CurrentForward * l_MoveStep;
+        }
+
+        if (m_IsKeyDDown)
+        {
+            m_TargetPosition += l_CurrentRight * l_MoveStep;
+        }
+
+        if (m_IsKeyADown)
+        {
+            m_TargetPosition -= l_CurrentRight * l_MoveStep;
+        }
+
+        if (m_IsKeyEDown)
+        {
+            m_TargetPosition += l_CurrentUp * l_MoveStep;
+        }
+
+        if (m_IsKeyQDown)
+        {
+            m_TargetPosition -= l_CurrentUp * l_MoveStep;
+        }
     }
 
     if (l_PanMode)
     {
         const float l_Distance = std::max(glm::length(m_TargetPosition - m_CameraPivot), 1.0f);
         const float l_PanScale = l_Distance * m_PanSpeedFactor;
-        const glm::vec3 l_PanDelta = (-l_TargetRight * m_PendingCursorDelta.x + tgtUp * m_PendingCursorDelta.y) * l_PanScale;
+        const glm::vec3 l_PanDelta = (-l_TargetRight * m_PendingCursorDelta.x + l_TargetUp * m_PendingCursorDelta.y) * l_PanScale;
         m_TargetPosition += l_PanDelta;
         if (l_OrbitMode) m_CameraPivot += l_PanDelta; // keep pivot under cursor while orbit-panning
     }
@@ -438,7 +488,8 @@ void ApplicationLayer::UpdateEditorCamera(float deltaTime)
         else
         {
             // Generic dolly along forward
-            m_TargetPosition += l_TargetForward * (m_PendingScrollDelta * m_MouseZoomSpeed);
+            // Align dolly movement with the camera's current facing so zooms do not drift when rotation smoothing is active.
+            m_TargetPosition += l_CurrentForward * (m_PendingScrollDelta * m_MouseZoomSpeed);
         }
     }
 
@@ -495,10 +546,10 @@ void ApplicationLayer::FrameSelection()
     m_TargetPosition = m_CameraPivot - l_Forward * m_OrbitDistance;
 }
 
-glm::vec3 ApplicationLayer::ForwardFromYawPitch(float yawDeg, float pitchDeg)
+glm::vec3 ApplicationLayer::ForwardFromYawPitch(float yawDegrees, float pitchDegrees)
 {
-    const float l_YAW = DegToRad(yawDeg);
-    const float l_Pitch = DegToRad(pitchDeg);
+    const float l_YAW = DegToRad(yawDegrees);
+    const float l_Pitch = DegToRad(pitchDegrees);
     const float l_CosPoint  = std::cos(l_Pitch);
     glm::vec3 l_Forward{ l_CosPoint  * std::cos(l_YAW), std::sin(l_Pitch), l_CosPoint  * std::sin(l_YAW) };
     if (!std::isfinite(l_Forward.x) || !std::isfinite(l_Forward.y) || !std::isfinite(l_Forward.z))

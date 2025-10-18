@@ -98,22 +98,22 @@ private:
 
     // Orbit + framing
     glm::vec3 m_CameraPivot{ 0.0f, 0.0f, 0.0f };    ///< Orbit center used by Alt+LMB and Frame (F).
-    float     m_OrbitDistance = 8.0f;               ///< Distance from pivot when orbiting.
-    float     m_MinOrbitDistance = 0.05f;           ///< Clamp to avoid flipping at the pivot.
+    float m_OrbitDistance = 8.0f;               ///< Distance from pivot when orbiting.
+    float m_MinOrbitDistance = 0.05f;           ///< Clamp to avoid flipping at the pivot.
 
     // Smoothing
-    float     m_PosSmoothing = 12.0f;               ///< Higher is snappier, 0 disables smoothing.
-    float     m_RotSmoothing = 14.0f;
+    float m_PosSmoothing = 12.0f;               ///< Higher is snappier, 0 disables smoothing.
+    float m_RotSmoothing = 14.0f;
     glm::vec3 m_TargetPosition{ 0.0f, 3.0f, 8.0f };
-    float     m_TargetYawDegrees = -90.0f;
-    float     m_TargetPitchDegrees = -20.0f;
+    float m_TargetYawDegrees = -90.0f;
+    float m_TargetPitchDegrees = -20.0f;
 
     // Pan/dolly tuning
-    float m_PanSpeedFactor = 0.0025f;             ///< Scales with orbit distance for consistent feel.
+    float m_PanSpeedFactor = 1.0f;             ///< Scales with orbit distance for consistent feel.
     float m_DollySpeedFactor = 0.15f;               ///< Used for Alt+RMB/scroll while orbiting.
 
     // Fly speed limits
-    float m_MinMoveSpeed = 0.1f;
+    float m_MinMoveSpeed = 10.1f;
     float m_MaxMoveSpeed = 50.0f;
 
     // One-shot requests
