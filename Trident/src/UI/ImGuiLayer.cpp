@@ -285,8 +285,6 @@ namespace Trident
                     TR_CORE_WARN("Failed to remove previous layout file '{}': {}", m_LayoutIniFilePath, l_RemoveError.message());
                 }
             }
-
-            // Future improvement: support selecting between multiple layout presets and auto-versioning them here.
         }
     }
 }

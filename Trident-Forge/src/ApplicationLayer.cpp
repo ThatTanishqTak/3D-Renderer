@@ -405,19 +405,20 @@ void ApplicationLayer::UpdateEditorCamera(float deltaTime)
         };
 
     // Read the actual camera orientation so translational motion follows what the user currently sees on screen.
+    // Query the current camera basis vectors so translation matches the live view.
     glm::vec3 l_CurrentForward = m_EditorCamera.GetForwardDirection();
     if (!l_IsFiniteVec3(l_CurrentForward))
     {
         l_CurrentForward = l_TargetForward;
     }
 
-    glm::vec3 l_CurrentRight = glm::normalize(glm::cross(l_CurrentForward, l_WorldUp));
+    glm::vec3 l_CurrentRight = m_EditorCamera.GetRightDirection();
     if (!l_IsFiniteVec3(l_CurrentRight))
     {
         l_CurrentRight = l_TargetRight;
     }
 
-    glm::vec3 l_CurrentUp = glm::normalize(glm::cross(l_CurrentRight, l_CurrentForward));
+    glm::vec3 l_CurrentUp = m_EditorCamera.GetUpDirection();
     if (!l_IsFiniteVec3(l_CurrentUp))
     {
         l_CurrentUp = l_TargetUp;

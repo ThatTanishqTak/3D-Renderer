@@ -152,6 +152,27 @@ namespace Trident
         return glm::normalize(l_Forward);
     }
 
+    glm::vec3 EditorCamera::GetRightDirection() const
+    {
+        const glm::quat l_Orientation = BuildOrientation();
+        const glm::vec3 l_Right = l_Orientation * glm::vec3{ 1.0f, 0.0f, 0.0f };
+
+        return glm::normalize(l_Right);
+    }
+
+    glm::vec3 EditorCamera::GetUpDirection() const
+    {
+        const glm::quat l_Orientation = BuildOrientation();
+        const glm::vec3 l_Up = l_Orientation * glm::vec3{ 0.0f, 1.0f, 0.0f };
+
+        return glm::normalize(l_Up);
+    }
+
+    glm::quat EditorCamera::GetOrientation() const
+    {
+        return BuildOrientation();
+    }
+
     void EditorCamera::UpdateViewMatrix() const
     {
         const glm::quat l_Orientation = BuildOrientation();

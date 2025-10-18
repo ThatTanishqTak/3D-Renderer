@@ -49,6 +49,15 @@ namespace Trident
 
         /// Returns a forward direction vector derived from the current rotation.
         glm::vec3 GetForwardDirection() const;
+        /// Returns a right direction vector derived from the current rotation.
+        glm::vec3 GetRightDirection() const;
+        /// Returns an up direction vector derived from the current rotation.
+        glm::vec3 GetUpDirection() const;
+        /// Builds and returns the orientation quaternion for the current rotation.
+        glm::quat GetOrientation() const;
+
+        /// Convenience accessor returning the combined view-projection matrix.
+        glm::mat4 GetViewProjectionMatrix() const { return GetProjectionMatrix() * GetViewMatrix(); }
 
     private:
         void UpdateViewMatrix() const;
