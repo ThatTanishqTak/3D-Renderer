@@ -7,6 +7,7 @@
 #include "Loader/AssimpExtensions.h"
 #include "Loader/ModelLoader.h"
 #include "Renderer/RenderCommand.h"
+#include "Core/Utilities.h"
 
 #include <imgui.h>
 
@@ -15,6 +16,10 @@
 #include <filesystem>
 #include <cmath>
 #include <iterator>
+#include <limits>
+
+#include <glm/geometric.hpp>
+#include <glm/vec3.hpp>
 
 void ApplicationLayer::Initialize()
 {
@@ -27,15 +32,30 @@ void ApplicationLayer::Initialize()
         {
             ImportDroppedAssets(droppedPaths);
         });
+
+    // Seed the editor camera with a comfortable default orbit so the scene appears immediately.
+    m_EditorCamera.SetPosition({ 0.0f, 3.0f, 8.0f });
+    m_EditorYawDegrees = -90.0f;
+    m_EditorPitchDegrees = -20.0f;
+    m_EditorCamera.SetRotation({ m_EditorPitchDegrees, m_EditorYawDegrees, 0.0f });
+    m_EditorCamera.SetClipPlanes(0.1f, 1000.0f);
+    m_EditorCamera.SetProjectionType(Trident::Camera::ProjectionType::Perspective);
+
+    // Hand the configured camera to the renderer once the panels are bound so subsequent renders use it immediately.
+    Trident::RenderCommand::SetEditorCamera(&m_EditorCamera);
 }
 
 void ApplicationLayer::Shutdown()
 {
-
+    // Detach the editor camera before destruction to avoid dangling references inside the renderer singleton.
+    Trident::RenderCommand::SetEditorCamera(nullptr);
 }
 
 void ApplicationLayer::Update()
 {
+    // Update the editor camera first so viewport interactions read the freshest position/rotation values for this frame.
+    UpdateEditorCamera(Trident::Utilities::Time::GetDeltaTime());
+
     m_ViewportPanel.Update();
     m_ContentBrowserPanel.Update();
     m_SceneHierarchyPanel.Update();
@@ -160,4 +180,120 @@ bool ApplicationLayer::ImportDroppedAssets(const std::vector<std::string>& dropp
     Trident::RenderCommand::AppendMeshes(std::move(l_ImportedMeshes), std::move(l_ImportedMaterials));
 
     return true;
+}
+
+void ApplicationLayer::UpdateEditorCamera(float a_DeltaTime)
+{
+    // Gather the latest ImGui IO snapshot so we can determine whether the editor should consume controls this frame.
+    ImGuiIO& l_IO = ImGui::GetIO();
+
+    // If ImGui intends to capture mouse or keyboard input we avoid touching the camera to respect focused widgets.
+    if (l_IO.WantCaptureMouse || l_IO.WantCaptureKeyboard)
+    {
+        m_IsRotateOrbitActive = false;
+        m_ResetRotateOrbitReference = true;
+        return;
+    }
+
+    // Restrict camera updates to the viewport so other panels remain scrollable and do not steal focus.
+    const bool l_HasViewportFocus = m_ViewportPanel.IsFocused() && m_ViewportPanel.IsHovered();
+    if (!l_HasViewportFocus)
+    {
+        m_IsRotateOrbitActive = false;
+        m_ResetRotateOrbitReference = true;
+
+        return;
+    }
+
+    // Store the cursor location so the next drag can start without a large delta jump when the button is pressed.
+    if (m_ResetRotateOrbitReference)
+    {
+        m_LastCursorPosition = { l_IO.MousePos.x, l_IO.MousePos.y };
+        m_ResetRotateOrbitReference = false;
+    }
+
+    const bool l_IsRotating = l_IO.MouseDown[ImGuiMouseButton_Right];
+    if (l_IsRotating)
+    {
+        // Mark the drag active so key handling below knows to treat WASD/QE as fly controls.
+        m_IsRotateOrbitActive = true;
+
+        // Convert the mouse delta into yaw/pitch adjustments to orbit around the focus point.
+        const float l_YawDelta = l_IO.MouseDelta.x * m_MouseRotationSpeed;
+        const float l_PitchDelta = l_IO.MouseDelta.y * m_MouseRotationSpeed;
+        m_EditorYawDegrees += l_YawDelta;
+        m_EditorPitchDegrees = std::clamp(m_EditorPitchDegrees - l_PitchDelta, -89.0f, 89.0f);
+
+        m_EditorCamera.SetRotation({ m_EditorPitchDegrees, m_EditorYawDegrees, 0.0f });
+        m_LastCursorPosition = { l_IO.MousePos.x, l_IO.MousePos.y };
+    }
+    else if (m_IsRotateOrbitActive)
+    {
+        // Once the button releases we clear the drag state so the next press seeds a fresh reference position.
+        m_IsRotateOrbitActive = false;
+        m_ResetRotateOrbitReference = true;
+    }
+
+    // Fetch forward/right vectors after any rotation updates so translation moves relative to the new heading.
+    const glm::vec3 l_Forward = m_EditorCamera.GetForwardDirection();
+    const glm::vec3 l_WorldUp{ 0.0f, 1.0f, 0.0f };
+    glm::vec3 l_Right = glm::normalize(glm::cross(l_Forward, l_WorldUp));
+    if (!std::isfinite(l_Right.x) || !std::isfinite(l_Right.y) || !std::isfinite(l_Right.z))
+    {
+        // Guard against degeneracy when looking straight up/down by falling back to a canonical horizontal axis.
+        l_Right = glm::vec3{ 1.0f, 0.0f, 0.0f };
+    }
+
+    glm::vec3 l_Translation{ 0.0f };
+
+    // Determine the frame's delta time from the engine clock so motion stays frame-rate independent.
+    const float l_FrameDelta = Trident::Utilities::Time::GetDeltaTime();
+    (void)a_DeltaTime; // The explicit parameter remains for future callers that provide custom deltas.
+
+    // Allow faster motion when shift is held so large scenes are easier to traverse.
+    const float l_SpeedMultiplier = l_IO.KeyShift ? m_CameraBoostMultiplier : 1.0f;
+    const float l_MoveStep = m_CameraMoveSpeed * l_SpeedMultiplier * l_FrameDelta;
+
+    // WASD drive forward/backward and strafing relative to the camera heading.
+    if (l_IsRotating && ImGui::IsKeyDown(ImGuiKey_W))
+    {
+        l_Translation += l_Forward * l_MoveStep;
+    }
+    if (l_IsRotating && ImGui::IsKeyDown(ImGuiKey_S))
+    {
+        l_Translation -= l_Forward * l_MoveStep;
+    }
+    if (l_IsRotating && ImGui::IsKeyDown(ImGuiKey_D))
+    {
+        l_Translation += l_Right * l_MoveStep;
+    }
+    if (l_IsRotating && ImGui::IsKeyDown(ImGuiKey_A))
+    {
+        l_Translation -= l_Right * l_MoveStep;
+    }
+
+    // QE provide vertical movement for fly navigation when orbiting with the mouse.
+    if (l_IsRotating && ImGui::IsKeyDown(ImGuiKey_E))
+    {
+        l_Translation += l_WorldUp * l_MoveStep;
+    }
+    if (l_IsRotating && ImGui::IsKeyDown(ImGuiKey_Q))
+    {
+        l_Translation -= l_WorldUp * l_MoveStep;
+    }
+
+    // Mouse wheel dolly adjusts the camera distance even without a key press to speed up framing.
+    if (std::abs(l_IO.MouseWheel) > std::numeric_limits<float>::epsilon())
+    {
+        l_Translation += l_Forward * (l_IO.MouseWheel * m_MouseZoomSpeed);
+    }
+
+    if (glm::length(l_Translation) > std::numeric_limits<float>::epsilon())
+    {
+        glm::vec3 l_Position = m_EditorCamera.GetPosition();
+        l_Position += l_Translation;
+        m_EditorCamera.SetPosition(l_Position);
+    }
+
+    // TODO: Integrate ViewportPanel::FrameSelection via a dedicated focus key to snap the camera to selections with smoothing.
 }

@@ -37,6 +37,8 @@ public:
     void SetAssetDropHandler(std::function<void(const std::vector<std::string>&)> assetDropHandler);
     // Exposes whether the viewport is hovered so external systems can gate drag-and-drop behaviour.
     bool IsHovered() const { return m_IsHovered; }
+    // Reports whether the viewport window currently owns keyboard focus for camera control decisions.
+    bool IsFocused() const { return m_IsFocused; }
     // Allows callers to check whether a screen-space point falls within the viewport image.
     bool ContainsPoint(const ImVec2& point) const;
 
