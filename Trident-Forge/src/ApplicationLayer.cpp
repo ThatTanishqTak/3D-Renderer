@@ -22,7 +22,9 @@
 
 #include <glm/gtx/norm.hpp>
 #include <glm/geometric.hpp>
-#include <glm/vec3.hpp>
+
+// ---- Utility local helpers ----
+static inline float DegToRad(float deg) { return deg * 0.017453292519943295769f; }
 
 void ApplicationLayer::Initialize()
 {
@@ -46,6 +48,18 @@ void ApplicationLayer::Initialize()
 
     // Hand the configured camera to the renderer once the panels are bound so subsequent renders use it immediately.
     Trident::RenderCommand::SetEditorCamera(&m_EditorCamera);
+
+    // Initialize Unity-like target state and pivot/distance
+    m_TargetYawDegrees = m_EditorYawDegrees;
+    m_TargetPitchDegrees = m_EditorPitchDegrees;
+    m_TargetPosition = m_EditorCamera.GetPosition();
+
+    m_CameraPivot = glm::vec3{ 0.0f, 0.0f, 0.0f };
+    m_OrbitDistance = glm::length(m_TargetPosition - m_CameraPivot);
+    if (!std::isfinite(m_OrbitDistance) || m_OrbitDistance <= 0.0f)
+    {
+        m_OrbitDistance = 8.0f;
+    }
 }
 
 void ApplicationLayer::Shutdown()
@@ -66,7 +80,7 @@ void ApplicationLayer::Update()
     // Push the hierarchy selection into the inspector before it performs validation.
     const Trident::ECS::Entity l_SelectedEntity = m_SceneHierarchyPanel.GetSelectedEntity();
     m_InspectorPanel.SetSelectedEntity(l_SelectedEntity);
-    // Mirror the selection for the viewport so camera pivots follow the same entity focus.
+    // Mirror the selection for the viewport so camera pivots follow the same entity l_Focus.
     m_ViewportPanel.SetSelectedEntity(l_SelectedEntity);
     m_InspectorPanel.Update();
 }
@@ -106,12 +120,15 @@ void ApplicationLayer::OnEvent(Trident::Events& event)
 
             return false;
         });
+
     l_Dispatcher.Dispatch<Trident::MouseScrolledEvent>([this](Trident::MouseScrolledEvent& a_ScrollEvent)
         {
             // Accumulate scroll input so the update loop can apply it once per frame.
             m_PendingScrollDelta += a_ScrollEvent.GetYOffset();
+
             return false;
         });
+
     l_Dispatcher.Dispatch<Trident::MouseButtonPressedEvent>([this](Trident::MouseButtonPressedEvent& a_MouseButtonEvent)
         {
             if (a_MouseButtonEvent.GetMouseButton() == Trident::Mouse::ButtonRight)
@@ -120,8 +137,20 @@ void ApplicationLayer::OnEvent(Trident::Events& event)
                 m_ResetRotateOrbitReference = true;
                 m_PendingCursorDelta = glm::vec2{ 0.0f, 0.0f };
             }
+            else if (a_MouseButtonEvent.GetMouseButton() == Trident::Mouse::ButtonMiddle)
+            {
+                m_IsMiddleMouseButtonDown = true;
+                m_PendingCursorDelta = glm::vec2{ 0.0f, 0.0f };
+            }
+            else if (a_MouseButtonEvent.GetMouseButton() == Trident::Mouse::ButtonLeft)
+            {
+                m_IsLeftMouseButtonDown = true;
+                m_PendingCursorDelta = glm::vec2{ 0.0f, 0.0f };
+            }
+
             return false;
         });
+
     l_Dispatcher.Dispatch<Trident::MouseButtonReleasedEvent>([this](Trident::MouseButtonReleasedEvent& a_MouseButtonEvent)
         {
             if (a_MouseButtonEvent.GetMouseButton() == Trident::Mouse::ButtonRight)
@@ -130,69 +159,57 @@ void ApplicationLayer::OnEvent(Trident::Events& event)
                 m_IsRotateOrbitActive = false;
                 m_ResetRotateOrbitReference = true;
             }
+            else if (a_MouseButtonEvent.GetMouseButton() == Trident::Mouse::ButtonMiddle)
+            {
+                m_IsMiddleMouseButtonDown = false;
+            }
+            else if (a_MouseButtonEvent.GetMouseButton() == Trident::Mouse::ButtonLeft)
+            {
+                m_IsLeftMouseButtonDown = false;
+            }
+
             return false;
         });
-    l_Dispatcher.Dispatch<Trident::KeyPressedEvent>([this](Trident::KeyPressedEvent& a_KeyEvent)
+
+    l_Dispatcher.Dispatch<Trident::KeyPressedEvent>([this](Trident::KeyPressedEvent& keyEvent)
         {
-            const Trident::KeyCode l_Key = a_KeyEvent.GetKeyCode();
+            const Trident::KeyCode l_Key = keyEvent.GetKeyCode();
             switch (l_Key)
             {
-            case Trident::Key::W:
-                m_IsKeyWDown = true;
-                break;
-            case Trident::Key::A:
-                m_IsKeyADown = true;
-                break;
-            case Trident::Key::S:
-                m_IsKeySDown = true;
-                break;
-            case Trident::Key::D:
-                m_IsKeyDDown = true;
-                break;
-            case Trident::Key::Q:
-                m_IsKeyQDown = true;
-                break;
-            case Trident::Key::E:
-                m_IsKeyEDown = true;
-                break;
+            case Trident::Key::W: m_IsKeyWDown = true; break;
+            case Trident::Key::A: m_IsKeyADown = true; break;
+            case Trident::Key::S: m_IsKeySDown = true; break;
+            case Trident::Key::D: m_IsKeyDDown = true; break;
+            case Trident::Key::Q: m_IsKeyQDown = true; break;
+            case Trident::Key::E: m_IsKeyEDown = true; break;
             case Trident::Key::LeftShift:
-            case Trident::Key::RightShift:
-                m_IsShiftDown = true;
-                break;
-            default:
-                break;
+            case Trident::Key::RightShift: m_IsShiftDown = true; break;
+            case Trident::Key::LeftAlt:
+            case Trident::Key::RightAlt: m_IsAltDown = true; break;
+            case Trident::Key::F: m_RequestFrameSelection = true; break;
+            default: break;
             }
+
             return false;
         });
-    l_Dispatcher.Dispatch<Trident::KeyReleasedEvent>([this](Trident::KeyReleasedEvent& a_KeyEvent)
+
+    l_Dispatcher.Dispatch<Trident::KeyReleasedEvent>([this](Trident::KeyReleasedEvent& keyEvent)
         {
-            const Trident::KeyCode l_Key = a_KeyEvent.GetKeyCode();
+            const Trident::KeyCode l_Key = keyEvent.GetKeyCode();
             switch (l_Key)
             {
-            case Trident::Key::W:
-                m_IsKeyWDown = false;
-                break;
-            case Trident::Key::A:
-                m_IsKeyADown = false;
-                break;
-            case Trident::Key::S:
-                m_IsKeySDown = false;
-                break;
-            case Trident::Key::D:
-                m_IsKeyDDown = false;
-                break;
-            case Trident::Key::Q:
-                m_IsKeyQDown = false;
-                break;
-            case Trident::Key::E:
-                m_IsKeyEDown = false;
-                break;
-            case Trident::Key::LeftShift:
-                m_IsShiftDown = false;
-                break;
-            default:
-                break;
+            case Trident::Key::W: m_IsKeyWDown = false; break;
+            case Trident::Key::A: m_IsKeyADown = false; break;
+            case Trident::Key::S: m_IsKeySDown = false; break;
+            case Trident::Key::D: m_IsKeyDDown = false; break;
+            case Trident::Key::Q: m_IsKeyQDown = false; break;
+            case Trident::Key::E: m_IsKeyEDown = false; break;
+            case Trident::Key::LeftShift: m_IsShiftDown = false; break;
+            case Trident::Key::LeftAlt:
+            case Trident::Key::RightAlt: m_IsAltDown = false; break;
+            default: break;
             }
+
             return false;
         });
 }
@@ -215,6 +232,7 @@ bool ApplicationLayer::HandleFileDrop(Trident::FileDropEvent& event)
         // Ignore drops that land outside the viewport so accidental drags do not spawn entities.
         return false;
     }
+
     return ImportDroppedAssets(event.GetPaths());
 }
 
@@ -269,7 +287,7 @@ bool ApplicationLayer::ImportDroppedAssets(const std::vector<std::string>& dropp
             const size_t l_AssignedMeshIndex = l_InitialMeshCount + l_PreviousMeshCount;
 
             Trident::ECS::Entity l_NewEntity = l_Registry.CreateEntity();
-            // Default transform keeps the asset centred at the origin with unit scale so artists can position it manually.
+            // Default transform keeps the asset centred at the origin with unit l_Scale so artists can position it manually.
             l_Registry.AddComponent<Trident::Transform>(l_NewEntity, Trident::Transform{});
 
             Trident::MeshComponent& l_MeshComponent = l_Registry.AddComponent<Trident::MeshComponent>(l_NewEntity);
@@ -312,9 +330,9 @@ void ApplicationLayer::UpdateEditorCamera(float deltaTime)
         return;
     }
 
-    // Restrict camera updates to the viewport so other panels remain scrollable and do not steal focus.
-    const bool l_HasViewportFocus = m_ViewportPanel.IsFocused() && m_ViewportPanel.IsHovered();
-    if (!l_HasViewportFocus)
+    // Restrict camera updates to the viewport so other panels remain scrollable and do not steal l_Focus.
+    const bool l_HasFocus = m_ViewportPanel.IsFocused() && m_ViewportPanel.IsHovered();
+    if (!l_HasFocus)
     {
         m_IsRotateOrbitActive = false;
         m_ResetRotateOrbitReference = true;
@@ -325,96 +343,168 @@ void ApplicationLayer::UpdateEditorCamera(float deltaTime)
         return;
     }
 
-    // Store the cursor location so the next drag can start without a large delta jump when the button is pressed.
+    const float l_DeltaTime = std::max(deltaTime, 0.0f);
+    const glm::vec3 l_WorldUp{ 0.0f, 1.0f, 0.0f };
+
+    // Handle one-shot frame request before applying input deltas.
+    if (m_RequestFrameSelection)
+    {
+        FrameSelection();
+        m_RequestFrameSelection = false;
+    }
+
+    // Store the cursor location so the next drag can start without a large l_Delta jump when the button is pressed.
     if (m_ResetRotateOrbitReference)
     {
         m_LastCursorPosition = m_CurrentCursorPosition;
         m_ResetRotateOrbitReference = false;
     }
 
-    const bool l_IsRotating = m_IsRightMouseButtonDown;
-    if (l_IsRotating)
+    // Current state
+    glm::vec3 l_CursorPosition = m_EditorCamera.GetPosition();
+
+    // Start with existing targets
+    m_TargetYawDegrees = m_EditorYawDegrees;
+    m_TargetPitchDegrees = m_EditorPitchDegrees;
+    m_TargetPosition = l_CursorPosition;
+
+    const bool l_FlyMode = m_IsRightMouseButtonDown && !m_IsAltDown;     // RMB
+    const bool l_OrbitMode = m_IsAltDown && m_IsLeftMouseButtonDown;       // Alt+LMB
+    const bool l_PanMode = m_IsMiddleMouseButtonDown || (m_IsAltDown && m_IsMiddleMouseButtonDown); // MMB
+
+    if (l_FlyMode)
     {
-        // Mark the drag active so key handling below knows to treat WASD/QE as fly controls.
         m_IsRotateOrbitActive = true;
-
-        // Convert the mouse delta into yaw/pitch adjustments to orbit around the focus point.
-        const float l_YawDelta = m_PendingCursorDelta.x * m_MouseRotationSpeed;
-        const float l_PitchDelta = m_PendingCursorDelta.y * m_MouseRotationSpeed;
-        m_EditorYawDegrees += l_YawDelta;
-        m_EditorPitchDegrees = std::clamp(m_EditorPitchDegrees - l_PitchDelta, -89.0f, 89.0f);
-
-        m_EditorCamera.SetRotation({ m_EditorPitchDegrees, m_EditorYawDegrees, 0.0f });
-        m_LastCursorPosition = m_CurrentCursorPosition;
+        m_TargetYawDegrees += m_PendingCursorDelta.x * m_MouseRotationSpeed;
+        m_TargetPitchDegrees = std::clamp(m_TargetPitchDegrees - m_PendingCursorDelta.y * m_MouseRotationSpeed, -89.0f, 89.0f);
     }
-    else if (m_IsRotateOrbitActive)
+    else if (l_OrbitMode)
     {
-        // Once the button releases we clear the drag state so the next press seeds a fresh reference position.
+        m_TargetYawDegrees += m_PendingCursorDelta.x * m_MouseRotationSpeed;
+        m_TargetPitchDegrees = std::clamp(m_TargetPitchDegrees - m_PendingCursorDelta.y * m_MouseRotationSpeed, -89.0f, 89.0f);
+        glm::vec3 l_Forward = ForwardFromYawPitch(m_TargetYawDegrees, m_TargetPitchDegrees);
+        m_OrbitDistance = std::max(m_OrbitDistance, m_MinOrbitDistance);
+        m_TargetPosition = m_CameraPivot - l_Forward * m_OrbitDistance;
+    }
+    else
+    {
         m_IsRotateOrbitActive = false;
-        m_ResetRotateOrbitReference = true;
     }
 
-    // Fetch forward/right vectors after any rotation updates so translation moves relative to the new heading.
-    const glm::vec3 l_Forward = m_EditorCamera.GetForwardDirection();
-    const glm::vec3 l_WorldUp{ 0.0f, 1.0f, 0.0f };
-    glm::vec3 l_Right = glm::normalize(glm::cross(l_Forward, l_WorldUp));
-    if (!std::isfinite(l_Right.x) || !std::isfinite(l_Right.y) || !std::isfinite(l_Right.z))
+    // Recompute basis from targets
+    glm::vec3 l_TargetForward = ForwardFromYawPitch(m_TargetYawDegrees, m_TargetPitchDegrees);
+    glm::vec3 l_TargetRight = glm::normalize(glm::cross(l_TargetForward, l_WorldUp));
+    if (!std::isfinite(l_TargetRight.x)) l_TargetRight = { 1.0f, 0.0f, 0.0f };
+    glm::vec3 tgtUp = glm::normalize(glm::cross(l_TargetRight, l_TargetForward));
+
+    float speedMult = m_IsShiftDown ? m_CameraBoostMultiplier : 1.0f;
+    float l_MoveStep = m_CameraMoveSpeed * speedMult * l_DeltaTime;
+
+    if (l_FlyMode)
     {
-        // Guard against degeneracy when looking straight up/down by falling back to a canonical horizontal axis.
-        l_Right = glm::vec3{ 1.0f, 0.0f, 0.0f };
+        if (m_IsKeyWDown) m_TargetPosition += l_TargetForward * l_MoveStep;
+        if (m_IsKeySDown) m_TargetPosition -= l_TargetForward * l_MoveStep;
+        if (m_IsKeyDDown) m_TargetPosition += l_TargetRight * l_MoveStep;
+        if (m_IsKeyADown) m_TargetPosition -= l_TargetRight * l_MoveStep;
+        if (m_IsKeyEDown) m_TargetPosition += l_WorldUp * l_MoveStep;
+        if (m_IsKeyQDown) m_TargetPosition -= l_WorldUp * l_MoveStep;
     }
 
-    glm::vec3 l_Translation{ 0.0f };
-
-    // Determine the frame's delta time from the caller so motion stays frame-rate independent.
-    const float l_FrameDelta = std::max(deltaTime, 0.0f);
-
-    // Allow faster motion when shift is held so large scenes are easier to traverse.
-    const float l_SpeedMultiplier = m_IsShiftDown ? m_CameraBoostMultiplier : 1.0f;
-    const float l_MoveStep = m_CameraMoveSpeed * l_SpeedMultiplier * l_FrameDelta;
-
-    // WASD drive forward/backward and strafing relative to the camera heading.
-    if (l_IsRotating && m_IsKeyWDown)
+    if (l_PanMode)
     {
-        l_Translation += l_Forward * l_MoveStep;
-    }
-    if (l_IsRotating && m_IsKeySDown)
-    {
-        l_Translation -= l_Forward * l_MoveStep;
-    }
-    if (l_IsRotating && m_IsKeyDDown)
-    {
-        l_Translation += l_Right * l_MoveStep;
-    }
-    if (l_IsRotating && m_IsKeyADown)
-    {
-        l_Translation -= l_Right * l_MoveStep;
+        const float l_Distance = std::max(glm::length(m_TargetPosition - m_CameraPivot), 1.0f);
+        const float l_PanScale = l_Distance * m_PanSpeedFactor;
+        const glm::vec3 l_PanDelta = (-l_TargetRight * m_PendingCursorDelta.x + tgtUp * m_PendingCursorDelta.y) * l_PanScale;
+        m_TargetPosition += l_PanDelta;
+        if (l_OrbitMode) m_CameraPivot += l_PanDelta; // keep pivot under cursor while orbit-panning
     }
 
-    // QE provide vertical movement for fly navigation when orbiting with the mouse.
-    if (l_IsRotating && m_IsKeyEDown)
-    {
-        l_Translation += l_WorldUp * l_MoveStep;
-    }
-    if (l_IsRotating && m_IsKeyQDown)
-    {
-        l_Translation -= l_WorldUp * l_MoveStep;
-    }
-
-    // Mouse wheel dolly adjusts the camera distance even without a key press to speed up framing.
     if (std::abs(m_PendingScrollDelta) > std::numeric_limits<float>::epsilon())
     {
-        l_Translation += l_Forward * (m_PendingScrollDelta * m_MouseZoomSpeed);
+        if (l_FlyMode)
+        {
+            // Scroll while RMB adjusts fly speed exponentially within limits
+            float l_Scale = std::exp(m_PendingScrollDelta * 0.1f);
+            m_CameraMoveSpeed = glm::clamp(m_CameraMoveSpeed * l_Scale, m_MinMoveSpeed, m_MaxMoveSpeed);
+        }
+        else if (m_IsAltDown || l_OrbitMode)
+        {
+            // Dolly to pivot
+            float l_Delta = -m_PendingScrollDelta * (m_OrbitDistance * m_DollySpeedFactor);
+            m_OrbitDistance = std::max(m_OrbitDistance + l_Delta, m_MinOrbitDistance);
+            glm::vec3 l_Forward = ForwardFromYawPitch(m_TargetYawDegrees, m_TargetPitchDegrees);
+            m_TargetPosition = m_CameraPivot - l_Forward * m_OrbitDistance;
+        }
+        else
+        {
+            // Generic dolly along forward
+            m_TargetPosition += l_TargetForward * (m_PendingScrollDelta * m_MouseZoomSpeed);
+        }
     }
 
-    if (glm::length2(l_Translation) > std::numeric_limits<float>::epsilon())
-    {
-        glm::vec3 l_Position = m_EditorCamera.GetPosition();
-        l_Position += l_Translation;
-        m_EditorCamera.SetPosition(l_Position);
-    }
+    auto l_Ease = [](float smoothing, float dtv) -> float
+        {
+            return smoothing <= 0.0f ? 1.0f : (1.0f - std::exp(-smoothing * dtv));
+        };
 
-    // TODO: Integrate ViewportPanel::FrameSelection via a dedicated focus key to snap the camera to selections with smoothing.
+    const float l_PositionAlpha = l_Ease(m_PosSmoothing, l_DeltaTime);
+    const float l_RotationAlpha = l_Ease(m_RotSmoothing, l_DeltaTime);
+
+    // Position smoothing
+    glm::vec3 l_NewPosition = l_CursorPosition + (m_TargetPosition - l_CursorPosition) * l_PositionAlpha;
+
+    // Angle smoothing in degrees
+    m_EditorYawDegrees = m_EditorYawDegrees + (m_TargetYawDegrees - m_EditorYawDegrees) * l_RotationAlpha;
+    m_EditorPitchDegrees = m_EditorPitchDegrees + (m_TargetPitchDegrees - m_EditorPitchDegrees) * l_RotationAlpha;
+
+    m_EditorCamera.SetPosition(l_NewPosition);
+    m_EditorCamera.SetRotation({ m_EditorPitchDegrees, m_EditorYawDegrees, 0.0f });
+
+    // Housekeeping
+    m_LastCursorPosition = m_CurrentCursorPosition;
     m_PendingCursorDelta = glm::vec2{ 0.0f, 0.0f };
     m_PendingScrollDelta = 0.0f;
+}
+
+void ApplicationLayer::FrameSelection()
+{
+    Trident::ECS::Entity l_Selected = m_SceneHierarchyPanel.GetSelectedEntity();
+    glm::vec3 l_Focus{ 0.0f };
+    float l_Radius = 1.0f;
+
+    if (l_Selected && Trident::Startup::GetRegistry().HasComponent<Trident::Transform>(l_Selected))
+    {
+        const auto& l_Transform = Trident::Startup::GetRegistry().GetComponent<Trident::Transform>(l_Selected);
+        l_Focus = l_Transform.Position;
+        // If you have bounds, set l_Radius from them for smarter framing.
+    }
+
+    m_CameraPivot = l_Focus;
+
+    // Choose distance based on a simple heuristic and clamp to a sensible range.
+    m_OrbitDistance = std::clamp(l_Radius * 3.0f, 2.0f, 50.0f);
+
+    // Aim camera at pivot using target state so smoothing handles the rest.
+    glm::vec3 l_ToPivot = glm::normalize(m_CameraPivot - m_EditorCamera.GetPosition());
+    const float l_YAW = std::atan2(l_ToPivot.z, l_ToPivot.x) * 57.29577951308232f;  // rad->deg
+    const float l_Pitch = std::asin(std::clamp(l_ToPivot.y, -1.0f, 1.0f)) * 57.29577951308232f;
+
+    m_TargetYawDegrees = l_YAW;
+    m_TargetPitchDegrees = std::clamp(l_Pitch, -89.0f, 89.0f);
+    const glm::vec3 l_Forward = ForwardFromYawPitch(m_TargetYawDegrees, m_TargetPitchDegrees);
+    m_TargetPosition = m_CameraPivot - l_Forward * m_OrbitDistance;
+}
+
+glm::vec3 ApplicationLayer::ForwardFromYawPitch(float yawDeg, float pitchDeg)
+{
+    const float l_YAW = DegToRad(yawDeg);
+    const float l_Pitch = DegToRad(pitchDeg);
+    const float l_CosPoint  = std::cos(l_Pitch);
+    glm::vec3 l_Forward{ l_CosPoint  * std::cos(l_YAW), std::sin(l_Pitch), l_CosPoint  * std::sin(l_YAW) };
+    if (!std::isfinite(l_Forward.x) || !std::isfinite(l_Forward.y) || !std::isfinite(l_Forward.z))
+    {
+        return glm::vec3{ 0.0f, 0.0f, -1.0f };
+    }
+    
+    return glm::normalize(l_Forward);
 }
