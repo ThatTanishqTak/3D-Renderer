@@ -3,6 +3,7 @@
 #include "Core/Utilities.h"
 
 #include "Renderer/RenderData.h"
+#include "Renderer/Camera/Camera.h"
 #include "Renderer/Vertex.h"
 #include "Renderer/UniformBuffer.h"
 #include "Renderer/Swapchain.h"
@@ -76,6 +77,9 @@ namespace Trident
         void AppendMeshes(std::vector<Geometry::Mesh> meshes, std::vector<Geometry::Material> materials);
         void UploadTexture(const Loader::TextureData& texture);
         void SetImGuiLayer(UI::ImGuiLayer* layer);
+        void SetEditorCamera(Camera* camera);
+        void SetRuntimeCamera(Camera* camera);
+        void SetRuntimeCameraActive(bool active);
 
         // Lightweight wrapper describing an ImGui-ready texture along with the Vulkan
         // resources required to keep it alive for the duration of the renderer.
@@ -125,6 +129,7 @@ namespace Trident
         // Provide tooling with the matrices required for gizmo overlay composition.
         glm::mat4 GetViewportViewMatrix() const;
         glm::mat4 GetViewportProjectionMatrix() const;
+        const Camera* GetActiveCamera() const;
 
         // Access to the CPU-side material cache so editor widgets can tweak shading values.
         std::vector<Geometry::Material>& GetMaterials() { return m_Materials; }
@@ -249,6 +254,9 @@ namespace Trident
         Skybox m_Skybox{};
 
         UI::ImGuiLayer* m_ImGuiLayer = nullptr;
+        Camera* m_EditorCamera = nullptr;          ///< Camera used while authoring scenes in the viewport.
+        Camera* m_RuntimeCamera = nullptr;         ///< Camera driven by gameplay systems when the scene is playing.
+        bool m_IsRuntimeCameraActive = false;      ///< Flag toggled when the runtime should drive the render pipeline.
         size_t m_FrameAllocationCount = 0;
 
         size_t m_ModelCount = 0;

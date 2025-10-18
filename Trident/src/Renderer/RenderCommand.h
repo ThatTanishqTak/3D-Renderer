@@ -21,6 +21,9 @@ namespace Trident
         // Mirror Renderer::SetClearColor so editor widgets can adjust the background tone live.
         static void SetClearColor(const glm::vec4& color);
         static void AppendMeshes(std::vector<Geometry::Mesh> meshes, std::vector<Geometry::Material> materials);
+        static void SetEditorCamera(Camera* camera);
+        static void SetRuntimeCamera(Camera* camera);
+        static void SetRuntimeCameraActive(bool active);
 
         static Transform GetTransform();
         static ViewportInfo GetViewport();

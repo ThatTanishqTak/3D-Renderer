@@ -52,6 +52,21 @@ namespace Trident
         Startup::GetRenderer().AppendMeshes(std::move(meshes), std::move(materials));
     }
 
+    void RenderCommand::SetEditorCamera(Camera* camera)
+    {
+        Startup::GetRenderer().SetEditorCamera(camera);
+    }
+
+    void RenderCommand::SetRuntimeCamera(Camera* camera)
+    {
+        Startup::GetRenderer().SetRuntimeCamera(camera);
+    }
+
+    void RenderCommand::SetRuntimeCameraActive(bool active)
+    {
+        Startup::GetRenderer().SetRuntimeCameraActive(active);
+    }
+
     Transform RenderCommand::GetTransform()
     {
         return Startup::GetRenderer().GetTransform();

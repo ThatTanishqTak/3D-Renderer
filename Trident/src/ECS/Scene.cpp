@@ -3,6 +3,7 @@
 #include "Core/Utilities.h"
 
 #include "ECS/Components/TransformComponent.h"
+#include "ECS/Components/CameraComponent.h"
 #include "ECS/Components/MeshComponent.h"
 #include "ECS/Components/LightComponent.h"
 #include "ECS/Components/TagComponent.h"
@@ -193,6 +194,15 @@ namespace Trident
                 << l_Transform.Scale.x << ' ' << l_Transform.Scale.y << ' ' << l_Transform.Scale.z << "\n";
         }
 
+        if (m_Registry->HasComponent<CameraComponent>(entity))
+        {
+            const CameraComponent& l_Camera = m_Registry->GetComponent<CameraComponent>(entity);
+            stream << "Camera "
+                << static_cast<uint32_t>(l_Camera.m_ProjectionType) << ' ' << l_Camera.m_FieldOfView << ' ' << l_Camera.m_OrthographicSize << ' '
+                << l_Camera.m_NearClip << ' ' << l_Camera.m_FarClip << ' ' << l_Camera.m_Primary << ' ' << l_Camera.m_FixedAspectRatio << ' '
+                << l_Camera.m_AspectRatio << "\n";
+        }
+
         if (m_Registry->HasComponent<MeshComponent>(entity))
         {
             const MeshComponent& l_Mesh = m_Registry->GetComponent<MeshComponent>(entity);
@@ -259,6 +269,22 @@ namespace Trident
                     >> l_Transform.Rotation.x >> l_Transform.Rotation.y >> l_Transform.Rotation.z
                     >> l_Transform.Scale.x >> l_Transform.Scale.y >> l_Transform.Scale.z;
                 m_Registry->AddComponent<Transform>(l_Entity, l_Transform);
+
+                continue;
+            }
+
+            if (l_Line.rfind("Camera ", 0) == 0)
+            {
+                CameraComponent l_Camera{};
+                std::istringstream l_TokenStream(l_Line.substr(7));
+                uint32_t l_ProjectionValue = 0;
+                l_TokenStream >> l_ProjectionValue;
+                l_Camera.m_ProjectionType = static_cast<Camera::ProjectionType>(l_ProjectionValue);
+                l_TokenStream >> l_Camera.m_FieldOfView >> l_Camera.m_OrthographicSize;
+                l_TokenStream >> l_Camera.m_NearClip >> l_Camera.m_FarClip;
+                l_TokenStream >> std::boolalpha >> l_Camera.m_Primary >> l_Camera.m_FixedAspectRatio;
+                l_TokenStream >> l_Camera.m_AspectRatio;
+                m_Registry->AddComponent<CameraComponent>(l_Entity, l_Camera);
 
                 continue;
             }

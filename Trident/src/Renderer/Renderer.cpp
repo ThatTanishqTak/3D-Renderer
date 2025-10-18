@@ -22,6 +22,7 @@
 #include <ctime>
 #include <memory>
 #include <system_error>
+#include <cstring>
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/matrix_inverse.hpp>
@@ -814,6 +815,29 @@ namespace Trident
         m_ImGuiLayer = layer;
     }
 
+    void Renderer::SetEditorCamera(Camera* camera)
+    {
+        m_EditorCamera = camera;
+        if (m_EditorCamera)
+        {
+            m_EditorCamera->SetViewportSize(m_Viewport.Size);
+        }
+    }
+
+    void Renderer::SetRuntimeCamera(Camera* camera)
+    {
+        m_RuntimeCamera = camera;
+        if (m_RuntimeCamera)
+        {
+            m_RuntimeCamera->SetViewportSize(m_Viewport.Size);
+        }
+    }
+
+    void Renderer::SetRuntimeCameraActive(bool active)
+    {
+        m_IsRuntimeCameraActive = active;
+    }
+
     void Renderer::SetClearColor(const glm::vec4& color)
     {
         // Persist the preferred clear colour so both render passes remain visually consistent.
@@ -845,11 +869,53 @@ namespace Trident
         return VK_NULL_HANDLE;
     }
 
+    const Camera* Renderer::GetActiveCamera() const
+    {
+        if (m_IsRuntimeCameraActive && m_RuntimeCamera)
+        {
+            return m_RuntimeCamera;
+        }
+
+        return m_EditorCamera;
+    }
+
+    glm::mat4 Renderer::GetViewportViewMatrix() const
+    {
+        const Camera* l_Camera = GetActiveCamera();
+        if (!l_Camera)
+        {
+            return glm::mat4{ 1.0f };
+        }
+
+        return l_Camera->GetViewMatrix();
+    }
+
+    glm::mat4 Renderer::GetViewportProjectionMatrix() const
+    {
+        const Camera* l_Camera = GetActiveCamera();
+        if (!l_Camera)
+        {
+            return glm::mat4{ 1.0f };
+        }
+
+        return l_Camera->GetProjectionMatrix();
+    }
+
     void Renderer::SetViewport(const ViewportInfo& info)
     {
         const uint32_t l_PreviousViewportId = m_ActiveViewportId;
         m_Viewport = info;
         m_ActiveViewportId = info.ViewportID;
+
+        if (m_EditorCamera)
+        {
+            m_EditorCamera->SetViewportSize(info.Size);
+        }
+
+        if (m_RuntimeCamera)
+        {
+            m_RuntimeCamera->SetViewportSize(info.Size);
+        }
 
         if (!IsValidViewport())
         {
@@ -2531,130 +2597,121 @@ namespace Trident
 
     void Renderer::UpdateUniformBuffer(uint32_t currentImage)
     {
-        //GlobalUniformBuffer l_Global{};
-        //const CameraSnapshot l_CameraSnapshot = ResolveViewportCamera();
+        if (currentImage >= m_GlobalUniformBuffersMemory.size() || currentImage >= m_MaterialUniformBuffersMemory.size())
+        {
+            return;
+        }
 
-        //l_Global.View = l_CameraSnapshot.View;
+        GlobalUniformBuffer l_Global{};
+        const Camera* l_ActiveCamera = GetActiveCamera();
+        if (l_ActiveCamera)
+        {
+            l_Global.View = l_ActiveCamera->GetViewMatrix();
+            l_Global.Projection = l_ActiveCamera->GetProjectionMatrix();
+            l_Global.CameraPosition = glm::vec4(l_ActiveCamera->GetPosition(), 1.0f);
+        }
+        else
+        {
+            l_Global.View = glm::mat4{ 1.0f };
+            l_Global.Projection = glm::mat4{ 1.0f };
+            l_Global.CameraPosition = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+            // TODO: Provide a jittered fallback matrix when temporal AA is introduced.
+        }
 
-        //float l_DefaultAspectRatio = static_cast<float>(m_Swapchain.GetExtent().width) / static_cast<float>(m_Swapchain.GetExtent().height);
-        //float l_TargetAspectRatio = l_CameraSnapshot.OverrideAspectRatio ? l_CameraSnapshot.AspectRatio : l_DefaultAspectRatio;
-        //l_TargetAspectRatio = std::max(l_TargetAspectRatio, 0.0001f);
+        l_Global.AmbientColorIntensity = glm::vec4(m_AmbientColor, m_AmbientIntensity);
 
-        //if (l_CameraSnapshot.UseCustomProjection)
-        //{
-        //    // Honor the bespoke projection without modification so advanced tools can inject specialised matrices.
-        //    l_Global.Projection = l_CameraSnapshot.CustomProjection;
-        //}
-        //else if (l_CameraSnapshot.Projection == ProjectionType::Orthographic)
-        //{
-        //    // Build an orthographic volume using the vertical size as the primary control to match common DCC packages.
-        //    const float l_HalfHeight = l_CameraSnapshot.OrthographicSize * 0.5f;
-        //    const float l_HalfWidth = l_HalfHeight * l_TargetAspectRatio;
-        //    l_Global.Projection = glm::ortho(-l_HalfWidth, l_HalfWidth, -l_HalfHeight, l_HalfHeight, l_CameraSnapshot.NearClip, l_CameraSnapshot.FarClip);
-        //    l_Global.Projection[1][1] *= -1.0f; // Flip Y for Vulkan's clip space
-        //}
-        //else
-        //{
-        //    // Default to the familiar perspective frustum for the editor and runtime cameras.
-        //    l_Global.Projection = glm::perspective(glm::radians(l_CameraSnapshot.FieldOfView), l_TargetAspectRatio, l_CameraSnapshot.NearClip, l_CameraSnapshot.FarClip);
-        //    l_Global.Projection[1][1] *= -1.0f; // Flip Y for Vulkan's clip space
-        //}
+        glm::vec3 l_DirectionalDirection = glm::normalize(s_DefaultDirectionalDirection);
+        glm::vec3 l_DirectionalColor = s_DefaultDirectionalColor;
+        float l_DirectionalIntensity = s_DefaultDirectionalIntensity;
+        uint32_t l_DirectionalCount = 0;
+        uint32_t l_PointLightWriteCount = 0;
 
-        //l_Global.CameraPosition = glm::vec4(l_CameraSnapshot.Position, 1.0f);
-        //l_Global.AmbientColorIntensity = glm::vec4(m_AmbientColor, m_AmbientIntensity);
+        if (m_Registry)
+        {
+            const std::vector<ECS::Entity>& l_Entities = m_Registry->GetEntities();
+            for (ECS::Entity it_Entity : l_Entities)
+            {
+                if (!m_Registry->HasComponent<LightComponent>(it_Entity))
+                {
+                    continue;
+                }
 
-        //// Prepare defaults so lighting behaves identically when no explicit components exist.
-        //glm::vec3 l_DirectionalDirection = glm::normalize(s_DefaultDirectionalDirection);
-        //glm::vec3 l_DirectionalColor = s_DefaultDirectionalColor;
-        //float l_DirectionalIntensity = s_DefaultDirectionalIntensity;
-        //uint32_t l_DirectionalCount = 0;
-        //uint32_t l_PointLightWriteCount = 0;
+                const LightComponent& l_LightComponent = m_Registry->GetComponent<LightComponent>(it_Entity);
+                if (!l_LightComponent.m_Enabled)
+                {
+                    continue;
+                }
 
-        //if (m_Registry)
-        //{
-        //    const std::vector<ECS::Entity>& l_Entities = m_Registry->GetEntities();
-        //    for (ECS::Entity it_Entity : l_Entities)
-        //    {
-        //        if (!m_Registry->HasComponent<LightComponent>(it_Entity))
-        //        {
-        //            continue;
-        //        }
+                if (l_LightComponent.m_Type == LightComponent::Type::Directional)
+                {
+                    if (l_DirectionalCount == 0)
+                    {
+                        const float l_LengthSquared = glm::dot(l_LightComponent.m_Direction, l_LightComponent.m_Direction);
+                        if (l_LengthSquared > 0.0001f)
+                        {
+                            l_DirectionalDirection = glm::normalize(l_LightComponent.m_Direction);
+                        }
+                        l_DirectionalColor = l_LightComponent.m_Color;
+                        l_DirectionalIntensity = std::max(l_LightComponent.m_Intensity, 0.0f);
+                    }
+                    ++l_DirectionalCount;
+                    continue;
+                }
 
-        //        const LightComponent& l_LightComponent = m_Registry->GetComponent<LightComponent>(it_Entity);
-        //        if (!l_LightComponent.m_Enabled)
-        //        {
-        //            continue; // Allow designers to mute lights without deleting them.
-        //        }
+                if (l_LightComponent.m_Type == LightComponent::Type::Point)
+                {
+                    if (l_PointLightWriteCount >= s_MaxPointLights)
+                    {
+                        continue;
+                    }
 
-        //        if (l_LightComponent.m_Type == LightComponent::Type::Directional)
-        //        {
-        //            if (l_DirectionalCount == 0)
-        //            {
-        //                // Consume the first directional light as the primary sun source for the forward pass.
-        //                const float l_LengthSquared = glm::dot(l_LightComponent.m_Direction, l_LightComponent.m_Direction);
-        //                if (l_LengthSquared > 0.0001f)
-        //                {
-        //                    l_DirectionalDirection = glm::normalize(l_LightComponent.m_Direction);
-        //                }
-        //                l_DirectionalColor = l_LightComponent.m_Color;
-        //                l_DirectionalIntensity = std::max(l_LightComponent.m_Intensity, 0.0f);
-        //            }
-        //            ++l_DirectionalCount;
-        //            continue;
-        //        }
+                    glm::vec3 l_Position{ 0.0f };
+                    if (m_Registry->HasComponent<Transform>(it_Entity))
+                    {
+                        l_Position = m_Registry->GetComponent<Transform>(it_Entity).Position;
+                    }
 
-        //        if (l_LightComponent.m_Type == LightComponent::Type::Point)
-        //        {
-        //            if (l_PointLightWriteCount < s_MaxPointLights)
-        //            {
-        //                // Copy as many point lights as the forward shader budget allows; clustered lighting can lift this cap later.
-        //                glm::vec3 l_Position{ 0.0f };
-        //                if (m_Registry->HasComponent<Transform>(it_Entity))
-        //                {
-        //                    l_Position = m_Registry->GetComponent<Transform>(it_Entity).Position;
-        //                }
+                    const float l_Range = std::max(l_LightComponent.m_Range, 0.0f);
+                    const float l_Intensity = std::max(l_LightComponent.m_Intensity, 0.0f);
 
-        //                const float l_Range = std::max(l_LightComponent.m_Range, 0.0f);
-        //                const float l_Intensity = std::max(l_LightComponent.m_Intensity, 0.0f);
+                    l_Global.PointLights[l_PointLightWriteCount].PositionRange = glm::vec4(l_Position, l_Range);
+                    l_Global.PointLights[l_PointLightWriteCount].ColorIntensity = glm::vec4(l_LightComponent.m_Color, l_Intensity);
+                    ++l_PointLightWriteCount;
+                    continue;
+                }
+            }
+        }
 
-        //                l_Global.PointLights[l_PointLightWriteCount].PositionRange = glm::vec4(l_Position, l_Range);
-        //                l_Global.PointLights[l_PointLightWriteCount].ColorIntensity = glm::vec4(l_LightComponent.m_Color, l_Intensity);
-        //                ++l_PointLightWriteCount;
-        //            }
-        //            continue;
-        //        }
-        //    }
-        //}
+        const bool l_ShouldUseFallbackDirectional = (l_DirectionalCount == 0 && l_PointLightWriteCount == 0);
+        const uint32_t l_DirectionalUsed = (l_DirectionalCount > 0 || l_ShouldUseFallbackDirectional) ? 1u : 0u;
 
-        //// Preserve the legacy sunlight when the scene has no explicit lighting yet so existing demos remain lit.
-        //const bool l_ShouldUseFallbackDirectional = (l_DirectionalCount == 0 && l_PointLightWriteCount == 0);
-        //const uint32_t l_DirectionalUsed = (l_DirectionalCount > 0 || l_ShouldUseFallbackDirectional) ? 1u : 0u;
+        l_Global.DirectionalLightDirection = glm::vec4(l_DirectionalDirection, 0.0f);
+        l_Global.DirectionalLightColor = glm::vec4(l_DirectionalColor, l_DirectionalIntensity);
+        l_Global.LightCounts = glm::uvec4(l_DirectionalUsed, l_PointLightWriteCount, 0u, 0u);
 
-        //l_Global.DirectionalLightDirection = glm::vec4(l_DirectionalDirection, 0.0f);
-        //l_Global.DirectionalLightColor = glm::vec4(l_DirectionalColor, l_DirectionalIntensity);
-        //l_Global.LightCounts = glm::uvec4(l_DirectionalUsed, l_PointLightWriteCount, 0u, 0u);
+        MaterialUniformBuffer l_Material{};
+        if (!m_Materials.empty())
+        {
+            const Geometry::Material& l_FirstMaterial = m_Materials.front();
+            l_Material.BaseColorFactor = l_FirstMaterial.BaseColorFactor;
+            l_Material.MaterialFactors = glm::vec4(l_FirstMaterial.MetallicFactor, l_FirstMaterial.RoughnessFactor, 1.0f, 0.0f);
+        }
+        else
+        {
+            l_Material.BaseColorFactor = glm::vec4(1.0f);
+            l_Material.MaterialFactors = glm::vec4(1.0f, 1.0f, 1.0f, 0.0f);
+        }
 
-        //MaterialUniformBuffer l_Material{};
-        //if (!m_Materials.empty())
-        //{
-        //    const Geometry::Material& l_FirstMaterial = m_Materials.front();
-        //    l_Material.BaseColorFactor = l_FirstMaterial.BaseColorFactor;
-        //    l_Material.MaterialFactors = glm::vec4(l_FirstMaterial.MetallicFactor, l_FirstMaterial.RoughnessFactor, 1.0f, 0.0f);
-        //}
-        //else
-        //{
-        //    l_Material.BaseColorFactor = glm::vec4(1.0f);
-        //    l_Material.MaterialFactors = glm::vec4(1.0f, 1.0f, 1.0f, 0.0f);
-        //}
+        void* l_Data = nullptr;
+        vkMapMemory(Startup::GetDevice(), m_GlobalUniformBuffersMemory[currentImage], 0, sizeof(l_Global), 0, &l_Data);
+        std::memcpy(l_Data, &l_Global, sizeof(l_Global));
+        vkUnmapMemory(Startup::GetDevice(), m_GlobalUniformBuffersMemory[currentImage]);
 
-        //void* l_Data = nullptr;
-        //vkMapMemory(Startup::GetDevice(), m_GlobalUniformBuffersMemory[currentImage], 0, sizeof(l_Global), 0, &l_Data);
-        //memcpy(l_Data, &l_Global, sizeof(l_Global));
-        //vkUnmapMemory(Startup::GetDevice(), m_GlobalUniformBuffersMemory[currentImage]);
+        vkMapMemory(Startup::GetDevice(), m_MaterialUniformBuffersMemory[currentImage], 0, sizeof(l_Material), 0, &l_Data);
+        std::memcpy(l_Data, &l_Material, sizeof(l_Material));
+        vkUnmapMemory(Startup::GetDevice(), m_MaterialUniformBuffersMemory[currentImage]);
 
-        //vkMapMemory(Startup::GetDevice(), m_MaterialUniformBuffersMemory[currentImage], 0, sizeof(l_Material), 0, &l_Data);
-        //memcpy(l_Data, &l_Material, sizeof(l_Material));
-        //vkUnmapMemory(Startup::GetDevice(), m_MaterialUniformBuffersMemory[currentImage]);
+        // TODO: Expand the uniform population to handle per-camera post-processing once those systems exist.
     }
 
     void Renderer::SetSelectedEntity(ECS::Entity entity)
