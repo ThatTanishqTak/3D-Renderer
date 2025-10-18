@@ -9,7 +9,6 @@
 #include <limits>
 
 #include "Renderer/RenderCommand.h"
-#include "../EditorCamera/EditorCamera.h"
 #include "ECS/Entity.h"
 #include "GizmoState.h"
 
@@ -30,8 +29,6 @@ public:
     void Update();
     // Draws the viewport ImGui window and presents the renderer output.
     void Render();
-    // Allows external systems to provide the camera that should drive the viewport.
-    void SetCameraEntity(Trident::ECS::Entity cameraEntity);
     // Provides a handle to the shared gizmo state so UI panels can coordinate behaviour.
     void SetGizmoState(GizmoState* gizmoState);
     // Allow the viewport to react when the hierarchy/inspector selection changes.
@@ -67,17 +64,7 @@ private:
     GizmoState* m_GizmoState = nullptr;
     // Callback invoked whenever a drag-and-drop payload is released over the viewport image.
     std::function<void(const std::vector<std::string>&)> m_OnAssetDrop{};
-    // Editor-side camera controller responsible for scene view navigation.
-    EditorCamera m_CameraController;
 
-    // Helper that reacts to selection changes and keeps the orbit pivot aligned.
-    void UpdateCameraPivotFromSelection();
-    // Process input each frame while the viewport has focus/hover.
-    void HandleCameraInput(const ImGuiIO& io);
     // Frame the current selection or world origin when the user presses the focus key.
     void FrameSelection();
-    // Copy the runtime camera transform into the editor controller when requested.
-    void SyncRuntimeCameraToEditor();
-    // Draws the scene orientation gizmo and reports whether the overlay captured input this frame.
-    bool RenderSceneGizmoOverlay(const ImVec2& viewportPos, const ImVec2& viewportSize);
 };

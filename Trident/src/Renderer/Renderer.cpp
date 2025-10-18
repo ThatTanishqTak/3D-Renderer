@@ -1,7 +1,6 @@
 ﻿#include "Renderer/Renderer.h"
 
 #include "Application/Startup.h"
-#include "Camera/RuntimeCamera.h"
 
 #include "ECS/Components/TransformComponent.h"
 #include "Geometry/Mesh.h"
@@ -98,8 +97,6 @@ namespace Trident
 
         // Prepare shared quad geometry so every sprite draw can reference the same GPU buffers.
         BuildSpriteGeometry();
-
-        m_Camera = std::make_unique<RuntimeCamera>(Startup::GetWindow().GetNativeWindow());
 
         m_Viewport.Position = { 0.0f, 0.0f };
         m_Viewport.Size = { static_cast<float>(m_Swapchain.GetExtent().width), static_cast<float>(m_Swapchain.GetExtent().height) };
@@ -203,10 +200,6 @@ namespace Trident
 
         Utilities::Allocation::ResetFrame();
         ProcessReloadEvents();
-        if (m_Camera)
-        {
-            m_Camera->Update(Utilities::Time::GetDeltaTime());
-        }
 
         // Allow developers to tweak GLSL and get instant feedback without restarting the app.
         if (m_Pipeline.ReloadIfNeeded(m_Swapchain))
@@ -852,42 +845,6 @@ namespace Trident
         return VK_NULL_HANDLE;
     }
 
-    glm::mat4 Renderer::GetViewportViewMatrix() const
-    {
-        // Resolve the camera hierarchy so tooling receives the same view used during the render pass.
-        const CameraSnapshot l_Snapshot = ResolveViewportCamera();
-        return l_Snapshot.View;
-    }
-
-    glm::mat4 Renderer::GetViewportProjectionMatrix() const
-    {
-        // Build a projection matching the renderer so gizmos align with the presented frame.
-        const CameraSnapshot l_Snapshot = ResolveViewportCamera();
-
-        float l_DefaultAspectRatio = 16.0f / 9.0f;
-        if (m_Viewport.Size.y != 0.0f)
-        {
-            l_DefaultAspectRatio = std::max(m_Viewport.Size.x / m_Viewport.Size.y, 0.0001f);
-        }
-
-        float l_TargetAspectRatio = l_Snapshot.OverrideAspectRatio ? l_Snapshot.AspectRatio : l_DefaultAspectRatio;
-        l_TargetAspectRatio = std::max(l_TargetAspectRatio, 0.0001f);
-
-        if (l_Snapshot.UseCustomProjection)
-        {
-            return l_Snapshot.CustomProjection;
-        }
-
-        if (l_Snapshot.Projection == ProjectionType::Orthographic)
-        {
-            const float l_HalfHeight = l_Snapshot.OrthographicSize * 0.5f;
-            const float l_HalfWidth = l_HalfHeight * l_TargetAspectRatio;
-            return glm::ortho(-l_HalfWidth, l_HalfWidth, -l_HalfHeight, l_HalfHeight, l_Snapshot.NearClip, l_Snapshot.FarClip);
-        }
-
-        return glm::perspective(glm::radians(l_Snapshot.FieldOfView), l_TargetAspectRatio, l_Snapshot.NearClip, l_Snapshot.FarClip);
-    }
-
     void Renderer::SetViewport(const ViewportInfo& info)
     {
         const uint32_t l_PreviousViewportId = m_ActiveViewportId;
@@ -923,69 +880,6 @@ namespace Trident
         CreateOrResizeOffscreenResources(l_Target, l_RequestedExtent);
 
         // Future: consider pooling and recycling detached targets so background viewports can warm-start when reopened.
-    }
-
-    void Renderer::SetViewportCamera(ECS::Entity cameraEntity)
-    {
-        // The UI layer forwards its selection through RenderCommand so the renderer can resolve the correct camera per frame.
-        m_ViewportCamera = cameraEntity;
-    }
-
-    void Renderer::SetViewportProjection(ProjectionType projection, float orthographicSize)
-    {
-        // Keep the internal editor camera synchronised with tooling requests so viewports render the expected projection.
-        if (m_Camera)
-        {
-            m_Camera->SetProjection(projection);
-            m_Camera->SetOrthographicSize(orthographicSize);
-        }
-    }
-
-    Renderer::CameraSnapshot Renderer::ResolveViewportCamera() const
-    {
-        CameraSnapshot l_Snapshot{};
-        if (m_Camera)
-        {
-            l_Snapshot.View = m_Camera->GetViewMatrix();
-            l_Snapshot.Position = m_Camera->GetPosition();
-            l_Snapshot.FieldOfView = m_Camera->GetFOV();
-            l_Snapshot.NearClip = m_Camera->GetNearClip();
-            l_Snapshot.FarClip = m_Camera->GetFarClip();
-            l_Snapshot.Projection = m_Camera->GetProjection();
-            l_Snapshot.OrthographicSize = m_Camera->GetOrthographicSize();
-        }
-        l_Snapshot.OverrideAspectRatio = false;
-        l_Snapshot.UseCustomProjection = false;
-
-        if (m_ViewportCamera == std::numeric_limits<ECS::Entity>::max() || m_Registry == nullptr)
-        {
-            return l_Snapshot;
-        }
-
-        if (!m_Registry->HasComponent<CameraComponent>(m_ViewportCamera) || !m_Registry->HasComponent<Transform>(m_ViewportCamera))
-        {
-            return l_Snapshot;
-        }
-
-        const CameraComponent& l_CameraComponent = m_Registry->GetComponent<CameraComponent>(m_ViewportCamera);
-        const Transform& l_Transform = m_Registry->GetComponent<Transform>(m_ViewportCamera);
-
-        const glm::mat4 l_ModelMatrix = ComposeTransform(l_Transform);
-        const glm::mat4 l_ViewMatrix = glm::inverse(l_ModelMatrix);
-
-        l_Snapshot.View = l_ViewMatrix;
-        l_Snapshot.Position = l_Transform.Position;
-        l_Snapshot.FieldOfView = l_CameraComponent.FieldOfView;
-        l_Snapshot.NearClip = l_CameraComponent.NearClip;
-        l_Snapshot.FarClip = l_CameraComponent.FarClip;
-        l_Snapshot.Projection = l_CameraComponent.Projection;
-        l_Snapshot.OrthographicSize = l_CameraComponent.OrthographicSize;
-        l_Snapshot.OverrideAspectRatio = l_CameraComponent.OverrideAspectRatio;
-        l_Snapshot.AspectRatio = l_CameraComponent.AspectRatio;
-        l_Snapshot.UseCustomProjection = l_CameraComponent.UseCustomProjection;
-        l_Snapshot.CustomProjection = l_CameraComponent.CustomProjection;
-
-        return l_Snapshot;
     }
 
     void Renderer::BuildSpriteGeometry()
@@ -2637,130 +2531,130 @@ namespace Trident
 
     void Renderer::UpdateUniformBuffer(uint32_t currentImage)
     {
-        GlobalUniformBuffer l_Global{};
-        const CameraSnapshot l_CameraSnapshot = ResolveViewportCamera();
+        //GlobalUniformBuffer l_Global{};
+        //const CameraSnapshot l_CameraSnapshot = ResolveViewportCamera();
 
-        l_Global.View = l_CameraSnapshot.View;
+        //l_Global.View = l_CameraSnapshot.View;
 
-        float l_DefaultAspectRatio = static_cast<float>(m_Swapchain.GetExtent().width) / static_cast<float>(m_Swapchain.GetExtent().height);
-        float l_TargetAspectRatio = l_CameraSnapshot.OverrideAspectRatio ? l_CameraSnapshot.AspectRatio : l_DefaultAspectRatio;
-        l_TargetAspectRatio = std::max(l_TargetAspectRatio, 0.0001f);
+        //float l_DefaultAspectRatio = static_cast<float>(m_Swapchain.GetExtent().width) / static_cast<float>(m_Swapchain.GetExtent().height);
+        //float l_TargetAspectRatio = l_CameraSnapshot.OverrideAspectRatio ? l_CameraSnapshot.AspectRatio : l_DefaultAspectRatio;
+        //l_TargetAspectRatio = std::max(l_TargetAspectRatio, 0.0001f);
 
-        if (l_CameraSnapshot.UseCustomProjection)
-        {
-            // Honor the bespoke projection without modification so advanced tools can inject specialised matrices.
-            l_Global.Projection = l_CameraSnapshot.CustomProjection;
-        }
-        else if (l_CameraSnapshot.Projection == ProjectionType::Orthographic)
-        {
-            // Build an orthographic volume using the vertical size as the primary control to match common DCC packages.
-            const float l_HalfHeight = l_CameraSnapshot.OrthographicSize * 0.5f;
-            const float l_HalfWidth = l_HalfHeight * l_TargetAspectRatio;
-            l_Global.Projection = glm::ortho(-l_HalfWidth, l_HalfWidth, -l_HalfHeight, l_HalfHeight, l_CameraSnapshot.NearClip, l_CameraSnapshot.FarClip);
-            l_Global.Projection[1][1] *= -1.0f; // Flip Y for Vulkan's clip space
-        }
-        else
-        {
-            // Default to the familiar perspective frustum for the editor and runtime cameras.
-            l_Global.Projection = glm::perspective(glm::radians(l_CameraSnapshot.FieldOfView), l_TargetAspectRatio, l_CameraSnapshot.NearClip, l_CameraSnapshot.FarClip);
-            l_Global.Projection[1][1] *= -1.0f; // Flip Y for Vulkan's clip space
-        }
+        //if (l_CameraSnapshot.UseCustomProjection)
+        //{
+        //    // Honor the bespoke projection without modification so advanced tools can inject specialised matrices.
+        //    l_Global.Projection = l_CameraSnapshot.CustomProjection;
+        //}
+        //else if (l_CameraSnapshot.Projection == ProjectionType::Orthographic)
+        //{
+        //    // Build an orthographic volume using the vertical size as the primary control to match common DCC packages.
+        //    const float l_HalfHeight = l_CameraSnapshot.OrthographicSize * 0.5f;
+        //    const float l_HalfWidth = l_HalfHeight * l_TargetAspectRatio;
+        //    l_Global.Projection = glm::ortho(-l_HalfWidth, l_HalfWidth, -l_HalfHeight, l_HalfHeight, l_CameraSnapshot.NearClip, l_CameraSnapshot.FarClip);
+        //    l_Global.Projection[1][1] *= -1.0f; // Flip Y for Vulkan's clip space
+        //}
+        //else
+        //{
+        //    // Default to the familiar perspective frustum for the editor and runtime cameras.
+        //    l_Global.Projection = glm::perspective(glm::radians(l_CameraSnapshot.FieldOfView), l_TargetAspectRatio, l_CameraSnapshot.NearClip, l_CameraSnapshot.FarClip);
+        //    l_Global.Projection[1][1] *= -1.0f; // Flip Y for Vulkan's clip space
+        //}
 
-        l_Global.CameraPosition = glm::vec4(l_CameraSnapshot.Position, 1.0f);
-        l_Global.AmbientColorIntensity = glm::vec4(m_AmbientColor, m_AmbientIntensity);
+        //l_Global.CameraPosition = glm::vec4(l_CameraSnapshot.Position, 1.0f);
+        //l_Global.AmbientColorIntensity = glm::vec4(m_AmbientColor, m_AmbientIntensity);
 
-        // Prepare defaults so lighting behaves identically when no explicit components exist.
-        glm::vec3 l_DirectionalDirection = glm::normalize(s_DefaultDirectionalDirection);
-        glm::vec3 l_DirectionalColor = s_DefaultDirectionalColor;
-        float l_DirectionalIntensity = s_DefaultDirectionalIntensity;
-        uint32_t l_DirectionalCount = 0;
-        uint32_t l_PointLightWriteCount = 0;
+        //// Prepare defaults so lighting behaves identically when no explicit components exist.
+        //glm::vec3 l_DirectionalDirection = glm::normalize(s_DefaultDirectionalDirection);
+        //glm::vec3 l_DirectionalColor = s_DefaultDirectionalColor;
+        //float l_DirectionalIntensity = s_DefaultDirectionalIntensity;
+        //uint32_t l_DirectionalCount = 0;
+        //uint32_t l_PointLightWriteCount = 0;
 
-        if (m_Registry)
-        {
-            const std::vector<ECS::Entity>& l_Entities = m_Registry->GetEntities();
-            for (ECS::Entity it_Entity : l_Entities)
-            {
-                if (!m_Registry->HasComponent<LightComponent>(it_Entity))
-                {
-                    continue;
-                }
+        //if (m_Registry)
+        //{
+        //    const std::vector<ECS::Entity>& l_Entities = m_Registry->GetEntities();
+        //    for (ECS::Entity it_Entity : l_Entities)
+        //    {
+        //        if (!m_Registry->HasComponent<LightComponent>(it_Entity))
+        //        {
+        //            continue;
+        //        }
 
-                const LightComponent& l_LightComponent = m_Registry->GetComponent<LightComponent>(it_Entity);
-                if (!l_LightComponent.m_Enabled)
-                {
-                    continue; // Allow designers to mute lights without deleting them.
-                }
+        //        const LightComponent& l_LightComponent = m_Registry->GetComponent<LightComponent>(it_Entity);
+        //        if (!l_LightComponent.m_Enabled)
+        //        {
+        //            continue; // Allow designers to mute lights without deleting them.
+        //        }
 
-                if (l_LightComponent.m_Type == LightComponent::Type::Directional)
-                {
-                    if (l_DirectionalCount == 0)
-                    {
-                        // Consume the first directional light as the primary sun source for the forward pass.
-                        const float l_LengthSquared = glm::dot(l_LightComponent.m_Direction, l_LightComponent.m_Direction);
-                        if (l_LengthSquared > 0.0001f)
-                        {
-                            l_DirectionalDirection = glm::normalize(l_LightComponent.m_Direction);
-                        }
-                        l_DirectionalColor = l_LightComponent.m_Color;
-                        l_DirectionalIntensity = std::max(l_LightComponent.m_Intensity, 0.0f);
-                    }
-                    ++l_DirectionalCount;
-                    continue;
-                }
+        //        if (l_LightComponent.m_Type == LightComponent::Type::Directional)
+        //        {
+        //            if (l_DirectionalCount == 0)
+        //            {
+        //                // Consume the first directional light as the primary sun source for the forward pass.
+        //                const float l_LengthSquared = glm::dot(l_LightComponent.m_Direction, l_LightComponent.m_Direction);
+        //                if (l_LengthSquared > 0.0001f)
+        //                {
+        //                    l_DirectionalDirection = glm::normalize(l_LightComponent.m_Direction);
+        //                }
+        //                l_DirectionalColor = l_LightComponent.m_Color;
+        //                l_DirectionalIntensity = std::max(l_LightComponent.m_Intensity, 0.0f);
+        //            }
+        //            ++l_DirectionalCount;
+        //            continue;
+        //        }
 
-                if (l_LightComponent.m_Type == LightComponent::Type::Point)
-                {
-                    if (l_PointLightWriteCount < s_MaxPointLights)
-                    {
-                        // Copy as many point lights as the forward shader budget allows; clustered lighting can lift this cap later.
-                        glm::vec3 l_Position{ 0.0f };
-                        if (m_Registry->HasComponent<Transform>(it_Entity))
-                        {
-                            l_Position = m_Registry->GetComponent<Transform>(it_Entity).Position;
-                        }
+        //        if (l_LightComponent.m_Type == LightComponent::Type::Point)
+        //        {
+        //            if (l_PointLightWriteCount < s_MaxPointLights)
+        //            {
+        //                // Copy as many point lights as the forward shader budget allows; clustered lighting can lift this cap later.
+        //                glm::vec3 l_Position{ 0.0f };
+        //                if (m_Registry->HasComponent<Transform>(it_Entity))
+        //                {
+        //                    l_Position = m_Registry->GetComponent<Transform>(it_Entity).Position;
+        //                }
 
-                        const float l_Range = std::max(l_LightComponent.m_Range, 0.0f);
-                        const float l_Intensity = std::max(l_LightComponent.m_Intensity, 0.0f);
+        //                const float l_Range = std::max(l_LightComponent.m_Range, 0.0f);
+        //                const float l_Intensity = std::max(l_LightComponent.m_Intensity, 0.0f);
 
-                        l_Global.PointLights[l_PointLightWriteCount].PositionRange = glm::vec4(l_Position, l_Range);
-                        l_Global.PointLights[l_PointLightWriteCount].ColorIntensity = glm::vec4(l_LightComponent.m_Color, l_Intensity);
-                        ++l_PointLightWriteCount;
-                    }
-                    continue;
-                }
-            }
-        }
+        //                l_Global.PointLights[l_PointLightWriteCount].PositionRange = glm::vec4(l_Position, l_Range);
+        //                l_Global.PointLights[l_PointLightWriteCount].ColorIntensity = glm::vec4(l_LightComponent.m_Color, l_Intensity);
+        //                ++l_PointLightWriteCount;
+        //            }
+        //            continue;
+        //        }
+        //    }
+        //}
 
-        // Preserve the legacy sunlight when the scene has no explicit lighting yet so existing demos remain lit.
-        const bool l_ShouldUseFallbackDirectional = (l_DirectionalCount == 0 && l_PointLightWriteCount == 0);
-        const uint32_t l_DirectionalUsed = (l_DirectionalCount > 0 || l_ShouldUseFallbackDirectional) ? 1u : 0u;
+        //// Preserve the legacy sunlight when the scene has no explicit lighting yet so existing demos remain lit.
+        //const bool l_ShouldUseFallbackDirectional = (l_DirectionalCount == 0 && l_PointLightWriteCount == 0);
+        //const uint32_t l_DirectionalUsed = (l_DirectionalCount > 0 || l_ShouldUseFallbackDirectional) ? 1u : 0u;
 
-        l_Global.DirectionalLightDirection = glm::vec4(l_DirectionalDirection, 0.0f);
-        l_Global.DirectionalLightColor = glm::vec4(l_DirectionalColor, l_DirectionalIntensity);
-        l_Global.LightCounts = glm::uvec4(l_DirectionalUsed, l_PointLightWriteCount, 0u, 0u);
+        //l_Global.DirectionalLightDirection = glm::vec4(l_DirectionalDirection, 0.0f);
+        //l_Global.DirectionalLightColor = glm::vec4(l_DirectionalColor, l_DirectionalIntensity);
+        //l_Global.LightCounts = glm::uvec4(l_DirectionalUsed, l_PointLightWriteCount, 0u, 0u);
 
-        MaterialUniformBuffer l_Material{};
-        if (!m_Materials.empty())
-        {
-            const Geometry::Material& l_FirstMaterial = m_Materials.front();
-            l_Material.BaseColorFactor = l_FirstMaterial.BaseColorFactor;
-            l_Material.MaterialFactors = glm::vec4(l_FirstMaterial.MetallicFactor, l_FirstMaterial.RoughnessFactor, 1.0f, 0.0f);
-        }
-        else
-        {
-            l_Material.BaseColorFactor = glm::vec4(1.0f);
-            l_Material.MaterialFactors = glm::vec4(1.0f, 1.0f, 1.0f, 0.0f);
-        }
+        //MaterialUniformBuffer l_Material{};
+        //if (!m_Materials.empty())
+        //{
+        //    const Geometry::Material& l_FirstMaterial = m_Materials.front();
+        //    l_Material.BaseColorFactor = l_FirstMaterial.BaseColorFactor;
+        //    l_Material.MaterialFactors = glm::vec4(l_FirstMaterial.MetallicFactor, l_FirstMaterial.RoughnessFactor, 1.0f, 0.0f);
+        //}
+        //else
+        //{
+        //    l_Material.BaseColorFactor = glm::vec4(1.0f);
+        //    l_Material.MaterialFactors = glm::vec4(1.0f, 1.0f, 1.0f, 0.0f);
+        //}
 
-        void* l_Data = nullptr;
-        vkMapMemory(Startup::GetDevice(), m_GlobalUniformBuffersMemory[currentImage], 0, sizeof(l_Global), 0, &l_Data);
-        memcpy(l_Data, &l_Global, sizeof(l_Global));
-        vkUnmapMemory(Startup::GetDevice(), m_GlobalUniformBuffersMemory[currentImage]);
+        //void* l_Data = nullptr;
+        //vkMapMemory(Startup::GetDevice(), m_GlobalUniformBuffersMemory[currentImage], 0, sizeof(l_Global), 0, &l_Data);
+        //memcpy(l_Data, &l_Global, sizeof(l_Global));
+        //vkUnmapMemory(Startup::GetDevice(), m_GlobalUniformBuffersMemory[currentImage]);
 
-        vkMapMemory(Startup::GetDevice(), m_MaterialUniformBuffersMemory[currentImage], 0, sizeof(l_Material), 0, &l_Data);
-        memcpy(l_Data, &l_Material, sizeof(l_Material));
-        vkUnmapMemory(Startup::GetDevice(), m_MaterialUniformBuffersMemory[currentImage]);
+        //vkMapMemory(Startup::GetDevice(), m_MaterialUniformBuffersMemory[currentImage], 0, sizeof(l_Material), 0, &l_Data);
+        //memcpy(l_Data, &l_Material, sizeof(l_Material));
+        //vkUnmapMemory(Startup::GetDevice(), m_MaterialUniformBuffersMemory[currentImage]);
     }
 
     void Renderer::SetSelectedEntity(ECS::Entity entity)

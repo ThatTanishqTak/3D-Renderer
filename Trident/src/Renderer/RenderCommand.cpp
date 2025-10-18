@@ -34,50 +34,6 @@ namespace Trident
         Startup::GetRenderer().SetViewport(info);
     }
 
-    void RenderCommand::SetViewportCamera(ECS::Entity cameraEntity)
-    {
-        // Preserve a clear UI -> RenderCommand -> Renderer flow so viewport textures reflect the chosen camera entity.
-        Startup::GetRenderer().SetViewportCamera(cameraEntity);
-    }
-
-    void RenderCommand::SetViewportProjection(ProjectionType projection, float orthographicSize)
-    {
-        // Forward the requested projection so the renderer's editor camera mirrors UI state immediately.
-        Renderer* l_Renderer = Startup::TryGetRenderer();
-
-        if (!l_Renderer)
-        {
-            // Defer the update until the renderer finishes constructing so we never touch the camera before it exists.
-            return;
-        }
-
-        l_Renderer->SetViewportProjection(projection, orthographicSize);
-    }
-
-    void RenderCommand::UpdateEditorCamera(const glm::vec3& position, float yawDegrees, float pitchDegrees, float fieldOfViewDegrees)
-    {
-        // Copy the provided transform into the renderer's built-in editor camera so gizmos and viewports stay aligned.
-        Renderer* l_Renderer = Startup::TryGetRenderer();
-
-        if (!l_Renderer)
-        {
-            // Bail out gracefully if the renderer has not finished initialising yet; the editor will retry next frame.
-            return;
-        }
-        Camera* l_Camera = l_Renderer->TryGetCamera();
-
-        if (!l_Camera)
-        {
-            // The renderer has not initialised its internal camera yet; retry on the next frame.
-            return;
-        }
-
-        l_Camera->SetPosition(position);
-        l_Camera->SetYaw(yawDegrees);
-        l_Camera->SetPitch(pitchDegrees);
-        l_Camera->SetFOV(fieldOfViewDegrees);
-    }
-
     void RenderCommand::SetSelectedEntity(ECS::Entity entity)
     {
         // Forward the selection so the renderer tracks the same entity as the editor panels when drawing gizmos.

@@ -20,8 +20,6 @@
 #include "ECS/Components/SpriteComponent.h"
 #include "ECS/Components/TransformComponent.h"
 #include "ECS/Components/LightComponent.h"
-#include "Camera/Camera.h"
-#include "Camera/CameraComponent.h"
 
 #include <vulkan/vulkan.h>
 #include <glm/glm.hpp>
@@ -116,8 +114,6 @@ namespace Trident
 
         void SetTransform(const Transform& props);
         void SetViewport(const ViewportInfo& info);
-        void SetViewportCamera(ECS::Entity cameraEntity);
-        void SetViewportProjection(ProjectionType projection, float orthographicSize);
         // Cache the inspector's selection so gizmo transforms lock onto the same entity as the editor UI.
         void SetSelectedEntity(ECS::Entity entity);
 
@@ -129,11 +125,6 @@ namespace Trident
         // Provide tooling with the matrices required for gizmo overlay composition.
         glm::mat4 GetViewportViewMatrix() const;
         glm::mat4 GetViewportProjectionMatrix() const;
-
-        Camera& GetCamera() { return *m_Camera; }
-        const Camera& GetCamera() const { return *m_Camera; }
-        Camera* TryGetCamera() { return m_Camera.get(); }
-        const Camera* TryGetCamera() const { return m_Camera.get(); }
 
         // Access to the CPU-side material cache so editor widgets can tweak shading values.
         std::vector<Geometry::Material>& GetMaterials() { return m_Materials; }
@@ -171,22 +162,6 @@ namespace Trident
             ECS::Entity m_Entity = 0;               ///< Owning entity for debugging and future sorting.
         };
 
-        struct CameraSnapshot
-        {
-            glm::mat4 View{ 1.0f };
-            glm::vec3 Position{ 0.0f };
-            float FieldOfView = 45.0f;
-            float NearClip = 0.1f;
-            float FarClip = 100.0f;
-            ProjectionType Projection = ProjectionType::Perspective;
-            float OrthographicSize = 10.0f;
-            bool OverrideAspectRatio = false;
-            float AspectRatio = 16.0f / 9.0f;
-            bool UseCustomProjection = false;
-            glm::mat4 CustomProjection{ 1.0f };
-        };
-
-        CameraSnapshot ResolveViewportCamera() const;
         void GatherMeshDraws();
         void BuildSpriteGeometry();
         void DestroySpriteGeometry();
@@ -271,7 +246,6 @@ namespace Trident
         ECS::Entity m_Entity = 0;
         ECS::Registry* m_Registry = nullptr;
         ViewportInfo m_Viewport{};
-        std::unique_ptr<Camera> m_Camera;
         Skybox m_Skybox{};
 
         UI::ImGuiLayer* m_ImGuiLayer = nullptr;
