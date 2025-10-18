@@ -183,7 +183,7 @@ bool ApplicationLayer::ImportDroppedAssets(const std::vector<std::string>& dropp
     return true;
 }
 
-void ApplicationLayer::UpdateEditorCamera(float a_DeltaTime)
+void ApplicationLayer::UpdateEditorCamera(float deltaTime)
 {
     // Gather the latest ImGui IO snapshot so we can determine whether the editor should consume controls this frame.
     ImGuiIO& l_IO = ImGui::GetIO();
@@ -249,7 +249,7 @@ void ApplicationLayer::UpdateEditorCamera(float a_DeltaTime)
 
     // Determine the frame's delta time from the engine clock so motion stays frame-rate independent.
     const float l_FrameDelta = Trident::Utilities::Time::GetDeltaTime();
-    (void)a_DeltaTime; // The explicit parameter remains for future callers that provide custom deltas.
+    (void)deltaTime; // The explicit parameter remains for future callers that provide custom deltas.
 
     // Allow faster motion when shift is held so large scenes are easier to traverse.
     const float l_SpeedMultiplier = l_IO.KeyShift ? m_CameraBoostMultiplier : 1.0f;

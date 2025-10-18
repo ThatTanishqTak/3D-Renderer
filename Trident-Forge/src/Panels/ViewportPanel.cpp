@@ -214,13 +214,18 @@ void ViewportPanel::Render()
                 // Fetch the camera matrices used for the rendered image so the gizmo aligns perfectly.
                 const glm::mat4 l_ViewMatrix = Trident::RenderCommand::GetViewportViewMatrix();
                 const glm::mat4 l_ProjectionMatrix = Trident::RenderCommand::GetViewportProjectionMatrix();
+                glm::mat4 l_GizmoProjectionMatrix = l_ProjectionMatrix;
+                // ImGuizmo assumes a standard clip space where the Y axis points upwards. The renderer already flips
+                // the projection matrix to satisfy Vulkan's coordinate system, so we unflip the matrix here to ensure
+                // gizmo translation directions remain intuitive for artists.
+                l_GizmoProjectionMatrix[1][1] *= -1.0f;
 
                 // Retrieve the active selection transform and hand it to ImGuizmo for manipulation.
                 const Trident::Transform l_CurrentTransform = Trident::RenderCommand::GetTransform();
                 glm::mat4 l_ModelMatrix = ComposeMatrixFromTransform(l_CurrentTransform);
 
                 // Drive the gizmo and push edits back into the renderer when the user drags the handles.
-                if (ImGuizmo::Manipulate(glm::value_ptr(l_ViewMatrix), glm::value_ptr(l_ProjectionMatrix), m_GizmoState->GetOperation(), m_GizmoState->GetMode(), 
+                if (ImGuizmo::Manipulate(glm::value_ptr(l_ViewMatrix), glm::value_ptr(l_GizmoProjectionMatrix), m_GizmoState->GetOperation(), m_GizmoState->GetMode(),
                     glm::value_ptr(l_ModelMatrix)))
                 {
                     const Trident::Transform l_UpdatedTransform = DecomposeMatrixToTransform(l_ModelMatrix);
