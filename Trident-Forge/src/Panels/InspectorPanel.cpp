@@ -5,14 +5,21 @@
 #include "ECS/Registry.h"
 #include "ECS/Components/TagComponent.h"
 #include "ECS/Components/TransformComponent.h"
+#include "ECS/Components/CameraComponent.h"
+#include "ECS/Components/LightComponent.h"
+#include "ECS/Components/MeshComponent.h"
+#include "ECS/Components/SpriteComponent.h"
+#include "ECS/Components/ScriptComponent.h"
 
 #include <imgui.h>
 #include <ImGuizmo.h>
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cstring>
 #include <limits>
+#include <string>
 #include <vector>
 
 #include <glm/gtc/type_ptr.hpp>
@@ -89,12 +96,149 @@ void InspectorPanel::Render()
 
     Trident::ECS::Registry& l_Registry = Trident::Startup::GetRegistry();
 
+    DrawAddComponentMenu(l_Registry);
     DrawTagComponent(l_Registry);
     DrawTransformComponent(l_Registry);
 
     // Future improvement: reflect over registered component types to avoid manual draw helpers.
 
     ImGui::End();
+}
+
+void InspectorPanel::DrawAddComponentMenu(Trident::ECS::Registry& registry)
+{
+    // Surface a familiar entry point that allows designers to add new behaviour to the entity.
+    if (ImGui::Button("Add Component"))
+    {
+        m_AddComponentSearchBuffer.fill('\0');
+        m_ShouldFocusAddComponentSearch = true;
+        ImGui::OpenPopup("AddComponentPopup");
+    }
+
+    if (ImGui::BeginPopup("AddComponentPopup"))
+    {
+        // Keep the workflow quick by focusing the search box whenever the popup reopens.
+        if (m_ShouldFocusAddComponentSearch)
+        {
+            ImGui::SetKeyboardFocusHere();
+            m_ShouldFocusAddComponentSearch = false;
+        }
+
+        ImGui::InputTextWithHint("##AddComponentSearch", "Search components...", m_AddComponentSearchBuffer.data(), m_AddComponentSearchBuffer.size());
+        ImGui::Separator();
+
+        bool l_DisplayedAnyComponent = false;
+        bool l_ComponentAdded = false;
+
+        // Tag component is optional for runtime entities, so keep it available in the menu.
+        if (!l_ComponentAdded && !registry.HasComponent<Trident::TagComponent>(m_SelectedEntity) && PassesAddComponentFilter("Tag"))
+        {
+            l_DisplayedAnyComponent = true;
+            if (ImGui::Selectable("Tag"))
+            {
+                registry.AddComponent<Trident::TagComponent>(m_SelectedEntity, Trident::TagComponent{});
+                l_ComponentAdded = true;
+                ImGui::CloseCurrentPopup();
+            }
+        }
+
+        if (!l_ComponentAdded && !registry.HasComponent<Trident::Transform>(m_SelectedEntity) && PassesAddComponentFilter("Transform"))
+        {
+            l_DisplayedAnyComponent = true;
+            if (ImGui::Selectable("Transform"))
+            {
+                registry.AddComponent<Trident::Transform>(m_SelectedEntity, Trident::Transform{});
+                l_ComponentAdded = true;
+                ImGui::CloseCurrentPopup();
+            }
+        }
+
+        if (!l_ComponentAdded && !registry.HasComponent<Trident::CameraComponent>(m_SelectedEntity) && PassesAddComponentFilter("Camera"))
+        {
+            l_DisplayedAnyComponent = true;
+            if (ImGui::Selectable("Camera"))
+            {
+                registry.AddComponent<Trident::CameraComponent>(m_SelectedEntity, Trident::CameraComponent{});
+                l_ComponentAdded = true;
+                ImGui::CloseCurrentPopup();
+            }
+        }
+
+        if (!l_ComponentAdded && !registry.HasComponent<Trident::MeshComponent>(m_SelectedEntity) && PassesAddComponentFilter("Mesh"))
+        {
+            l_DisplayedAnyComponent = true;
+            if (ImGui::Selectable("Mesh"))
+            {
+                registry.AddComponent<Trident::MeshComponent>(m_SelectedEntity, Trident::MeshComponent{});
+                l_ComponentAdded = true;
+                ImGui::CloseCurrentPopup();
+            }
+        }
+
+        if (!l_ComponentAdded && !registry.HasComponent<Trident::LightComponent>(m_SelectedEntity) && PassesAddComponentFilter("Light"))
+        {
+            l_DisplayedAnyComponent = true;
+            if (ImGui::Selectable("Light"))
+            {
+                registry.AddComponent<Trident::LightComponent>(m_SelectedEntity, Trident::LightComponent{});
+                l_ComponentAdded = true;
+                ImGui::CloseCurrentPopup();
+            }
+        }
+
+        if (!l_ComponentAdded && !registry.HasComponent<Trident::SpriteComponent>(m_SelectedEntity) && PassesAddComponentFilter("Sprite"))
+        {
+            l_DisplayedAnyComponent = true;
+            if (ImGui::Selectable("Sprite"))
+            {
+                registry.AddComponent<Trident::SpriteComponent>(m_SelectedEntity, Trident::SpriteComponent{});
+                l_ComponentAdded = true;
+                ImGui::CloseCurrentPopup();
+            }
+        }
+
+        if (!l_ComponentAdded && !registry.HasComponent<Trident::ScriptComponent>(m_SelectedEntity) && PassesAddComponentFilter("Script"))
+        {
+            l_DisplayedAnyComponent = true;
+            if (ImGui::Selectable("Script"))
+            {
+                registry.AddComponent<Trident::ScriptComponent>(m_SelectedEntity, Trident::ScriptComponent{});
+                l_ComponentAdded = true;
+                ImGui::CloseCurrentPopup();
+            }
+        }
+
+        if (!l_DisplayedAnyComponent)
+        {
+            ImGui::TextDisabled("No components match the current search.");
+        }
+
+        ImGui::EndPopup();
+    }
+}
+
+bool InspectorPanel::PassesAddComponentFilter(const char* componentName) const
+{
+    const std::string l_Query = m_AddComponentSearchBuffer.data();
+    if (l_Query.empty())
+    {
+        return true;
+    }
+
+    std::string l_LowerCandidate = componentName;
+    std::string l_LowerQuery = l_Query;
+
+    for (char& it_Character : l_LowerCandidate)
+    {
+        it_Character = static_cast<char>(std::tolower(static_cast<unsigned char>(it_Character)));
+    }
+
+    for (char& it_Character : l_LowerQuery)
+    {
+        it_Character = static_cast<char>(std::tolower(static_cast<unsigned char>(it_Character)));
+    }
+
+    return l_LowerCandidate.find(l_LowerQuery) != std::string::npos;
 }
 
 void InspectorPanel::DrawTagComponent(Trident::ECS::Registry& registry)

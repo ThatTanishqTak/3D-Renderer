@@ -3,6 +3,7 @@
 #include "ECS/Entity.h"
 #include "GizmoState.h"
 
+#include <array>
 #include <limits>
 
 namespace Trident
@@ -37,9 +38,20 @@ private:
     void DrawTagComponent(Trident::ECS::Registry& registry);
     // Helper that exposes transform controls for translation, rotation, and scale.
     void DrawTransformComponent(Trident::ECS::Registry& registry);
+    // Helper that renders the add component popup and handles the search workflow.
+    void DrawAddComponentMenu(Trident::ECS::Registry& registry);
+    // Helper that runs a case-insensitive contains check against the search buffer.
+    bool PassesAddComponentFilter(const char* componentName) const;
 
+private:
     // Sentinel used to represent the absence of a valid selection.
     Trident::ECS::Entity m_SelectedEntity = std::numeric_limits<Trident::ECS::Entity>::max();
     // Shared gizmo configuration that mirrors the viewport overlay behaviour.
     GizmoState* m_GizmoState = nullptr;
+    // Size of the persistent add component search buffer.
+    static constexpr std::size_t s_AddComponentSearchBufferSize = 128;
+    // Backing buffer that stores the current search query typed inside the popup.
+    std::array<char, s_AddComponentSearchBufferSize> m_AddComponentSearchBuffer{};
+    // When true the next popup open will focus the search field for rapid workflows.
+    bool m_ShouldFocusAddComponentSearch = false;
 };
