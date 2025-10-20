@@ -141,7 +141,7 @@ void ApplicationLayer::HandleViewportContextMenu(const ImVec2& min, const ImVec2
     }
 }
 
-void ApplicationLayer::CreatePrimitiveEntity(PrimitiveType a_Type)
+void ApplicationLayer::CreatePrimitiveEntity(PrimitiveType type)
 {
     // Resolve the ECS registry so newly created entities immediately integrate with the renderer and inspector panels.
     Trident::ECS::Registry& l_Registry = Trident::Startup::GetRegistry();
@@ -161,10 +161,26 @@ void ApplicationLayer::CreatePrimitiveEntity(PrimitiveType a_Type)
     Trident::MeshComponent& l_MeshComponent = l_Registry.AddComponent<Trident::MeshComponent>(l_NewEntity);
     l_MeshComponent.m_Visible = true;
     // TODO: Wire specific mesh indices once the renderer exposes procedural primitives for these shapes.
+    switch (type)
+    {
+    case PrimitiveType::Cube:
+        l_MeshComponent.m_Primitive = Trident::MeshComponent::PrimitiveType::Cube;
+        break;
+    case PrimitiveType::Sphere:
+        l_MeshComponent.m_Primitive = Trident::MeshComponent::PrimitiveType::Sphere;
+        break;
+    case PrimitiveType::Quad:
+        l_MeshComponent.m_Primitive = Trident::MeshComponent::PrimitiveType::Quad;
+        break;
+    default:
+        l_MeshComponent.m_Primitive = Trident::MeshComponent::PrimitiveType::None;
+        break;
+    }
+    // TODO: Promote primitives into a dedicated authoring path once automatic mesh assignment is available.
 
     // Assign a tag that reads clearly in the hierarchy, ensuring duplicates receive numbered suffixes.
     std::string l_BaseTag = "Primitive";
-    switch (a_Type)
+    switch (type)
     {
     case PrimitiveType::Cube: l_BaseTag = "Cube"; break;
     case PrimitiveType::Sphere: l_BaseTag = "Sphere"; break;
@@ -174,6 +190,7 @@ void ApplicationLayer::CreatePrimitiveEntity(PrimitiveType a_Type)
 
     Trident::TagComponent& l_TagComponent = l_Registry.AddComponent<Trident::TagComponent>(l_NewEntity);
     l_TagComponent.m_Tag = MakeUniqueName(l_BaseTag);
+    // TODO: Consider attaching a lightweight PrimitiveTag marker component so batch operations can filter these entities.
 }
 
 std::string ApplicationLayer::MakeUniqueName(const std::string& a_BaseName) const

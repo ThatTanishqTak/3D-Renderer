@@ -72,12 +72,12 @@ namespace Trident
                             MeshComponent& l_MeshComponent = l_Registry.AddComponent<MeshComponent>(l_Entity);
                             l_MeshComponent.m_MeshIndex = l_NewMeshIndex;
                             l_MeshComponent.m_MaterialIndex = l_Scene.Meshes.back().MaterialIndex;
+
+                            // Imported assets always provide explicit mesh buffers, so leave the primitive unset.
+                            l_MeshComponent.m_Primitive = MeshComponent::PrimitiveType::None;
                         }
 
-                        l_Scene.Materials.insert(
-                            l_Scene.Materials.end(),
-                            a_ModelData.Materials.begin(),
-                            a_ModelData.Materials.end());
+                        l_Scene.Materials.insert(l_Scene.Materials.end(), a_ModelData.Materials.begin(), a_ModelData.Materials.end());
                         ++l_Scene.ModelCount;
                     }
                 }

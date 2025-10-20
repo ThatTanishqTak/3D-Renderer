@@ -396,6 +396,12 @@ namespace Trident
                 }
 
                 MeshComponent& l_Component = m_Registry->GetComponent<MeshComponent>(it_Entity);
+                if (l_Component.m_Primitive != MeshComponent::PrimitiveType::None && l_Component.m_MeshIndex == std::numeric_limits<size_t>::max())
+                {
+                    // TODO: Generate renderer-side draw info when procedural primitives acquire baked geometry.
+                    continue;
+                }
+
                 if (l_Component.m_MeshIndex >= m_MeshDrawInfo.size())
                 {
                     continue;
@@ -1028,6 +1034,12 @@ namespace Trident
             MeshComponent& l_MeshComponent = m_Registry->GetComponent<MeshComponent>(it_Entity);
             if (!l_MeshComponent.m_Visible)
             {
+                continue;
+            }
+
+            if (l_MeshComponent.m_Primitive != MeshComponent::PrimitiveType::None && l_MeshComponent.m_MeshIndex == std::numeric_limits<size_t>::max())
+            {
+                // TODO: Once primitives upload procedural vertex/index buffers, enqueue them here.
                 continue;
             }
 

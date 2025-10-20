@@ -207,9 +207,10 @@ namespace Trident
         {
             const MeshComponent& l_Mesh = m_Registry->GetComponent<MeshComponent>(entity);
             // Persist the renderer-facing indices; future iterations can enrich this with asset references.
+            // The primitive flag trails the legacy fields so pre-update files continue to deserialize cleanly.
             stream << "Mesh "
                 << l_Mesh.m_MeshIndex << ' ' << l_Mesh.m_MaterialIndex << ' ' << l_Mesh.m_FirstIndex << ' '
-                << l_Mesh.m_IndexCount << ' ' << l_Mesh.m_BaseVertex << ' ' << l_Mesh.m_Visible << "\n";
+                << l_Mesh.m_IndexCount << ' ' << l_Mesh.m_BaseVertex << ' ' << l_Mesh.m_Visible << ' ' << static_cast<int>(l_Mesh.m_Primitive) << "\n";
         }
 
         if (m_Registry->HasComponent<LightComponent>(entity))
@@ -295,6 +296,21 @@ namespace Trident
                 std::istringstream l_TokenStream(l_Line.substr(5));
                 l_TokenStream >> l_Mesh.m_MeshIndex >> l_Mesh.m_MaterialIndex >> l_Mesh.m_FirstIndex >> l_Mesh.m_IndexCount >> l_Mesh.m_BaseVertex;
                 l_TokenStream >> std::boolalpha >> l_Mesh.m_Visible;
+
+                int l_PrimitiveValue = static_cast<int>(MeshComponent::PrimitiveType::None);
+                if (l_TokenStream >> l_PrimitiveValue)
+                {
+                    // Clamp unknown enum values to "None" so corrupted data does not trip assertions later.
+                    if (l_PrimitiveValue >= static_cast<int>(MeshComponent::PrimitiveType::None) &&
+                        l_PrimitiveValue <= static_cast<int>(MeshComponent::PrimitiveType::Quad))
+                    {
+                        l_Mesh.m_Primitive = static_cast<MeshComponent::PrimitiveType>(l_PrimitiveValue);
+                    }
+                    else
+                    {
+                        l_Mesh.m_Primitive = MeshComponent::PrimitiveType::None;
+                    }
+                }
                 m_Registry->AddComponent<MeshComponent>(l_Entity, l_Mesh);
 
                 continue;
