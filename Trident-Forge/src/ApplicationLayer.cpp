@@ -8,7 +8,9 @@
 #include "Loader/ModelLoader.h"
 #include "Renderer/RenderCommand.h"
 #include "Core/Utilities.h"
-#include "Events/KeyEvents.h"
+#include "Application/Input.h"
+#include "Events/KeyCodes.h"
+#include "Events/MouseCodes.h"
 #include "Events/MouseEvents.h"
 
 #include <imgui.h>
@@ -193,7 +195,7 @@ void ApplicationLayer::CreatePrimitiveEntity(PrimitiveType type)
     // TODO: Consider attaching a lightweight PrimitiveTag marker component so batch operations can filter these entities.
 }
 
-std::string ApplicationLayer::MakeUniqueName(const std::string& a_BaseName) const
+std::string ApplicationLayer::MakeUniqueName(const std::string& baseName) const
 {
     // Collect all existing tags so the uniqueness check runs in constant time when evaluating potential names.
     Trident::ECS::Registry& l_Registry = Trident::Startup::GetRegistry();
@@ -212,7 +214,7 @@ std::string ApplicationLayer::MakeUniqueName(const std::string& a_BaseName) cons
         l_ExistingTags.insert(l_TagComponent.m_Tag);
     }
 
-    const std::string l_RootName = a_BaseName.empty() ? std::string("Primitive") : a_BaseName;
+    const std::string l_RootName = baseName.empty() ? std::string("Primitive") : baseName;
     if (!l_ExistingTags.contains(l_RootName))
     {
         return l_RootName;
@@ -239,9 +241,9 @@ void ApplicationLayer::OnEvent(Trident::Events& event)
             return HandleFileDrop(dropEvent);
         });
 
-    l_Dispatcher.Dispatch<Trident::MouseMovedEvent>([this](Trident::MouseMovedEvent& a_MouseEvent)
+    l_Dispatcher.Dispatch<Trident::MouseMovedEvent>([this](Trident::MouseMovedEvent& mouseEvent)
         {
-            const glm::vec2 l_NewPosition{ a_MouseEvent.GetX(), a_MouseEvent.GetY() };
+            const glm::vec2 l_NewPosition{ mouseEvent.GetX(), mouseEvent.GetY() };
 
             if (!m_HasCursorPosition)
             {
@@ -259,93 +261,41 @@ void ApplicationLayer::OnEvent(Trident::Events& event)
             return false;
         });
 
-    l_Dispatcher.Dispatch<Trident::MouseScrolledEvent>([this](Trident::MouseScrolledEvent& a_ScrollEvent)
+    l_Dispatcher.Dispatch<Trident::MouseScrolledEvent>([this](Trident::MouseScrolledEvent& scrollEvent)
         {
             // Accumulate scroll input so the update loop can apply it once per frame.
-            m_PendingScrollDelta += a_ScrollEvent.GetYOffset();
+            m_PendingScrollDelta += scrollEvent.GetYOffset();
 
             return false;
         });
 
-    l_Dispatcher.Dispatch<Trident::MouseButtonPressedEvent>([this](Trident::MouseButtonPressedEvent& a_MouseButtonEvent)
+    // The input manager already tracks button state, so we only reset editor-specific cursors here.
+    l_Dispatcher.Dispatch<Trident::MouseButtonPressedEvent>([this](Trident::MouseButtonPressedEvent& mouseButtonEvent)
         {
-            if (a_MouseButtonEvent.GetMouseButton() == Trident::Mouse::ButtonRight)
+            const Trident::MouseCode l_Button = mouseButtonEvent.GetMouseButton();
+
+            if (l_Button == Trident::Mouse::ButtonRight)
             {
-                m_IsRightMouseButtonDown = true;
                 m_ResetRotateOrbitReference = true;
-                m_PendingCursorDelta = glm::vec2{ 0.0f, 0.0f };
             }
-            else if (a_MouseButtonEvent.GetMouseButton() == Trident::Mouse::ButtonMiddle)
+
+            // Reset cursor deltas so fresh drags begin from the click point regardless of button.
+            if (l_Button == Trident::Mouse::ButtonRight ||
+                l_Button == Trident::Mouse::ButtonMiddle ||
+                l_Button == Trident::Mouse::ButtonLeft)
             {
-                m_IsMiddleMouseButtonDown = true;
-                m_PendingCursorDelta = glm::vec2{ 0.0f, 0.0f };
-            }
-            else if (a_MouseButtonEvent.GetMouseButton() == Trident::Mouse::ButtonLeft)
-            {
-                m_IsLeftMouseButtonDown = true;
                 m_PendingCursorDelta = glm::vec2{ 0.0f, 0.0f };
             }
 
             return false;
         });
 
-    l_Dispatcher.Dispatch<Trident::MouseButtonReleasedEvent>([this](Trident::MouseButtonReleasedEvent& a_MouseButtonEvent)
+    l_Dispatcher.Dispatch<Trident::MouseButtonReleasedEvent>([this](Trident::MouseButtonReleasedEvent& mouseButtonEvent)
         {
-            if (a_MouseButtonEvent.GetMouseButton() == Trident::Mouse::ButtonRight)
+            if (mouseButtonEvent.GetMouseButton() == Trident::Mouse::ButtonRight)
             {
-                m_IsRightMouseButtonDown = false;
                 m_IsRotateOrbitActive = false;
                 m_ResetRotateOrbitReference = true;
-            }
-            else if (a_MouseButtonEvent.GetMouseButton() == Trident::Mouse::ButtonMiddle)
-            {
-                m_IsMiddleMouseButtonDown = false;
-            }
-            else if (a_MouseButtonEvent.GetMouseButton() == Trident::Mouse::ButtonLeft)
-            {
-                m_IsLeftMouseButtonDown = false;
-            }
-
-            return false;
-        });
-
-    l_Dispatcher.Dispatch<Trident::KeyPressedEvent>([this](Trident::KeyPressedEvent& keyEvent)
-        {
-            const Trident::KeyCode l_Key = keyEvent.GetKeyCode();
-            switch (l_Key)
-            {
-            case Trident::Key::W: m_IsKeyWDown = true; break;
-            case Trident::Key::A: m_IsKeyADown = true; break;
-            case Trident::Key::S: m_IsKeySDown = true; break;
-            case Trident::Key::D: m_IsKeyDDown = true; break;
-            case Trident::Key::Q: m_IsKeyQDown = true; break;
-            case Trident::Key::E: m_IsKeyEDown = true; break;
-            case Trident::Key::LeftShift:
-            case Trident::Key::RightShift: m_IsShiftDown = true; break;
-            case Trident::Key::LeftAlt:
-            case Trident::Key::RightAlt: m_IsAltDown = true; break;
-            case Trident::Key::F: m_RequestFrameSelection = true; break;
-            default: break;
-            }
-
-            return false;
-        });
-
-    l_Dispatcher.Dispatch<Trident::KeyReleasedEvent>([this](Trident::KeyReleasedEvent& keyEvent)
-        {
-            const Trident::KeyCode l_Key = keyEvent.GetKeyCode();
-            switch (l_Key)
-            {
-            case Trident::Key::W: m_IsKeyWDown = false; break;
-            case Trident::Key::A: m_IsKeyADown = false; break;
-            case Trident::Key::S: m_IsKeySDown = false; break;
-            case Trident::Key::D: m_IsKeyDDown = false; break;
-            case Trident::Key::Q: m_IsKeyQDown = false; break;
-            case Trident::Key::E: m_IsKeyEDown = false; break;
-            case Trident::Key::LeftShift: m_IsShiftDown = false; break;
-            case Trident::Key::LeftAlt:
-            case Trident::Key::RightAlt: m_IsAltDown = false; break;
-            default: break;
             }
 
             return false;
@@ -395,9 +345,9 @@ bool ApplicationLayer::ImportDroppedAssets(const std::vector<std::string>& dropp
     {
         std::filesystem::path l_PathView{ it_Path };
         std::string l_Extension = l_PathView.extension().string();
-        std::transform(l_Extension.begin(), l_Extension.end(), l_Extension.begin(), [](unsigned char a_Char)
+        std::transform(l_Extension.begin(), l_Extension.end(), l_Extension.begin(), [](unsigned char character)
             {
-                return static_cast<char>(std::tolower(a_Char));
+                return static_cast<char>(std::tolower(character));
             });
 
         const bool l_Supported = std::find(l_SupportedExtensions.begin(), l_SupportedExtensions.end(), l_Extension) != l_SupportedExtensions.end();
@@ -474,7 +424,6 @@ void ApplicationLayer::UpdateEditorCamera(float deltaTime)
     {
         m_IsRotateOrbitActive = false;
         m_ResetRotateOrbitReference = true;
-        m_IsRightMouseButtonDown = false;
         m_PendingCursorDelta = glm::vec2{ 0.0f, 0.0f };
         m_PendingScrollDelta = 0.0f;
 
@@ -484,11 +433,16 @@ void ApplicationLayer::UpdateEditorCamera(float deltaTime)
     const float l_DeltaTime = std::max(deltaTime, 0.0f);
     const glm::vec3 l_WorldUp{ 0.0f, 1.0f, 0.0f };
 
+    // Query the shared input manager once so all calculations share the same snapshot of key/mouse state.
+    const Trident::Input& l_Input = Trident::Input::Get();
+    const bool l_IsAltDown = l_Input.IsKeyDown(Trident::Key::LeftAlt) || l_Input.IsKeyDown(Trident::Key::RightAlt);
+    const bool l_IsShiftDown = l_Input.IsKeyDown(Trident::Key::LeftShift) || l_Input.IsKeyDown(Trident::Key::RightShift);
+
     // Handle one-shot frame request before applying input deltas.
-    if (m_RequestFrameSelection)
+    if (l_Input.IsKeyPressed(Trident::Key::F))
     {
+        // Frame selection reacts to the rising edge so holding F does not repeatedly recenter the camera.
         FrameSelection();
-        m_RequestFrameSelection = false;
     }
 
     // Store the cursor location so the next drag can start without a large l_Delta jump when the button is pressed.
@@ -506,9 +460,14 @@ void ApplicationLayer::UpdateEditorCamera(float deltaTime)
     m_TargetPitchDegrees = m_EditorPitchDegrees;
     m_TargetPosition = l_CursorPosition;
 
-    const bool l_FlyMode = m_IsRightMouseButtonDown && !m_IsAltDown;     // RMB
-    const bool l_OrbitMode = m_IsAltDown && m_IsLeftMouseButtonDown;       // Alt+LMB
-    const bool l_PanMode = m_IsMiddleMouseButtonDown || (m_IsAltDown && m_IsMiddleMouseButtonDown); // MMB
+    // Capture mouse buttons once so orbit/fly/pan toggles read consistent values even if callbacks arrive mid-frame.
+    const bool l_RightMouseDown = l_Input.IsMouseButtonDown(Trident::Mouse::ButtonRight);
+    const bool l_LeftMouseDown = l_Input.IsMouseButtonDown(Trident::Mouse::ButtonLeft);
+    const bool l_MiddleMouseDown = l_Input.IsMouseButtonDown(Trident::Mouse::ButtonMiddle);
+
+    const bool l_FlyMode = l_RightMouseDown && !l_IsAltDown;     // RMB
+    const bool l_OrbitMode = l_IsAltDown && l_LeftMouseDown;       // Alt+LMB
+    const bool l_PanMode = l_MiddleMouseDown || (l_IsAltDown && l_MiddleMouseDown); // MMB
 
     if (l_FlyMode)
     {
@@ -563,38 +522,46 @@ void ApplicationLayer::UpdateEditorCamera(float deltaTime)
         l_CurrentUp = l_TargetUp;
     }
 
-    float speedMult = m_IsShiftDown ? m_CameraBoostMultiplier : 1.0f;
-    float l_MoveStep = m_CameraMoveSpeed * speedMult * l_DeltaTime;
+    const float l_SpeedMultiplier = l_IsShiftDown ? m_CameraBoostMultiplier : 1.0f;
+    float l_MoveStep = m_CameraMoveSpeed * l_SpeedMultiplier * l_DeltaTime;
 
     if (l_FlyMode)
     {
         // Use the camera's smoothed forward/right vectors so WASD motion stays in lockstep with the rendered view.
-        if (m_IsKeyWDown)
+        // The dedicated input manager exposes explicit checks for each key, making it easy to remap or extend controls later.
+        const bool l_KeyWDown = l_Input.IsKeyDown(Trident::Key::W);
+        const bool l_KeySDown = l_Input.IsKeyDown(Trident::Key::S);
+        const bool l_KeyDDown = l_Input.IsKeyDown(Trident::Key::D);
+        const bool l_KeyADown = l_Input.IsKeyDown(Trident::Key::A);
+        const bool l_KeyEDown = l_Input.IsKeyDown(Trident::Key::E);
+        const bool l_KeyQDown = l_Input.IsKeyDown(Trident::Key::Q);
+
+        if (l_KeyWDown)
         {
             m_TargetPosition += l_CurrentForward * l_MoveStep;
         }
 
-        if (m_IsKeySDown)
+        if (l_KeySDown)
         {
             m_TargetPosition -= l_CurrentForward * l_MoveStep;
         }
 
-        if (m_IsKeyDDown)
+        if (l_KeyDDown)
         {
             m_TargetPosition += l_CurrentRight * l_MoveStep;
         }
 
-        if (m_IsKeyADown)
+        if (l_KeyADown)
         {
             m_TargetPosition -= l_CurrentRight * l_MoveStep;
         }
 
-        if (m_IsKeyEDown)
+        if (l_KeyEDown)
         {
             m_TargetPosition += l_CurrentUp * l_MoveStep;
         }
 
-        if (m_IsKeyQDown)
+        if (l_KeyQDown)
         {
             m_TargetPosition -= l_CurrentUp * l_MoveStep;
         }
@@ -617,7 +584,7 @@ void ApplicationLayer::UpdateEditorCamera(float deltaTime)
             float l_Scale = std::exp(m_PendingScrollDelta * 0.1f);
             m_CameraMoveSpeed = glm::clamp(m_CameraMoveSpeed * l_Scale, m_MinMoveSpeed, m_MaxMoveSpeed);
         }
-        else if (m_IsAltDown || l_OrbitMode)
+        else if (l_IsAltDown || l_OrbitMode)
         {
             // Dolly to pivot
             float l_Delta = -m_PendingScrollDelta * (m_OrbitDistance * m_DollySpeedFactor);

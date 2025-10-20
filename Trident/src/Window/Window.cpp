@@ -1,6 +1,7 @@
 #include "Window/Window.h"
 
 #include "Application.h"
+#include "Application/Input.h"
 #include "Core/Utilities.h"
 
 #include "Events/ApplicationEvents.h"
@@ -88,6 +89,7 @@ namespace Trident
                 {
                 case GLFW_PRESS:
                 {
+                    Trident::Input::Get().OnKeyPressed(static_cast<KeyCode>(key), false);
                     KeyPressedEvent l_Event(static_cast<KeyCode>(key), false);
 
                     if (l_Data.m_EventCallback)
@@ -99,6 +101,7 @@ namespace Trident
                 }
                 case GLFW_RELEASE:
                 {
+                    Trident::Input::Get().OnKeyReleased(static_cast<KeyCode>(key));
                     KeyReleasedEvent l_Event(static_cast<KeyCode>(key));
 
                     if (l_Data.m_EventCallback)
@@ -110,6 +113,7 @@ namespace Trident
                 }
                 case GLFW_REPEAT:
                 {
+                    Trident::Input::Get().OnKeyPressed(static_cast<KeyCode>(key), true);
                     KeyPressedEvent l_Event(static_cast<KeyCode>(key), true);
 
                     if (l_Data.m_EventCallback)
@@ -134,6 +138,7 @@ namespace Trident
                 {
                 case GLFW_PRESS:
                 {
+                    Trident::Input::Get().OnMouseButtonPressed(static_cast<MouseCode>(button));
                     MouseButtonPressedEvent l_Event(static_cast<MouseCode>(button));
 
                     if (l_Data.m_EventCallback)
@@ -145,6 +150,7 @@ namespace Trident
                 }
                 case GLFW_RELEASE:
                 {
+                    Trident::Input::Get().OnMouseButtonReleased(static_cast<MouseCode>(button));
                     MouseButtonReleasedEvent l_Event(static_cast<MouseCode>(button));
 
                     if (l_Data.m_EventCallback)

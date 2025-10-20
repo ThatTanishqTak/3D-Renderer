@@ -91,21 +91,6 @@ private:
     float m_PendingScrollDelta = 0.0f;              ///< Scroll wheel offset captured from recent events.
     bool m_HasCursorPosition = false;               ///< Indicates whether any cursor events have been observed yet.
 
-    // Mouse/keyboard state
-    bool m_IsRightMouseButtonDown = false;          ///< RMB for free-look fly.
-    bool m_IsMiddleMouseButtonDown = false;         ///< MMB for pan.
-    bool m_IsLeftMouseButtonDown = false;           ///< LMB used with Alt for orbit.
-
-    bool m_IsShiftDown = false;                     ///< Shift boosts fly speed.
-    bool m_IsAltDown = false;                       ///< Alt gates orbit/dolly modes.
-
-    bool m_IsKeyWDown = false;                      ///< Forward
-    bool m_IsKeyADown = false;                      ///< Strafe left
-    bool m_IsKeySDown = false;                      ///< Backward
-    bool m_IsKeyDDown = false;                      ///< Strafe right
-    bool m_IsKeyQDown = false;                      ///< Down
-    bool m_IsKeyEDown = false;                      ///< Up
-
     // Orbit + framing
     glm::vec3 m_CameraPivot{ 0.0f, 0.0f, 0.0f };    ///< Orbit center used by Alt+LMB and Frame (F).
     float m_OrbitDistance = 8.0f;               ///< Distance from pivot when orbiting.
@@ -125,7 +110,4 @@ private:
     // Fly speed limits
     float m_MinMoveSpeed = 10.1f;
     float m_MaxMoveSpeed = 50.0f;
-
-    // One-shot requests
-    bool  m_RequestFrameSelection = false;
 };
