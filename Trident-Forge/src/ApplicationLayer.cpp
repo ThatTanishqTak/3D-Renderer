@@ -37,6 +37,12 @@ void ApplicationLayer::Initialize()
             ImportDroppedAssets(droppedPaths);
         });
 
+    // Bridge viewport rendering back to the application layer so the contextual menu can react to image interactions.
+    m_ViewportPanel.SetContextMenuHandler([this](const ImVec2& min, const ImVec2& max)
+        {
+            HandleViewportContextMenu(min, max);
+        });
+
     // Seed the editor camera with a comfortable default orbit so the scene appears immediately.
     m_EditorCamera.SetPosition({ 0.0f, 3.0f, 8.0f });
     m_EditorYawDegrees = -90.0f;
@@ -90,6 +96,122 @@ void ApplicationLayer::Render()
     m_ContentBrowserPanel.Render();
     m_SceneHierarchyPanel.Render();
     m_InspectorPanel.Render();
+}
+
+void ApplicationLayer::HandleViewportContextMenu(const ImVec2& min, const ImVec2& max)
+{
+    // The viewport image is hosted within an ImGui window, so we verify the cursor lies inside the draw rectangle before
+    // responding to mouse releases. This keeps the context menu from appearing while resizing docks or dragging overlays.
+    const bool l_IsHovered = ImGui::IsMouseHoveringRect(min, max, true);
+    const bool l_IsMouseReleased = ImGui::IsMouseReleased(ImGuiMouseButton_Right);
+
+    // Block popups when the editor is actively dragging a widget or resizing splitters to avoid double consumption of inputs.
+    const bool l_IsDragging = ImGui::IsMouseDragging(ImGuiMouseButton_Left) ||
+        ImGui::IsMouseDragging(ImGuiMouseButton_Right) ||
+        ImGui::IsMouseDragging(ImGuiMouseButton_Middle);
+    const bool l_IsManipulatingItem = ImGui::IsAnyItemActive();
+
+    if (l_IsHovered && l_IsMouseReleased && !l_IsDragging && !l_IsManipulatingItem)
+    {
+        ImGui::OpenPopup("ViewportContextMenu");
+    }
+
+    if (ImGui::BeginPopup("ViewportContextMenu"))
+    {
+        // Provide a dedicated submenu so the primitive list scales cleanly as future shapes are added.
+        if (ImGui::BeginMenu("Add Primitive"))
+        {
+            if (ImGui::MenuItem("Cube"))
+            {
+                CreatePrimitiveEntity(PrimitiveType::Cube);
+            }
+            if (ImGui::MenuItem("Sphere"))
+            {
+                CreatePrimitiveEntity(PrimitiveType::Sphere);
+            }
+            if (ImGui::MenuItem("Quad"))
+            {
+                CreatePrimitiveEntity(PrimitiveType::Quad);
+            }
+            ImGui::EndMenu();
+        }
+
+        // TODO: Extend the context menu with lighting helpers, cameras, and custom authoring tools.
+        ImGui::EndPopup();
+    }
+}
+
+void ApplicationLayer::CreatePrimitiveEntity(PrimitiveType a_Type)
+{
+    // Resolve the ECS registry so newly created entities immediately integrate with the renderer and inspector panels.
+    Trident::ECS::Registry& l_Registry = Trident::Startup::GetRegistry();
+
+    // Spawn primitives a short distance in front of the camera so they appear within the artist's view frustum.
+    const glm::vec3 l_SpawnPosition = m_EditorCamera.GetPosition() + (m_EditorCamera.GetForwardDirection() * 10.0f);
+    Trident::ECS::Entity l_NewEntity = l_Registry.CreateEntity();
+
+    // Initialise the transform so authoring begins with predictable orientation and scale.
+    Trident::Transform l_Transform{};
+    l_Transform.Position = l_SpawnPosition;
+    l_Transform.Rotation = glm::vec3{ 0.0f };
+    l_Transform.Scale = glm::vec3{ 1.0f };
+    l_Registry.AddComponent<Trident::Transform>(l_NewEntity, l_Transform);
+
+    // Attach a mesh component so the renderer recognises the entity as drawable geometry.
+    Trident::MeshComponent& l_MeshComponent = l_Registry.AddComponent<Trident::MeshComponent>(l_NewEntity);
+    l_MeshComponent.m_Visible = true;
+    // TODO: Wire specific mesh indices once the renderer exposes procedural primitives for these shapes.
+
+    // Assign a tag that reads clearly in the hierarchy, ensuring duplicates receive numbered suffixes.
+    std::string l_BaseTag = "Primitive";
+    switch (a_Type)
+    {
+    case PrimitiveType::Cube: l_BaseTag = "Cube"; break;
+    case PrimitiveType::Sphere: l_BaseTag = "Sphere"; break;
+    case PrimitiveType::Quad: l_BaseTag = "Quad"; break;
+    default: break;
+    }
+
+    Trident::TagComponent& l_TagComponent = l_Registry.AddComponent<Trident::TagComponent>(l_NewEntity);
+    l_TagComponent.m_Tag = MakeUniqueName(l_BaseTag);
+}
+
+std::string ApplicationLayer::MakeUniqueName(const std::string& a_BaseName) const
+{
+    // Collect all existing tags so the uniqueness check runs in constant time when evaluating potential names.
+    Trident::ECS::Registry& l_Registry = Trident::Startup::GetRegistry();
+    std::unordered_set<std::string> l_ExistingTags{};
+    const std::vector<Trident::ECS::Entity>& l_Entities = l_Registry.GetEntities();
+    l_ExistingTags.reserve(l_Entities.size());
+
+    for (Trident::ECS::Entity it_Entity : l_Entities)
+    {
+        if (!l_Registry.HasComponent<Trident::TagComponent>(it_Entity))
+        {
+            continue;
+        }
+
+        const Trident::TagComponent& l_TagComponent = l_Registry.GetComponent<Trident::TagComponent>(it_Entity);
+        l_ExistingTags.insert(l_TagComponent.m_Tag);
+    }
+
+    const std::string l_RootName = a_BaseName.empty() ? std::string("Primitive") : a_BaseName;
+    if (!l_ExistingTags.contains(l_RootName))
+    {
+        return l_RootName;
+    }
+
+    int l_Suffix = 2;
+    while (true)
+    {
+        std::string l_Candidate = l_RootName + " (" + std::to_string(l_Suffix) + ")";
+        if (!l_ExistingTags.contains(l_Candidate))
+        {
+            return l_Candidate;
+        }
+
+        ++l_Suffix;
+    }
 }
 
 void ApplicationLayer::OnEvent(Trident::Events& event)

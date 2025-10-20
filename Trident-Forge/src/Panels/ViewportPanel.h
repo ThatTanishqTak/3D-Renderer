@@ -35,12 +35,18 @@ public:
     void SetSelectedEntity(Trident::ECS::Entity selectedEntity);
     // Allows editor systems to react when assets are dropped onto the viewport image.
     void SetAssetDropHandler(std::function<void(const std::vector<std::string>&)> assetDropHandler);
+    // Allows the viewport to notify external systems when the image has been rendered so they can display context menus.
+    void SetContextMenuHandler(std::function<void(const ImVec2&, const ImVec2&)> contextMenuHandler);
     // Exposes whether the viewport is hovered so external systems can gate drag-and-drop behaviour.
     bool IsHovered() const { return m_IsHovered; }
     // Reports whether the viewport window currently owns keyboard focus for camera control decisions.
     bool IsFocused() const { return m_IsFocused; }
     // Allows callers to check whether a screen-space point falls within the viewport image.
     bool ContainsPoint(const ImVec2& point) const;
+
+private:
+    // Frame the current selection or world origin when the user presses the focus key.
+    void FrameSelection();
 
 private:
     // Persistent identifier used when asking the renderer for a viewport.
@@ -66,7 +72,6 @@ private:
     GizmoState* m_GizmoState = nullptr;
     // Callback invoked whenever a drag-and-drop payload is released over the viewport image.
     std::function<void(const std::vector<std::string>&)> m_OnAssetDrop{};
-
-    // Frame the current selection or world origin when the user presses the focus key.
-    void FrameSelection();
+    // Callback used to surface viewport image bounds immediately after the framebuffer is submitted to ImGui.
+    std::function<void(const ImVec2&, const ImVec2&)> m_OnViewportContextMenu{};
 };

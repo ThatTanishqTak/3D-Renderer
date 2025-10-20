@@ -186,6 +186,11 @@ void ViewportPanel::Render()
             // Draw the viewport texture using standard UV orientation. The renderer already flips the projection
             // matrix for Vulkan, so the off-screen image is stored upright and does not require an additional flip.
             ImGui::Image(reinterpret_cast<ImTextureID>(l_Descriptor), l_ContentRegion, ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f));
+            // Surface the drawn image bounds immediately so the application layer can attach contextual menus.
+            if (m_OnViewportContextMenu)
+            {
+                m_OnViewportContextMenu(m_ViewportBoundsMin, m_ViewportBoundsMax);
+            }
             if (ImGui::BeginDragDropTarget())
             {
                 const ImGuiPayload* l_Payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM");
@@ -273,6 +278,12 @@ void ViewportPanel::SetAssetDropHandler(std::function<void(const std::vector<std
 {
     // Store the callback so the application layer can process accepted payloads.
     m_OnAssetDrop = std::move(assetDropHandler);
+}
+
+void ViewportPanel::SetContextMenuHandler(std::function<void(const ImVec2&, const ImVec2&)> contextMenuHandler)
+{
+    // Mirror the handler provided by the application layer so viewport rendering can trigger context menus.
+    m_OnViewportContextMenu = std::move(contextMenuHandler);
 }
 
 bool ViewportPanel::ContainsPoint(const ImVec2& point) const

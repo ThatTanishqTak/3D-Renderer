@@ -42,6 +42,13 @@ public:
     void OnEvent(Trident::Events& event) override;
 
 private:
+    enum class PrimitiveType
+    {
+        Cube,
+        Sphere,
+        Quad
+    };
+
     bool HandleFileDrop(Trident::FileDropEvent& event);
     bool ImportDroppedAssets(const std::vector<std::string>& droppedPaths);
 
@@ -50,6 +57,9 @@ private:
     // Unity-like helpers
     void FrameSelection();
     static glm::vec3 ForwardFromYawPitch(float yawDeg, float pitchDeg);
+    void HandleViewportContextMenu(const ImVec2& a_Min, const ImVec2& a_Max);
+    void CreatePrimitiveEntity(PrimitiveType a_Type);
+    std::string MakeUniqueName(const std::string& a_BaseName) const;
 
 private:
     GizmoState m_GizmoState;
