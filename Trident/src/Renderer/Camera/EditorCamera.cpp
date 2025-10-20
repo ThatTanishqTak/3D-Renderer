@@ -140,6 +140,9 @@ namespace Trident
 
     void EditorCamera::Invalidate()
     {
+        // Reset cached matrices so any debug visualisation observes predictable identity data until recomputed.
+        m_ViewMatrix = glm::mat4{ 1.0f };
+        m_ProjectionMatrix = glm::mat4{ 1.0f };
         m_ViewDirty = true;
         m_ProjectionDirty = true;
     }
@@ -176,7 +179,8 @@ namespace Trident
     void EditorCamera::UpdateViewMatrix() const
     {
         const glm::quat l_Orientation = BuildOrientation();
-        const glm::mat4 l_Rotation = glm::mat4_cast(l_Orientation);
+        // Use the conjugate so the view matrix represents the inverse rotation (camera to world).
+        const glm::mat4 l_Rotation = glm::mat4_cast(glm::conjugate(l_Orientation));
         const glm::mat4 l_Translation = glm::translate(glm::mat4{ 1.0f }, -m_Position);
 
         // Compose rotation and translation to build a typical look-at matrix.
