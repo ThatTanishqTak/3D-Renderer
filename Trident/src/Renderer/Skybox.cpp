@@ -4,36 +4,42 @@
 
 #include <glm/gtc/matrix_transform.hpp>
 
+#include <vector>
+
 namespace Trident
 {
     void Skybox::Init(Buffers& buffers, CommandBufferPool& pool)
     {
-        //std::vector<Vertex> vertices =
-        //{
-        //      // positions             // color              // texcoord
-        //    { { -1.0f, -1.0f,  1.0f }, { 1.0f, 1.0f, 1.0f }, { 0.0f, 0.0f } },
-        //    { {  1.0f, -1.0f,  1.0f }, { 1.0f, 1.0f, 1.0f }, { 1.0f, 0.0f } },
-        //    { {  1.0f,  1.0f,  1.0f }, { 1.0f, 1.0f, 1.0f }, { 1.0f, 1.0f } },
-        //    { { -1.0f,  1.0f,  1.0f }, { 1.0f, 1.0f, 1.0f }, { 0.0f, 1.0f } },
+        std::vector<Vertex> l_Vertices =
+        {
+            // Position                    Normal                 Tangent                Bitangent              Color                  TexCoord
+            { { -1.0f, -1.0f,  1.0f }, { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f }, { 0.0f, 0.0f } },
+            { {  1.0f, -1.0f,  1.0f }, { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f }, { 1.0f, 0.0f } },
+            { {  1.0f,  1.0f,  1.0f }, { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f }, { 1.0f, 1.0f } },
+            { { -1.0f,  1.0f,  1.0f }, { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f }, { 0.0f, 1.0f } },
 
-        //    { { -1.0f, -1.0f, -1.0f }, { 1.0f, 1.0f, 1.0f }, { 0.0f, 0.0f } },
-        //    { {  1.0f, -1.0f, -1.0f }, { 1.0f, 1.0f, 1.0f }, { 1.0f, 0.0f } },
-        //    { {  1.0f,  1.0f, -1.0f }, { 1.0f, 1.0f, 1.0f }, { 1.0f, 1.0f } },
-        //    { { -1.0f,  1.0f, -1.0f }, { 1.0f, 1.0f, 1.0f }, { 0.0f, 1.0f } },
-        //};
+            { { -1.0f, -1.0f, -1.0f }, { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f }, { 0.0f, 0.0f } },
+            { {  1.0f, -1.0f, -1.0f }, { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f }, { 1.0f, 0.0f } },
+            { {  1.0f,  1.0f, -1.0f }, { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f }, { 1.0f, 1.0f } },
+            { { -1.0f,  1.0f, -1.0f }, { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f }, { 0.0f, 1.0f } },
+        };
 
-        //std::vector<uint32_t> indices =
-        //{
-        //    0, 1, 2, 2, 3, 0,
-        //    1, 5, 6, 6, 2, 1,
-        //    5, 4, 7, 7, 6, 5,
-        //    4, 0, 3, 3, 7, 4,
-        //    3, 2, 6, 6, 7, 3,
-        //    4, 5, 1, 1, 0, 4
-        //};
+        // Define the index list to reuse vertices while drawing the cube.
+        std::vector<uint32_t> l_Indices =
+        {
+            0, 1, 2, 2, 3, 0,
+            1, 5, 6, 6, 2, 1,
+            5, 4, 7, 7, 6, 5,
+            4, 0, 3, 3, 7, 4,
+            3, 2, 6, 6, 7, 3,
+            4, 5, 1, 1, 0, 4
+        };
 
-        //buffers.CreateVertexBuffer(vertices, pool, m_VertexBuffer, m_VertexBufferMemory);
-        //buffers.CreateIndexBuffer(indices, pool, m_IndexBuffer, m_IndexBufferMemory, m_IndexCount);
+        // Upload the cube data to GPU buffers; the renderer expects these handles to be valid.
+        buffers.CreateVertexBuffer(l_Vertices, pool, m_VertexBuffer, m_VertexBufferMemory);
+        buffers.CreateIndexBuffer(l_Indices, pool, m_IndexBuffer, m_IndexBufferMemory, m_IndexCount);
+
+        // TODO: Replace the placeholder white vertices with cubemap-driven attributes once textures are available.
     }
 
     void Skybox::Cleanup(Buffers& buffers)
