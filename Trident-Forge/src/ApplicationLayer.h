@@ -83,13 +83,8 @@ private:
     float m_MouseZoomSpeed = 2.0f;                  ///< Distance moved along the forward vector per wheel notch.
 
     // Cursor tracking
-    glm::vec2 m_LastCursorPosition{ 0.0f, 0.0f };   ///< Tracks previous cursor position to reset drag pivots.
     bool m_IsRotateOrbitActive = false;             ///< Flags whether the current frame is processing an orbit drag.
-    bool m_ResetRotateOrbitReference = true;        ///< Ensures the next drag seeds from the current cursor location.
-    glm::vec2 m_CurrentCursorPosition{ 0.0f, 0.0f };///< Last known cursor position reported by the windowing system.
-    glm::vec2 m_PendingCursorDelta{ 0.0f, 0.0f };   ///< Accumulated mouse delta since the previous update tick.
-    float m_PendingScrollDelta = 0.0f;              ///< Scroll wheel offset captured from recent events.
-    bool m_HasCursorPosition = false;               ///< Indicates whether any cursor events have been observed yet.
+    bool m_ResetRotateOrbitReference = true;        ///< Ensures the next drag discards the initial delta for stability.
 
     // Orbit + framing
     glm::vec3 m_CameraPivot{ 0.0f, 0.0f, 0.0f };    ///< Orbit center used by Alt+LMB and Frame (F).

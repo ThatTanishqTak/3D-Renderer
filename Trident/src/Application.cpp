@@ -84,6 +84,8 @@ namespace Trident
     {
         Utilities::Time::Update();
 
+        Input::Get().BeginFrame();
+
         m_Window->PollEvents();
 
         // Update the active layer after input/events so it can react to the latest state.

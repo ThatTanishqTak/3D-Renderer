@@ -12,9 +12,43 @@ namespace Trident
 
     Input::Input() = default;
 
+    void Input::BeginFrame()
+    {
+        if (m_FrameActive)
+        {
+            return;
+        }
+
+        m_FrameActive = true;
+
+        m_PreviousKeyState = m_CurrentKeyState;
+        m_PreviousMouseState = m_CurrentMouseState;
+        m_PreviousMousePosition = m_CurrentMousePosition;
+
+        std::fill(m_KeyPressed.begin(), m_KeyPressed.end(), false);
+        std::fill(m_KeyReleased.begin(), m_KeyReleased.end(), false);
+        std::fill(m_KeyRepeated.begin(), m_KeyRepeated.end(), false);
+
+        std::fill(m_MousePressed.begin(), m_MousePressed.end(), false);
+        std::fill(m_MouseReleased.begin(), m_MouseReleased.end(), false);
+
+        m_MouseDelta = glm::vec2{ 0.0f, 0.0f };
+        m_ScrollDelta = glm::vec2{ 0.0f, 0.0f };
+    }
+
+    void Input::EndFrame()
+    {
+        m_FrameActive = false;
+    }
+
     bool Input::IsKeyDown(KeyCode key) const
     {
         if (!IsCodeValid<KeyCode, s_MaxKeys>(key))
+        {
+            return false;
+        }
+
+        if (m_WantCaptureKeyboard)
         {
             return false;
         }
@@ -29,12 +63,22 @@ namespace Trident
             return false;
         }
 
+        if (m_WantCaptureKeyboard)
+        {
+            return false;
+        }
+
         return m_KeyPressed[static_cast<size_t>(key)];
     }
 
     bool Input::IsKeyReleased(KeyCode key) const
     {
         if (!IsCodeValid<KeyCode, s_MaxKeys>(key))
+        {
+            return false;
+        }
+
+        if (m_WantCaptureKeyboard)
         {
             return false;
         }
@@ -49,6 +93,11 @@ namespace Trident
             return false;
         }
 
+        if (m_WantCaptureKeyboard)
+        {
+            return false;
+        }
+
         return m_KeyRepeated[static_cast<size_t>(key)];
     }
 
@@ -59,12 +108,32 @@ namespace Trident
             return false;
         }
 
+        if (m_WantCaptureMouse)
+        {
+            return false;
+        }
+
         return m_CurrentMouseState[static_cast<size_t>(button)];
     }
 
     bool Input::IsMouseButtonPressed(MouseCode button) const
     {
+        return WasMouseButtonPressed(button);
+    }
+
+    bool Input::IsMouseButtonReleased(MouseCode button) const
+    {
+        return WasMouseButtonReleased(button);
+    }
+
+    bool Input::WasMouseButtonPressed(MouseCode button) const
+    {
         if (!IsCodeValid<MouseCode, s_MaxMouseButtons>(button))
+        {
+            return false;
+        }
+
+        if (m_WantCaptureMouse)
         {
             return false;
         }
@@ -72,14 +141,55 @@ namespace Trident
         return m_MousePressed[static_cast<size_t>(button)];
     }
 
-    bool Input::IsMouseButtonReleased(MouseCode button) const
+    bool Input::WasMouseButtonReleased(MouseCode button) const
     {
         if (!IsCodeValid<MouseCode, s_MaxMouseButtons>(button))
         {
             return false;
         }
 
+        if (m_WantCaptureMouse)
+        {
+            return false;
+        }
+
         return m_MouseReleased[static_cast<size_t>(button)];
+    }
+
+    glm::vec2 Input::GetMousePosition() const
+    {
+        return m_CurrentMousePosition;
+    }
+
+    glm::vec2 Input::GetMouseDelta() const
+    {
+        if (m_WantCaptureMouse)
+        {
+            return glm::vec2{ 0.0f, 0.0f };
+        }
+
+        return m_MouseDelta;
+    }
+
+    glm::vec2 Input::GetScrollDelta() const
+    {
+        if (m_WantCaptureMouse)
+        {
+            return glm::vec2{ 0.0f, 0.0f };
+        }
+
+        return m_ScrollDelta;
+    }
+
+    bool Input::HasMousePosition() const
+    {
+        return m_HasMousePosition;
+    }
+
+    void Input::SetUICapture(bool wantMouse, bool wantKeyboard)
+    {
+        m_WantCaptureMouse = wantMouse;
+        m_WantCaptureKeyboard = wantKeyboard;
     }
 
     void Input::OnKeyPressed(KeyCode key, bool isRepeat)
@@ -157,19 +267,26 @@ namespace Trident
         }
     }
 
-    void Input::EndFrame()
+    void Input::OnMouseMoved(float x, float y)
     {
-        m_PreviousKeyState = m_CurrentKeyState;
-        m_PreviousMouseState = m_CurrentMouseState;
+        const glm::vec2 l_NewPosition{ x, y };
 
-        std::fill(m_KeyPressed.begin(), m_KeyPressed.end(), false);
-        std::fill(m_KeyReleased.begin(), m_KeyReleased.end(), false);
-        std::fill(m_KeyRepeated.begin(), m_KeyRepeated.end(), false);
+        if (!m_HasMousePosition)
+        {
+            m_HasMousePosition = true;
+            m_CurrentMousePosition = l_NewPosition;
+            m_PreviousMousePosition = l_NewPosition;
 
-        std::fill(m_MousePressed.begin(), m_MousePressed.end(), false);
-        std::fill(m_MouseReleased.begin(), m_MouseReleased.end(), false);
+            return;
+        }
 
-        // TODO: When controller support arrives, this is where we can reset gamepad
-        // edges alongside the keyboard and mouse state.
+        m_PreviousMousePosition = m_CurrentMousePosition;
+        m_CurrentMousePosition = l_NewPosition;
+        m_MouseDelta += (m_CurrentMousePosition - m_PreviousMousePosition);
+    }
+
+    void Input::OnMouseScrolled(float xoff, float yoff)
+    {
+        m_ScrollDelta += glm::vec2{ xoff, yoff };
     }
 }

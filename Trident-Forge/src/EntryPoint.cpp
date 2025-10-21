@@ -10,8 +10,6 @@ int main()
     try
     {
         auto a_ApplicationLayer = std::make_unique<ApplicationLayer>();
-        // TODO: Support stacking multiple layers or toggling editor/runtime selections here.
-
         Trident::Application l_App(std::move(a_ApplicationLayer));
 
         l_App.Run();

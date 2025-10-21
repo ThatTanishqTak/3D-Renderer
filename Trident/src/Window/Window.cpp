@@ -169,6 +169,7 @@ namespace Trident
             {
                 WindowData& l_Data = *static_cast<WindowData*>(glfwGetWindowUserPointer(window));
 
+                Trident::Input::Get().OnMouseMoved(static_cast<float>(xPos), static_cast<float>(yPos));
                 MouseMovedEvent l_Event(static_cast<float>(xPos), static_cast<float>(yPos));
 
                 if (l_Data.m_EventCallback)
@@ -181,6 +182,7 @@ namespace Trident
             {
                 WindowData& l_Data = *static_cast<WindowData*>(glfwGetWindowUserPointer(window));
 
+                Trident::Input::Get().OnMouseScrolled(static_cast<float>(xOffset), static_cast<float>(yOffset));
                 MouseScrolledEvent l_Event(static_cast<float>(xOffset), static_cast<float>(yOffset));
 
                 if (l_Data.m_EventCallback)

@@ -5,6 +5,8 @@
 
 #include <array>
 
+#include <glm/vec2.hpp>
+
 namespace Trident
 {
     /**
@@ -35,19 +37,26 @@ namespace Trident
         bool IsMouseButtonDown(MouseCode button) const;
         bool IsMouseButtonPressed(MouseCode button) const;
         bool IsMouseButtonReleased(MouseCode button) const;
+        bool WasMouseButtonPressed(MouseCode button) const;
+        bool WasMouseButtonReleased(MouseCode button) const;
+
+        glm::vec2 GetMousePosition() const;
+        glm::vec2 GetMouseDelta() const;
+        glm::vec2 GetScrollDelta() const;
+        bool HasMousePosition() const;
+
+        void BeginFrame();
+        void EndFrame();
+
+        void SetUICapture(bool wantMouse, bool wantKeyboard);
 
         // Event hooks -------------------------------------------------------
         void OnKeyPressed(KeyCode key, bool isRepeat);
         void OnKeyReleased(KeyCode key);
         void OnMouseButtonPressed(MouseCode button);
         void OnMouseButtonReleased(MouseCode button);
-
-        /**
-         * Reset one-shot edges (pressed, released, repeated) at the end of a
-         * frame once consumers have observed them. This ensures short-lived
-         * transitions remain accurate without losing the long-lived down state.
-         */
-        void EndFrame();
+        void OnMouseMoved(float x, float y);
+        void OnMouseScrolled(float xoff, float yoff);
 
     private:
         Input();
@@ -72,5 +81,15 @@ namespace Trident
         std::array<bool, s_MaxMouseButtons> m_PreviousMouseState{};
         std::array<bool, s_MaxMouseButtons> m_MousePressed{};
         std::array<bool, s_MaxMouseButtons> m_MouseReleased{};
+
+        glm::vec2 m_CurrentMousePosition{ 0.0f, 0.0f };
+        glm::vec2 m_PreviousMousePosition{ 0.0f, 0.0f };
+        glm::vec2 m_MouseDelta{ 0.0f, 0.0f };
+        glm::vec2 m_ScrollDelta{ 0.0f, 0.0f };
+
+        bool m_HasMousePosition = false;
+        bool m_FrameActive = false;
+        bool m_WantCaptureMouse = false;
+        bool m_WantCaptureKeyboard = false;
     };
 }
