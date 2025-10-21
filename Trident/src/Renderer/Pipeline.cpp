@@ -21,7 +21,9 @@ namespace Trident
         InitializeShaderStages();
         CreateRenderPass(swapchain);
         CreateDescriptorSetLayout();
+        CreateSkyboxDescriptorSetLayout();
         CreateGraphicsPipeline(swapchain);
+        CreateSkyboxPipeline(swapchain);
         CreateFramebuffers(swapchain);
     }
 
@@ -29,6 +31,7 @@ namespace Trident
     {
         CleanupFramebuffers();
         DestroyGraphicsPipeline();
+        DestroySkyboxPipeline();
 
         if (m_RenderPass != VK_NULL_HANDLE)
         {
@@ -44,7 +47,15 @@ namespace Trident
             m_DescriptorSetLayout = VK_NULL_HANDLE;
         }
 
+        if (m_SkyboxDescriptorSetLayout != VK_NULL_HANDLE)
+        {
+            vkDestroyDescriptorSetLayout(Startup::GetDevice(), m_SkyboxDescriptorSetLayout, nullptr);
+
+            m_SkyboxDescriptorSetLayout = VK_NULL_HANDLE;
+        }
+
         m_ShaderStages.clear();
+        m_SkyboxShaderStages.clear();
     }
 
     void Pipeline::RecreateFramebuffers(Swapchain& swapchain)
@@ -110,9 +121,25 @@ namespace Trident
         }
     }
 
+    void Pipeline::DestroySkyboxPipeline()
+    {
+        if (m_SkyboxPipeline != VK_NULL_HANDLE)
+        {
+            vkDestroyPipeline(Startup::GetDevice(), m_SkyboxPipeline, nullptr);
+            m_SkyboxPipeline = VK_NULL_HANDLE;
+        }
+
+        if (m_SkyboxPipelineLayout != VK_NULL_HANDLE)
+        {
+            vkDestroyPipelineLayout(Startup::GetDevice(), m_SkyboxPipelineLayout, nullptr);
+            m_SkyboxPipelineLayout = VK_NULL_HANDLE;
+        }
+    }
+
     void Pipeline::InitializeShaderStages()
     {
         m_ShaderStages.clear();
+        m_SkyboxShaderStages.clear();
 
         std::filesystem::path l_ShaderRoot = std::filesystem::path("Assets") / "Shaders";
 
@@ -128,27 +155,45 @@ namespace Trident
         l_Fragment.SpirvPath = l_Fragment.SourcePath + ".spv";
         m_ShaderStages.push_back(l_Fragment);
 
+        ShaderStage l_SkyboxVertex{};
+        l_SkyboxVertex.Stage = VK_SHADER_STAGE_VERTEX_BIT;
+        l_SkyboxVertex.SourcePath = (l_ShaderRoot / "Skybox.vert").generic_string();
+        l_SkyboxVertex.SpirvPath = l_SkyboxVertex.SourcePath + ".spv";
+        m_SkyboxShaderStages.push_back(l_SkyboxVertex);
+
+        ShaderStage l_SkyboxFragment{};
+        l_SkyboxFragment.Stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+        l_SkyboxFragment.SourcePath = (l_ShaderRoot / "Skybox.frag").generic_string();
+        l_SkyboxFragment.SpirvPath = l_SkyboxFragment.SourcePath + ".spv";
+        m_SkyboxShaderStages.push_back(l_SkyboxFragment);
+
         // Cache initial timestamps so the first frame hot-reload check does not trigger unnecessarily.
         std::error_code l_Error{};
-        for (auto& l_Shader : m_ShaderStages)
-        {
-            if (std::filesystem::exists(l_Shader.SourcePath, l_Error))
+        auto l_CacheTimestamps = [&l_Error](std::vector<ShaderStage>& a_Stages)
             {
-                l_Shader.SourceTimestamp = std::filesystem::last_write_time(l_Shader.SourcePath, l_Error);
-            }
-            if (std::filesystem::exists(l_Shader.SpirvPath, l_Error))
-            {
-                l_Shader.SpirvTimestamp = std::filesystem::last_write_time(l_Shader.SpirvPath, l_Error);
-            }
-        }
+                for (auto& l_Shader : a_Stages)
+                {
+                    if (std::filesystem::exists(l_Shader.SourcePath, l_Error))
+                    {
+                        l_Shader.SourceTimestamp = std::filesystem::last_write_time(l_Shader.SourcePath, l_Error);
+                    }
+                    if (std::filesystem::exists(l_Shader.SpirvPath, l_Error))
+                    {
+                        l_Shader.SpirvTimestamp = std::filesystem::last_write_time(l_Shader.SpirvPath, l_Error);
+                    }
+                }
+            };
+
+        l_CacheTimestamps(m_ShaderStages);
+        l_CacheTimestamps(m_SkyboxShaderStages);
     }
 
-    bool Pipeline::EnsureShaderBinaries()
+    bool Pipeline::EnsureShaderBinaries(std::vector<ShaderStage>& shaderStages)
     {
         bool l_AllCompiled = true;
         std::error_code l_Error{};
 
-        for (auto& l_Shader : m_ShaderStages)
+        for (auto& l_Shader : shaderStages)
         {
             if (!std::filesystem::exists(l_Shader.SourcePath, l_Error))
             {
@@ -431,13 +476,45 @@ namespace Trident
         TR_CORE_TRACE("Descriptor Set Layout Created");
     }
 
+    void Pipeline::CreateSkyboxDescriptorSetLayout()
+    {
+        TR_CORE_TRACE("Creating Skybox Descriptor Set Layout");
+
+        VkDescriptorSetLayoutBinding l_GlobalBinding{};
+        l_GlobalBinding.binding = 0;
+        l_GlobalBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        l_GlobalBinding.descriptorCount = 1;
+        l_GlobalBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+        l_GlobalBinding.pImmutableSamplers = nullptr;
+
+        VkDescriptorSetLayoutBinding l_CubemapBinding{};
+        l_CubemapBinding.binding = 1;
+        l_CubemapBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        l_CubemapBinding.descriptorCount = 1;
+        l_CubemapBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+        l_CubemapBinding.pImmutableSamplers = nullptr;
+
+        std::array<VkDescriptorSetLayoutBinding, 2> l_Bindings{ l_GlobalBinding, l_CubemapBinding };
+
+        VkDescriptorSetLayoutCreateInfo l_LayoutInfo{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
+        l_LayoutInfo.bindingCount = static_cast<uint32_t>(l_Bindings.size());
+        l_LayoutInfo.pBindings = l_Bindings.data();
+
+        if (vkCreateDescriptorSetLayout(Startup::GetDevice(), &l_LayoutInfo, nullptr, &m_SkyboxDescriptorSetLayout) != VK_SUCCESS)
+        {
+            TR_CORE_CRITICAL("Failed to create skybox descriptor set layout");
+        }
+
+        TR_CORE_TRACE("Skybox Descriptor Set Layout Created");
+    }
+
     void Pipeline::CreateGraphicsPipeline(Swapchain& swapchain)
     {
         TR_CORE_TRACE("Creating Graphics Pipeline");
 
         DestroyGraphicsPipeline();
 
-        if (!EnsureShaderBinaries())
+        if (!EnsureShaderBinaries(m_ShaderStages))
         {
             TR_CORE_WARN("Shader compilation reported issues; attempting to reuse existing SPIR-V artifacts");
         }
@@ -607,7 +684,191 @@ namespace Trident
         }
 
         TR_CORE_TRACE("Graphics Pipeline Created");
+}
+
+void Pipeline::CreateSkyboxPipeline(Swapchain& swapchain)
+{
+    TR_CORE_TRACE("Creating Skybox Pipeline");
+
+    DestroySkyboxPipeline();
+
+    if (!EnsureShaderBinaries(m_SkyboxShaderStages))
+    {
+        TR_CORE_WARN("Skybox shader compilation reported issues; attempting to reuse existing SPIR-V artifacts");
     }
+
+    std::vector<VkPipelineShaderStageCreateInfo> l_ShaderStages;
+    std::vector<VkShaderModule> l_ShaderModules;
+    l_ShaderStages.reserve(m_SkyboxShaderStages.size());
+    l_ShaderModules.reserve(m_SkyboxShaderStages.size());
+
+    for (auto& l_Shader : m_SkyboxShaderStages)
+    {
+        auto a_Code = Utilities::FileManagement::ReadBinaryFile(l_Shader.SpirvPath);
+        if (a_Code.empty())
+        {
+            TR_CORE_CRITICAL("Failed to read skybox shader binary: {}", l_Shader.SpirvPath);
+            continue;
+        }
+
+        VkShaderModule l_Module = CreateShaderModule(a_Code);
+        if (l_Module == VK_NULL_HANDLE)
+        {
+            continue;
+        }
+
+        VkPipelineShaderStageCreateInfo l_ShaderStage{ VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO };
+        l_ShaderStage.stage = l_Shader.Stage;
+        l_ShaderStage.module = l_Module;
+        l_ShaderStage.pName = "main";
+
+        l_ShaderStages.push_back(l_ShaderStage);
+        l_ShaderModules.push_back(l_Module);
+    }
+
+    if (l_ShaderStages.size() != m_SkyboxShaderStages.size())
+    {
+        for (VkShaderModule it_Module : l_ShaderModules)
+        {
+            vkDestroyShaderModule(Startup::GetDevice(), it_Module, nullptr);
+        }
+
+        TR_CORE_CRITICAL("Aborting skybox pipeline creation because a shader stage failed to load");
+
+        return;
+    }
+
+    VkVertexInputBindingDescription l_Binding{};
+    l_Binding.binding = 0;
+    l_Binding.stride = sizeof(glm::vec3);
+    l_Binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+    VkVertexInputAttributeDescription l_Attribute{};
+    l_Attribute.binding = 0;
+    l_Attribute.location = 0;
+    l_Attribute.format = VK_FORMAT_R32G32B32_SFLOAT;
+    l_Attribute.offset = 0;
+
+    VkPipelineVertexInputStateCreateInfo l_VertexInput{ VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO };
+    l_VertexInput.vertexBindingDescriptionCount = 1;
+    l_VertexInput.pVertexBindingDescriptions = &l_Binding;
+    l_VertexInput.vertexAttributeDescriptionCount = 1;
+    l_VertexInput.pVertexAttributeDescriptions = &l_Attribute;
+
+    VkPipelineInputAssemblyStateCreateInfo l_InputAssembly{ VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO };
+    l_InputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    l_InputAssembly.primitiveRestartEnable = VK_FALSE;
+
+    VkViewport l_Viewport{};
+    l_Viewport.x = 0.0f;
+    l_Viewport.y = 0.0f;
+    l_Viewport.width = static_cast<float>(swapchain.GetExtent().width);
+    l_Viewport.height = static_cast<float>(swapchain.GetExtent().height);
+    l_Viewport.minDepth = 0.0f;
+    l_Viewport.maxDepth = 1.0f;
+
+    VkRect2D l_Scissor{};
+    l_Scissor.offset = { 0,0 };
+    l_Scissor.extent = swapchain.GetExtent();
+
+    VkPipelineViewportStateCreateInfo l_ViewportState{ VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO };
+    l_ViewportState.viewportCount = 1;
+    l_ViewportState.pViewports = &l_Viewport;
+    l_ViewportState.scissorCount = 1;
+    l_ViewportState.pScissors = &l_Scissor;
+
+    VkPipelineRasterizationStateCreateInfo l_Rasterizer{ VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO };
+    l_Rasterizer.depthClampEnable = VK_FALSE;
+    l_Rasterizer.rasterizerDiscardEnable = VK_FALSE;
+    l_Rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+    l_Rasterizer.lineWidth = 1.0f;
+    l_Rasterizer.cullMode = VK_CULL_MODE_FRONT_BIT;
+    l_Rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    l_Rasterizer.depthBiasEnable = VK_FALSE;
+
+    VkPipelineMultisampleStateCreateInfo l_Multisampling{ VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO };
+    l_Multisampling.sampleShadingEnable = VK_FALSE;
+    l_Multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+    VkPipelineColorBlendAttachmentState l_ColorBlendAttachment{};
+    l_ColorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+    l_ColorBlendAttachment.blendEnable = VK_FALSE;
+
+    VkPipelineColorBlendStateCreateInfo l_ColorBlending{ VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO };
+    l_ColorBlending.logicOpEnable = VK_FALSE;
+    l_ColorBlending.attachmentCount = 1;
+    l_ColorBlending.pAttachments = &l_ColorBlendAttachment;
+
+    VkPipelineDepthStencilStateCreateInfo l_DepthStencil{ VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO };
+    l_DepthStencil.depthTestEnable = VK_TRUE;
+    l_DepthStencil.depthWriteEnable = VK_FALSE;
+    l_DepthStencil.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+    l_DepthStencil.depthBoundsTestEnable = VK_FALSE;
+    l_DepthStencil.stencilTestEnable = VK_FALSE;
+
+    VkDynamicState l_DynamicStates[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+    VkPipelineDynamicStateCreateInfo l_DynamicState{ VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO };
+    l_DynamicState.dynamicStateCount = 2;
+    l_DynamicState.pDynamicStates = l_DynamicStates;
+
+    VkPushConstantRange l_PushConstant{};
+    l_PushConstant.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    l_PushConstant.offset = 0;
+    l_PushConstant.size = sizeof(glm::mat4);
+
+    VkPipelineLayoutCreateInfo l_PipelineLayoutInfo{ VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO };
+    l_PipelineLayoutInfo.setLayoutCount = 1;
+    l_PipelineLayoutInfo.pSetLayouts = &m_SkyboxDescriptorSetLayout;
+    l_PipelineLayoutInfo.pushConstantRangeCount = 1;
+    l_PipelineLayoutInfo.pPushConstantRanges = &l_PushConstant;
+
+    if (vkCreatePipelineLayout(Startup::GetDevice(), &l_PipelineLayoutInfo, nullptr, &m_SkyboxPipelineLayout) != VK_SUCCESS)
+    {
+        TR_CORE_CRITICAL("Failed to create skybox pipeline layout");
+    }
+
+    VkGraphicsPipelineCreateInfo l_PipelineInfo{ VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO };
+    l_PipelineInfo.stageCount = static_cast<uint32_t>(l_ShaderStages.size());
+    l_PipelineInfo.pStages = l_ShaderStages.data();
+    l_PipelineInfo.pVertexInputState = &l_VertexInput;
+    l_PipelineInfo.pInputAssemblyState = &l_InputAssembly;
+    l_PipelineInfo.pViewportState = &l_ViewportState;
+    l_PipelineInfo.pRasterizationState = &l_Rasterizer;
+    l_PipelineInfo.pMultisampleState = &l_Multisampling;
+    l_PipelineInfo.pDepthStencilState = &l_DepthStencil;
+    l_PipelineInfo.pColorBlendState = &l_ColorBlending;
+    l_PipelineInfo.pDynamicState = &l_DynamicState;
+    l_PipelineInfo.layout = m_SkyboxPipelineLayout;
+    l_PipelineInfo.renderPass = m_RenderPass;
+    l_PipelineInfo.subpass = 0;
+    l_PipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
+    l_PipelineInfo.basePipelineIndex = -1;
+
+    if (vkCreateGraphicsPipelines(Startup::GetDevice(), VK_NULL_HANDLE, 1, &l_PipelineInfo, nullptr, &m_SkyboxPipeline) != VK_SUCCESS)
+    {
+        TR_CORE_CRITICAL("Failed to create skybox graphics pipeline");
+    }
+
+    for (VkShaderModule it_Module : l_ShaderModules)
+    {
+        vkDestroyShaderModule(Startup::GetDevice(), it_Module, nullptr);
+    }
+
+    std::error_code l_Error{};
+    for (auto& l_Shader : m_SkyboxShaderStages)
+    {
+        if (std::filesystem::exists(l_Shader.SourcePath, l_Error))
+        {
+            l_Shader.SourceTimestamp = std::filesystem::last_write_time(l_Shader.SourcePath, l_Error);
+        }
+        if (std::filesystem::exists(l_Shader.SpirvPath, l_Error))
+        {
+            l_Shader.SpirvTimestamp = std::filesystem::last_write_time(l_Shader.SpirvPath, l_Error);
+        }
+    }
+
+    TR_CORE_TRACE("Skybox Pipeline Created");
+}
 
     void Pipeline::CreateFramebuffers(Swapchain& swapchain)
     {
@@ -698,23 +959,32 @@ namespace Trident
     bool Pipeline::ReloadIfNeeded(Swapchain& swapchain, bool waitForDevice)
     {
         std::error_code l_Error{};
-        bool l_ShouldReload = false;
+        bool l_ShouldReloadDefault = false;
+        bool l_ShouldReloadSkybox = false;
 
-        for (auto& l_Shader : m_ShaderStages)
-        {
-            if (!std::filesystem::exists(l_Shader.SourcePath, l_Error))
+        auto l_CheckStages = [&l_Error](std::vector<ShaderStage>& a_Stages)
             {
-                continue;
-            }
+                bool l_ShouldReload = false;
+                for (auto& l_Shader : a_Stages)
+                {
+                    if (!std::filesystem::exists(l_Shader.SourcePath, l_Error))
+                    {
+                        continue;
+                    }
 
-            auto l_WriteTime = std::filesystem::last_write_time(l_Shader.SourcePath, l_Error);
-            if (l_Shader.SourceTimestamp != l_WriteTime)
-            {
-                l_ShouldReload = true;
-            }
-        }
+                    auto l_WriteTime = std::filesystem::last_write_time(l_Shader.SourcePath, l_Error);
+                    if (l_Shader.SourceTimestamp != l_WriteTime)
+                    {
+                        l_ShouldReload = true;
+                    }
+                }
+                return l_ShouldReload;
+            };
 
-        if (!l_ShouldReload)
+        l_ShouldReloadDefault = l_CheckStages(m_ShaderStages);
+        l_ShouldReloadSkybox = l_CheckStages(m_SkyboxShaderStages);
+
+        if (!l_ShouldReloadDefault && !l_ShouldReloadSkybox)
         {
             return false;
         }
@@ -724,12 +994,26 @@ namespace Trident
             vkDeviceWaitIdle(Startup::GetDevice());
         }
 
-        CreateGraphicsPipeline(swapchain);
-
-        if (m_GraphicsPipeline == VK_NULL_HANDLE)
+        if (l_ShouldReloadDefault)
         {
-            TR_CORE_ERROR("Graphics pipeline handle is null after reload attempt");
-            return false;
+            CreateGraphicsPipeline(swapchain);
+
+            if (m_GraphicsPipeline == VK_NULL_HANDLE)
+            {
+                TR_CORE_ERROR("Graphics pipeline handle is null after reload attempt");
+                return false;
+            }
+        }
+
+        if (l_ShouldReloadSkybox)
+        {
+            CreateSkyboxPipeline(swapchain);
+
+            if (m_SkyboxPipeline == VK_NULL_HANDLE)
+            {
+                TR_CORE_ERROR("Skybox pipeline handle is null after reload attempt");
+                return false;
+            }
         }
 
         return true;

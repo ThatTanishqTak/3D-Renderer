@@ -134,6 +134,7 @@ namespace Trident
         }
 
         m_DescriptorSets.clear();
+        DestroySkyboxDescriptorSets();
         m_Pipeline.Cleanup();
         m_Swapchain.Cleanup();
         m_Skybox.Cleanup(m_Buffers);
@@ -171,6 +172,7 @@ namespace Trident
             m_TextureImageMemory = VK_NULL_HANDLE;
         }
 
+        DestroySkyboxCubemap();
 
         for (auto& it_Texture : m_ImGuiTexturePool)
         {
@@ -1196,6 +1198,8 @@ namespace Trident
                 m_DescriptorSets.clear();
             }
 
+            DestroySkyboxDescriptorSets();
+
             if (m_DescriptorPool != VK_NULL_HANDLE)
             {
                 // Tear down the descriptor pool so that we can rebuild it with the new descriptor counts.
@@ -1250,21 +1254,20 @@ namespace Trident
     {
         TR_CORE_TRACE("Creating Descriptor Pool");
 
-        VkDescriptorPoolSize l_PoolSizes[3]{};
+        uint32_t l_ImageCount = m_Swapchain.GetImageCount();
+        VkDescriptorPoolSize l_PoolSizes[2]{};
         l_PoolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        l_PoolSizes[0].descriptorCount = m_Swapchain.GetImageCount();
-        l_PoolSizes[1].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        l_PoolSizes[1].descriptorCount = m_Swapchain.GetImageCount();
-        l_PoolSizes[2].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        l_PoolSizes[2].descriptorCount = m_Swapchain.GetImageCount();
+        l_PoolSizes[0].descriptorCount = l_ImageCount * 3; // Global UBO, material UBO, and skybox global state per frame.
+        l_PoolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        l_PoolSizes[1].descriptorCount = l_ImageCount * 2; // Material textures plus the skybox cubemap sampler.
 
         VkDescriptorPoolCreateInfo l_PoolInfo{};
         l_PoolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
         // We free and recreate descriptor sets whenever the swapchain is resized, so enable free-descriptor support.
         l_PoolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
-        l_PoolInfo.poolSizeCount = 3;
+        l_PoolInfo.poolSizeCount = 2;
         l_PoolInfo.pPoolSizes = l_PoolSizes;
-        l_PoolInfo.maxSets = m_Swapchain.GetImageCount();
+        l_PoolInfo.maxSets = l_ImageCount * 2; // Main render pipeline + dedicated skybox descriptors.
 
         if (vkCreateDescriptorPool(Startup::GetDevice(), &l_PoolInfo, nullptr, &m_DescriptorPool) != VK_SUCCESS)
         {
@@ -1416,9 +1419,189 @@ namespace Trident
     {
         TR_CORE_TRACE("Creating Default Skybox");
 
+        // Build a placeholder cubemap so the dedicated skybox shaders have a valid texture binding.
+        CreateSkyboxCubemap();
+
         m_Skybox.Init(m_Buffers, m_Commands.GetOneTimePool());
 
         TR_CORE_TRACE("Default Skybox Created");
+    }
+
+    void Renderer::CreateSkyboxCubemap()
+    {
+        DestroySkyboxCubemap();
+
+        TR_CORE_TRACE("Creating fallback skybox cubemap");
+
+        std::array<uint32_t, 6> l_FacePixels{};
+        l_FacePixels.fill(0xffffffff);
+        VkDeviceSize l_ImageSize = sizeof(uint32_t) * l_FacePixels.size();
+
+        VkBuffer l_StagingBuffer = VK_NULL_HANDLE;
+        VkDeviceMemory l_StagingMemory = VK_NULL_HANDLE;
+        m_Buffers.CreateBuffer(l_ImageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, l_StagingBuffer, l_StagingMemory);
+
+        void* l_Data = nullptr;
+        vkMapMemory(Startup::GetDevice(), l_StagingMemory, 0, l_ImageSize, 0, &l_Data);
+        std::memcpy(l_Data, l_FacePixels.data(), static_cast<size_t>(l_ImageSize));
+        vkUnmapMemory(Startup::GetDevice(), l_StagingMemory);
+
+        VkImageCreateInfo l_ImageInfo{ VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO };
+        l_ImageInfo.flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
+        l_ImageInfo.imageType = VK_IMAGE_TYPE_2D;
+        l_ImageInfo.extent.width = 1;
+        l_ImageInfo.extent.height = 1;
+        l_ImageInfo.extent.depth = 1;
+        l_ImageInfo.mipLevels = 1;
+        l_ImageInfo.arrayLayers = 6;
+        l_ImageInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
+        l_ImageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+        l_ImageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        l_ImageInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+        l_ImageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        l_ImageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+
+        if (vkCreateImage(Startup::GetDevice(), &l_ImageInfo, nullptr, &m_SkyboxImage) != VK_SUCCESS)
+        {
+            TR_CORE_CRITICAL("Failed to create fallback skybox cubemap image");
+        }
+
+        VkMemoryRequirements l_MemoryRequirements{};
+        vkGetImageMemoryRequirements(Startup::GetDevice(), m_SkyboxImage, &l_MemoryRequirements);
+
+        VkMemoryAllocateInfo l_AllocInfo{ VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO };
+        l_AllocInfo.allocationSize = l_MemoryRequirements.size;
+        l_AllocInfo.memoryTypeIndex = m_Buffers.FindMemoryType(l_MemoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+        if (vkAllocateMemory(Startup::GetDevice(), &l_AllocInfo, nullptr, &m_SkyboxImageMemory) != VK_SUCCESS)
+        {
+            TR_CORE_CRITICAL("Failed to allocate fallback skybox cubemap memory");
+        }
+
+        vkBindImageMemory(Startup::GetDevice(), m_SkyboxImage, m_SkyboxImageMemory, 0);
+
+        VkCommandBuffer l_CommandBuffer = m_Commands.BeginSingleTimeCommands();
+
+        VkImageMemoryBarrier l_BarrierToTransfer{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+        l_BarrierToTransfer.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        l_BarrierToTransfer.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        l_BarrierToTransfer.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        l_BarrierToTransfer.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        l_BarrierToTransfer.image = m_SkyboxImage;
+        l_BarrierToTransfer.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        l_BarrierToTransfer.subresourceRange.baseMipLevel = 0;
+        l_BarrierToTransfer.subresourceRange.levelCount = 1;
+        l_BarrierToTransfer.subresourceRange.baseArrayLayer = 0;
+        l_BarrierToTransfer.subresourceRange.layerCount = 6;
+        l_BarrierToTransfer.srcAccessMask = 0;
+        l_BarrierToTransfer.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+
+        vkCmdPipelineBarrier(l_CommandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &l_BarrierToTransfer);
+
+        std::array<VkBufferImageCopy, 6> l_CopyRegions{};
+        for (uint32_t i = 0; i < l_CopyRegions.size(); ++i)
+        {
+            VkBufferImageCopy& l_Region = l_CopyRegions[i];
+            l_Region.bufferOffset = sizeof(uint32_t) * i;
+            l_Region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            l_Region.imageSubresource.mipLevel = 0;
+            l_Region.imageSubresource.baseArrayLayer = i;
+            l_Region.imageSubresource.layerCount = 1;
+            l_Region.imageOffset = { 0, 0, 0 };
+            l_Region.imageExtent = { 1, 1, 1 };
+        }
+
+        vkCmdCopyBufferToImage(l_CommandBuffer, l_StagingBuffer, m_SkyboxImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            static_cast<uint32_t>(l_CopyRegions.size()), l_CopyRegions.data());
+
+        VkImageMemoryBarrier l_BarrierToShader{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+        l_BarrierToShader.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        l_BarrierToShader.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        l_BarrierToShader.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        l_BarrierToShader.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        l_BarrierToShader.image = m_SkyboxImage;
+        l_BarrierToShader.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        l_BarrierToShader.subresourceRange.baseMipLevel = 0;
+        l_BarrierToShader.subresourceRange.levelCount = 1;
+        l_BarrierToShader.subresourceRange.baseArrayLayer = 0;
+        l_BarrierToShader.subresourceRange.layerCount = 6;
+        l_BarrierToShader.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        l_BarrierToShader.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+        vkCmdPipelineBarrier(l_CommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &l_BarrierToShader);
+
+        m_Commands.EndSingleTimeCommands(l_CommandBuffer);
+
+        m_Buffers.DestroyBuffer(l_StagingBuffer, l_StagingMemory);
+
+        VkImageViewCreateInfo l_ViewInfo{ VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
+        l_ViewInfo.image = m_SkyboxImage;
+        l_ViewInfo.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
+        l_ViewInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
+        l_ViewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        l_ViewInfo.subresourceRange.baseMipLevel = 0;
+        l_ViewInfo.subresourceRange.levelCount = 1;
+        l_ViewInfo.subresourceRange.baseArrayLayer = 0;
+        l_ViewInfo.subresourceRange.layerCount = 6;
+
+        if (vkCreateImageView(Startup::GetDevice(), &l_ViewInfo, nullptr, &m_SkyboxImageView) != VK_SUCCESS)
+        {
+            TR_CORE_CRITICAL("Failed to create fallback skybox cubemap view");
+        }
+
+        VkSamplerCreateInfo l_SamplerInfo{ VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO };
+        l_SamplerInfo.magFilter = VK_FILTER_LINEAR;
+        l_SamplerInfo.minFilter = VK_FILTER_LINEAR;
+        l_SamplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        l_SamplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        l_SamplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        l_SamplerInfo.anisotropyEnable = VK_FALSE;
+        l_SamplerInfo.maxAnisotropy = 1.0f;
+        l_SamplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_WHITE;
+        l_SamplerInfo.unnormalizedCoordinates = VK_FALSE;
+        l_SamplerInfo.compareEnable = VK_FALSE;
+        l_SamplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+        l_SamplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+        l_SamplerInfo.mipLodBias = 0.0f;
+        l_SamplerInfo.minLod = 0.0f;
+        l_SamplerInfo.maxLod = 0.0f;
+
+        if (vkCreateSampler(Startup::GetDevice(), &l_SamplerInfo, nullptr, &m_SkyboxSampler) != VK_SUCCESS)
+        {
+            TR_CORE_CRITICAL("Failed to create fallback skybox sampler");
+        }
+
+        // TODO: Replace the solid-colour cubemap with HDR environment maps once the IBL pipeline lands.
+    }
+
+    void Renderer::DestroySkyboxCubemap()
+    {
+        VkDevice l_Device = Startup::GetDevice();
+
+        if (m_SkyboxSampler != VK_NULL_HANDLE)
+        {
+            vkDestroySampler(l_Device, m_SkyboxSampler, nullptr);
+            m_SkyboxSampler = VK_NULL_HANDLE;
+        }
+
+        if (m_SkyboxImageView != VK_NULL_HANDLE)
+        {
+            vkDestroyImageView(l_Device, m_SkyboxImageView, nullptr);
+            m_SkyboxImageView = VK_NULL_HANDLE;
+        }
+
+        if (m_SkyboxImage != VK_NULL_HANDLE)
+        {
+            vkDestroyImage(l_Device, m_SkyboxImage, nullptr);
+            m_SkyboxImage = VK_NULL_HANDLE;
+        }
+
+        if (m_SkyboxImageMemory != VK_NULL_HANDLE)
+        {
+            vkFreeMemory(l_Device, m_SkyboxImageMemory, nullptr);
+            m_SkyboxImageMemory = VK_NULL_HANDLE;
+        }
     }
 
     void Renderer::CreateDescriptorSets()
@@ -1486,7 +1669,78 @@ namespace Trident
             vkUpdateDescriptorSets(Startup::GetDevice(), 3, l_Writes, 0, nullptr);
         }
 
-        TR_CORE_TRACE("Descriptor Sets Allocated ({})", l_ImageCount);
+        CreateSkyboxDescriptorSets();
+
+        TR_CORE_TRACE("Descriptor Sets Allocated (Main = {}, Skybox = {})", l_ImageCount, m_SkyboxDescriptorSets.size());
+    }
+
+    void Renderer::CreateSkyboxDescriptorSets()
+    {
+        DestroySkyboxDescriptorSets();
+
+        size_t l_ImageCount = m_Swapchain.GetImageCount();
+        if (l_ImageCount == 0 || m_SkyboxImageView == VK_NULL_HANDLE || m_SkyboxSampler == VK_NULL_HANDLE)
+        {
+            TR_CORE_WARN("Skipped skybox descriptor allocation because required resources are missing");
+            return;
+        }
+
+        std::vector<VkDescriptorSetLayout> l_Layouts(l_ImageCount, m_Pipeline.GetSkyboxDescriptorSetLayout());
+
+        VkDescriptorSetAllocateInfo l_AllocateInfo{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO };
+        l_AllocateInfo.descriptorPool = m_DescriptorPool;
+        l_AllocateInfo.descriptorSetCount = static_cast<uint32_t>(l_ImageCount);
+        l_AllocateInfo.pSetLayouts = l_Layouts.data();
+
+        m_SkyboxDescriptorSets.resize(l_ImageCount);
+        if (vkAllocateDescriptorSets(Startup::GetDevice(), &l_AllocateInfo, m_SkyboxDescriptorSets.data()) != VK_SUCCESS)
+        {
+            TR_CORE_CRITICAL("Failed to allocate skybox descriptor sets");
+            m_SkyboxDescriptorSets.clear();
+            return;
+        }
+
+        for (size_t i = 0; i < l_ImageCount; ++i)
+        {
+            VkDescriptorBufferInfo l_GlobalBufferInfo{};
+            l_GlobalBufferInfo.buffer = m_GlobalUniformBuffers[i];
+            l_GlobalBufferInfo.offset = 0;
+            l_GlobalBufferInfo.range = sizeof(GlobalUniformBuffer);
+
+            VkDescriptorImageInfo l_CubemapInfo{};
+            l_CubemapInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            l_CubemapInfo.imageView = m_SkyboxImageView;
+            l_CubemapInfo.sampler = m_SkyboxSampler;
+
+            VkWriteDescriptorSet l_GlobalWrite{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
+            l_GlobalWrite.dstSet = m_SkyboxDescriptorSets[i];
+            l_GlobalWrite.dstBinding = 0;
+            l_GlobalWrite.dstArrayElement = 0;
+            l_GlobalWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            l_GlobalWrite.descriptorCount = 1;
+            l_GlobalWrite.pBufferInfo = &l_GlobalBufferInfo;
+
+            VkWriteDescriptorSet l_CubemapWrite{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
+            l_CubemapWrite.dstSet = m_SkyboxDescriptorSets[i];
+            l_CubemapWrite.dstBinding = 1;
+            l_CubemapWrite.dstArrayElement = 0;
+            l_CubemapWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            l_CubemapWrite.descriptorCount = 1;
+            l_CubemapWrite.pImageInfo = &l_CubemapInfo;
+
+            VkWriteDescriptorSet l_Writes[] = { l_GlobalWrite, l_CubemapWrite };
+            vkUpdateDescriptorSets(Startup::GetDevice(), 2, l_Writes, 0, nullptr);
+        }
+    }
+
+    void Renderer::DestroySkyboxDescriptorSets()
+    {
+        if (!m_SkyboxDescriptorSets.empty() && m_DescriptorPool != VK_NULL_HANDLE)
+        {
+            vkFreeDescriptorSets(Startup::GetDevice(), m_DescriptorPool, static_cast<uint32_t>(m_SkyboxDescriptorSets.size()), m_SkyboxDescriptorSets.data());
+        }
+
+        m_SkyboxDescriptorSets.clear();
     }
 
     void Renderer::DestroyOffscreenResources(uint32_t viewportId)
@@ -2051,9 +2305,17 @@ namespace Trident
             l_OffscreenScissor.offset = { 0, 0 };
             l_OffscreenScissor.extent = l_ActiveTarget->m_Extent;
             vkCmdSetScissor(l_CommandBuffer, 0, 1, &l_OffscreenScissor);
+            const bool l_HasSkyboxDescriptors = imageIndex < m_SkyboxDescriptorSets.size() && m_SkyboxDescriptorSets[imageIndex] != VK_NULL_HANDLE;
+            if (l_HasSkyboxDescriptors && m_Pipeline.GetSkyboxPipeline() != VK_NULL_HANDLE)
+            {
+                // Draw the cubemap with its dedicated pipeline so future tone-mapping additions remain isolated from mesh draws.
+                vkCmdBindPipeline(l_CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline.GetSkyboxPipeline());
+                m_Skybox.Record(l_CommandBuffer, m_Pipeline.GetSkyboxPipelineLayout(), m_SkyboxDescriptorSets.data(), imageIndex);
+            }
+
+            // Switch back to the main forward pipeline for scene geometry.
 
             vkCmdBindPipeline(l_CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline.GetPipeline());
-            m_Skybox.Record(l_CommandBuffer, m_Pipeline.GetPipelineLayout(), m_DescriptorSets.data(), imageIndex);
 
             const bool l_HasDescriptorSet = imageIndex < m_DescriptorSets.size();
             if (l_HasDescriptorSet)
@@ -2344,8 +2606,14 @@ namespace Trident
         if (!l_ViewportActive)
         {
             // Legacy rendering path: draw directly to the back buffer when the editor viewport is hidden.
+            const bool l_HasSkyboxDescriptors = imageIndex < m_SkyboxDescriptorSets.size() && m_SkyboxDescriptorSets[imageIndex] != VK_NULL_HANDLE;
+            if (l_HasSkyboxDescriptors && m_Pipeline.GetSkyboxPipeline() != VK_NULL_HANDLE)
+            {
+                vkCmdBindPipeline(l_CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline.GetSkyboxPipeline());
+                m_Skybox.Record(l_CommandBuffer, m_Pipeline.GetSkyboxPipelineLayout(), m_SkyboxDescriptorSets.data(), imageIndex);
+            }
+
             vkCmdBindPipeline(l_CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline.GetPipeline());
-            m_Skybox.Record(l_CommandBuffer, m_Pipeline.GetPipelineLayout(), m_DescriptorSets.data(), imageIndex);
 
             const bool l_HasDescriptorSet = imageIndex < m_DescriptorSets.size();
             if (l_HasDescriptorSet)

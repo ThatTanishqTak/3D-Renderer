@@ -3,6 +3,7 @@
 #include "Application/Startup.h"
 #include "Core/Utilities.h"
 
+#include <cstring>
 #include <algorithm>
 #include <stdexcept>
 
@@ -28,26 +29,31 @@ namespace Trident
 
     void Buffers::CreateVertexBuffer(const std::vector<Vertex>& vertices, CommandBufferPool& pool, VkBuffer& vertexBuffer, VkDeviceMemory& vertexBufferMemory)
     {
+        CreateVertexBuffer(vertices.data(), vertices.size(), sizeof(Vertex), pool, vertexBuffer, vertexBufferMemory);
+    }
+
+    void Buffers::CreateVertexBuffer(const void* vertexData, size_t vertexCount, size_t vertexStride, CommandBufferPool& pool, VkBuffer& vertexBuffer, VkDeviceMemory& vertexBufferMemory)
+    {
         TR_CORE_TRACE("Creating Vertex Buffer");
 
-        if (vertices.empty())
+        if (vertexData == nullptr || vertexCount == 0 || vertexStride == 0)
         {
-            TR_CORE_WARN("No vertices provided - skipping vertex buffer creation");
+            TR_CORE_WARN("Vertex buffer creation skipped because the input stream was empty or invalid");
             vertexBuffer = VK_NULL_HANDLE;
             vertexBufferMemory = VK_NULL_HANDLE;
 
             return;
         }
 
-        VkDeviceSize l_BufferSize = sizeof(Vertex) * vertices.size();
+        VkDeviceSize l_BufferSize = static_cast<VkDeviceSize>(vertexCount) * static_cast<VkDeviceSize>(vertexStride);
 
-        VkBuffer l_StagingBuffer;
-        VkDeviceMemory l_StagingBufferMemory;
+        VkBuffer l_StagingBuffer = VK_NULL_HANDLE;
+        VkDeviceMemory l_StagingBufferMemory = VK_NULL_HANDLE;
         CreateBuffer(l_BufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, l_StagingBuffer, l_StagingBufferMemory);
 
-        void* l_Data;
+        void* l_Data = nullptr;
         vkMapMemory(Startup::GetDevice(), l_StagingBufferMemory, 0, l_BufferSize, 0, &l_Data);
-        memcpy(l_Data, vertices.data(), static_cast<size_t>(l_BufferSize));
+        std::memcpy(l_Data, vertexData, static_cast<size_t>(l_BufferSize));
         vkUnmapMemory(Startup::GetDevice(), l_StagingBufferMemory);
 
         CreateBuffer(l_BufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer, vertexBufferMemory);
