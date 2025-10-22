@@ -36,6 +36,10 @@ target_include_directories(stb INTERFACE
 add_library(tinyexr INTERFACE)
 target_include_directories(tinyexr INTERFACE
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/vendor/tinyexr>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/vendor/tinyexr/deps/miniz>
+)
+target_sources(tinyexr INTERFACE
+  ${CMAKE_CURRENT_SOURCE_DIR}/vendor/tinyexr/deps/miniz/miniz.c
 )
 
 include(FetchContent)
