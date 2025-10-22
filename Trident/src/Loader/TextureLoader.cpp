@@ -4,6 +4,7 @@
 
 #include <stb_image.h>
 #define TINYEXR_USE_OPENMP 0
+#define TINYEXR_IMPLEMENTATION
 #include <tinyexr.h>
 
 #include <algorithm>
