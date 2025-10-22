@@ -20,3 +20,6 @@
 [submodule "Trident/vendor/ImGuizmo"]
 	path = Trident/vendor/ImGuizmo
 	url = https://github.com/ThatTanishqTak/ImGuizmo.git
+[submodule "Trident/vendor/tinyexr"]
+	path = Trident/vendor/tinyexr
+	url = https://github.com/syoyo/tinyexr.git

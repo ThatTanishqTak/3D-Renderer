@@ -56,6 +56,7 @@ namespace Trident
             static CubemapTextureData LoadFromKtx(const std::filesystem::path& filePath);
 
         private:
+            static CubemapTextureData LoadFromExrFaces(const std::array<std::filesystem::path, 6>& normalizedFaces);
             static CubemapTextureData LoadFromFileList(const std::array<std::filesystem::path, 6>& normalizedFaces);
         };
     }

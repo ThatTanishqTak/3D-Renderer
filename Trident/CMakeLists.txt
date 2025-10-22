@@ -33,6 +33,11 @@ target_include_directories(stb INTERFACE
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/vendor/stb>
 )
 
+add_library(tinyexr INTERFACE)
+target_include_directories(tinyexr INTERFACE
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/vendor/tinyexr>
+)
+
 include(FetchContent)
 
 set(ASSIMP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
@@ -84,6 +89,7 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
   spdlog
   imguizmo
   stb
+  tinyexr
   assimp::assimp
 )
 
