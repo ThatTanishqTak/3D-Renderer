@@ -1,5 +1,5 @@
 ﻿cmake_minimum_required(VERSION 3.20)
-project(Trident-Forge LANGUAGES CXX)
+project(Trident-Forge LANGUAGES C CXX)
 
 # ---- Sources & target first (so it exists for dependencies) ----
 file(GLOB_RECURSE FORGE_SOURCES CONFIGURE_DEPENDS

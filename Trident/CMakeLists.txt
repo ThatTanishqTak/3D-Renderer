@@ -1,5 +1,5 @@
 ﻿cmake_minimum_required(VERSION 3.20)
-project(Trident LANGUAGES CXX)
+project(Trident LANGUAGES C CXX)
 
 add_definitions(-DGLFW_INCLUDE_VULKAN)
 
