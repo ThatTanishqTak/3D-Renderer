@@ -1259,7 +1259,7 @@ namespace Trident
         l_PoolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         l_PoolSizes[0].descriptorCount = l_ImageCount * 3; // Global UBO, material UBO, and skybox global state per frame.
         l_PoolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        l_PoolSizes[1].descriptorCount = l_ImageCount * 2; // Material textures plus the skybox cubemap sampler.
+        l_PoolSizes[1].descriptorCount = l_ImageCount * 3; // Material textures, skybox in the main set, and the dedicated skybox set.
 
         VkDescriptorPoolCreateInfo l_PoolInfo{};
         l_PoolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -1431,56 +1431,95 @@ namespace Trident
     {
         DestroySkyboxCubemap();
 
-        TR_CORE_TRACE("Creating fallback skybox cubemap");
+        TR_CORE_TRACE("Creating skybox cubemap");
 
-        std::array<uint32_t, 6> l_FacePixels{};
-        l_FacePixels.fill(0xffffffff);
-        VkDeviceSize l_ImageSize = sizeof(uint32_t) * l_FacePixels.size();
+        Loader::CubemapTextureData l_CubemapData{};
 
+        // Try loading a pre-authored cubemap from disk. This keeps the renderer flexible and allows
+        // artists to swap between KTX packages and loose face images without touching the code.
+        const std::filesystem::path l_DefaultSkyboxRoot = std::filesystem::path("Trident-Forge") / "Assets" / "Skyboxes";
+        const std::filesystem::path l_DefaultKtx = l_DefaultSkyboxRoot / "DefaultSkybox.ktx";
+        std::error_code l_FileError{};
+        if (std::filesystem::exists(l_DefaultKtx, l_FileError))
+        {
+            l_CubemapData = Loader::SkyboxTextureLoader::LoadFromKtx(l_DefaultKtx);
+        }
+        else
+        {
+            const std::filesystem::path l_DefaultFaces = l_DefaultSkyboxRoot / "Default";
+            if (std::filesystem::exists(l_DefaultFaces, l_FileError))
+            {
+                l_CubemapData = Loader::SkyboxTextureLoader::LoadFromDirectory(l_DefaultFaces);
+            }
+        }
+
+        if (!l_CubemapData.IsValid())
+        {
+            TR_CORE_WARN("Falling back to a solid colour cubemap because no skybox textures were found on disk");
+            l_CubemapData = Loader::CubemapTextureData::CreateSolidColor(0xffffffffu);
+        }
+
+        if (l_CubemapData.m_Format == VK_FORMAT_UNDEFINED)
+        {
+            l_CubemapData.m_Format = VK_FORMAT_R8G8B8A8_SRGB;
+        }
+
+        const VkDeviceSize l_StagingSize = static_cast<VkDeviceSize>(l_CubemapData.m_PixelData.size());
+        if (l_StagingSize == 0)
+        {
+            TR_CORE_CRITICAL("Skybox cubemap contains no pixel data");
+            return;
+        }
+
+        // Stage 1: allocate a CPU-visible staging buffer so the pixel data can be uploaded efficiently.
         VkBuffer l_StagingBuffer = VK_NULL_HANDLE;
         VkDeviceMemory l_StagingMemory = VK_NULL_HANDLE;
-        m_Buffers.CreateBuffer(l_ImageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        m_Buffers.CreateBuffer(l_StagingSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, l_StagingBuffer, l_StagingMemory);
 
         void* l_Data = nullptr;
-        vkMapMemory(Startup::GetDevice(), l_StagingMemory, 0, l_ImageSize, 0, &l_Data);
-        std::memcpy(l_Data, l_FacePixels.data(), static_cast<size_t>(l_ImageSize));
+        vkMapMemory(Startup::GetDevice(), l_StagingMemory, 0, l_StagingSize, 0, &l_Data);
+        std::memcpy(l_Data, l_CubemapData.m_PixelData.data(), static_cast<size_t>(l_StagingSize));
         vkUnmapMemory(Startup::GetDevice(), l_StagingMemory);
 
+        // Stage 2: create the GPU image backing the cubemap. Keeping the sample count and usage flags
+        // conservative for now leaves room for future HDR/IBL upgrades without reallocating everything.
         VkImageCreateInfo l_ImageInfo{ VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO };
         l_ImageInfo.flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
         l_ImageInfo.imageType = VK_IMAGE_TYPE_2D;
-        l_ImageInfo.extent.width = 1;
-        l_ImageInfo.extent.height = 1;
+        l_ImageInfo.extent.width = l_CubemapData.m_Width;
+        l_ImageInfo.extent.height = l_CubemapData.m_Height;
         l_ImageInfo.extent.depth = 1;
-        l_ImageInfo.mipLevels = 1;
+        l_ImageInfo.mipLevels = l_CubemapData.m_MipCount;
         l_ImageInfo.arrayLayers = 6;
-        l_ImageInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
+        l_ImageInfo.format = l_CubemapData.m_Format;
         l_ImageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
         l_ImageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         l_ImageInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
         l_ImageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         l_ImageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
 
-        if (vkCreateImage(Startup::GetDevice(), &l_ImageInfo, nullptr, &m_SkyboxImage) != VK_SUCCESS)
+        if (vkCreateImage(Startup::GetDevice(), &l_ImageInfo, nullptr, &m_SkyboxTextureImage) != VK_SUCCESS)
         {
-            TR_CORE_CRITICAL("Failed to create fallback skybox cubemap image");
+            TR_CORE_CRITICAL("Failed to create skybox image");
         }
 
-        VkMemoryRequirements l_MemoryRequirements{};
-        vkGetImageMemoryRequirements(Startup::GetDevice(), m_SkyboxImage, &l_MemoryRequirements);
+        VkMemoryRequirements l_ImageRequirements{};
+        vkGetImageMemoryRequirements(Startup::GetDevice(), m_SkyboxTextureImage, &l_ImageRequirements);
 
         VkMemoryAllocateInfo l_AllocInfo{ VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO };
-        l_AllocInfo.allocationSize = l_MemoryRequirements.size;
-        l_AllocInfo.memoryTypeIndex = m_Buffers.FindMemoryType(l_MemoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+        l_AllocInfo.allocationSize = l_ImageRequirements.size;
+        l_AllocInfo.memoryTypeIndex = m_Buffers.FindMemoryType(l_ImageRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
-        if (vkAllocateMemory(Startup::GetDevice(), &l_AllocInfo, nullptr, &m_SkyboxImageMemory) != VK_SUCCESS)
+        if (vkAllocateMemory(Startup::GetDevice(), &l_AllocInfo, nullptr, &m_SkyboxTextureImageMemory) != VK_SUCCESS)
         {
-            TR_CORE_CRITICAL("Failed to allocate fallback skybox cubemap memory");
+            TR_CORE_CRITICAL("Failed to allocate skybox image memory");
         }
 
-        vkBindImageMemory(Startup::GetDevice(), m_SkyboxImage, m_SkyboxImageMemory, 0);
+        vkBindImageMemory(Startup::GetDevice(), m_SkyboxTextureImage, m_SkyboxTextureImageMemory, 0);
 
+        // Stage 3: record layout transitions and buffer copies. Future async streaming can split this
+        // block so uploads happen on dedicated transfer queues.
         VkCommandBuffer l_CommandBuffer = m_Commands.BeginSingleTimeCommands();
 
         VkImageMemoryBarrier l_BarrierToTransfer{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
@@ -1488,31 +1527,46 @@ namespace Trident
         l_BarrierToTransfer.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
         l_BarrierToTransfer.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         l_BarrierToTransfer.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        l_BarrierToTransfer.image = m_SkyboxImage;
+        l_BarrierToTransfer.image = m_SkyboxTextureImage;
         l_BarrierToTransfer.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         l_BarrierToTransfer.subresourceRange.baseMipLevel = 0;
-        l_BarrierToTransfer.subresourceRange.levelCount = 1;
+        l_BarrierToTransfer.subresourceRange.levelCount = l_CubemapData.m_MipCount;
         l_BarrierToTransfer.subresourceRange.baseArrayLayer = 0;
         l_BarrierToTransfer.subresourceRange.layerCount = 6;
         l_BarrierToTransfer.srcAccessMask = 0;
         l_BarrierToTransfer.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
 
-        vkCmdPipelineBarrier(l_CommandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &l_BarrierToTransfer);
+        vkCmdPipelineBarrier(l_CommandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
+            0, nullptr, 0, nullptr, 1, &l_BarrierToTransfer);
 
-        std::array<VkBufferImageCopy, 6> l_CopyRegions{};
-        for (uint32_t i = 0; i < l_CopyRegions.size(); ++i)
+        std::vector<VkBufferImageCopy> l_CopyRegions{};
+        l_CopyRegions.reserve(l_CubemapData.m_FaceRegions.size() * 6);
+
+        for (uint32_t it_Mip = 0; it_Mip < l_CubemapData.m_MipCount; ++it_Mip)
         {
-            VkBufferImageCopy& l_Region = l_CopyRegions[i];
-            l_Region.bufferOffset = sizeof(uint32_t) * i;
-            l_Region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            l_Region.imageSubresource.mipLevel = 0;
-            l_Region.imageSubresource.baseArrayLayer = i;
-            l_Region.imageSubresource.layerCount = 1;
-            l_Region.imageOffset = { 0, 0, 0 };
-            l_Region.imageExtent = { 1, 1, 1 };
+            uint32_t l_MipWidth = std::max(1u, l_CubemapData.m_Width >> it_Mip);
+            uint32_t l_MipHeight = std::max(1u, l_CubemapData.m_Height >> it_Mip);
+
+            for (uint32_t it_Face = 0; it_Face < 6; ++it_Face)
+            {
+                const Loader::CubemapFaceRegion& l_Region = l_CubemapData.m_FaceRegions[it_Mip][it_Face];
+
+                VkBufferImageCopy l_CopyRegion{};
+                l_CopyRegion.bufferOffset = static_cast<VkDeviceSize>(l_Region.m_Offset);
+                l_CopyRegion.bufferRowLength = 0;
+                l_CopyRegion.bufferImageHeight = 0;
+                l_CopyRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                l_CopyRegion.imageSubresource.mipLevel = it_Mip;
+                l_CopyRegion.imageSubresource.baseArrayLayer = it_Face;
+                l_CopyRegion.imageSubresource.layerCount = 1;
+                l_CopyRegion.imageOffset = { 0, 0, 0 };
+                l_CopyRegion.imageExtent = { l_MipWidth, l_MipHeight, 1 };
+
+                l_CopyRegions.push_back(l_CopyRegion);
+            }
         }
 
-        vkCmdCopyBufferToImage(l_CommandBuffer, l_StagingBuffer, m_SkyboxImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        vkCmdCopyBufferToImage(l_CommandBuffer, l_StagingBuffer, m_SkyboxTextureImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
             static_cast<uint32_t>(l_CopyRegions.size()), l_CopyRegions.data());
 
         VkImageMemoryBarrier l_BarrierToShader{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
@@ -1520,34 +1574,37 @@ namespace Trident
         l_BarrierToShader.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         l_BarrierToShader.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         l_BarrierToShader.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        l_BarrierToShader.image = m_SkyboxImage;
+        l_BarrierToShader.image = m_SkyboxTextureImage;
         l_BarrierToShader.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         l_BarrierToShader.subresourceRange.baseMipLevel = 0;
-        l_BarrierToShader.subresourceRange.levelCount = 1;
+        l_BarrierToShader.subresourceRange.levelCount = l_CubemapData.m_MipCount;
         l_BarrierToShader.subresourceRange.baseArrayLayer = 0;
         l_BarrierToShader.subresourceRange.layerCount = 6;
         l_BarrierToShader.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
         l_BarrierToShader.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 
-        vkCmdPipelineBarrier(l_CommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &l_BarrierToShader);
+        vkCmdPipelineBarrier(l_CommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
+            0, nullptr, 0, nullptr, 1, &l_BarrierToShader);
 
         m_Commands.EndSingleTimeCommands(l_CommandBuffer);
 
         m_Buffers.DestroyBuffer(l_StagingBuffer, l_StagingMemory);
 
+        // Stage 4: create the view and sampler consumed by the skybox shaders. Sampling remains simple for now
+        // but clamped addressing keeps seams hidden when future HDR content arrives.
         VkImageViewCreateInfo l_ViewInfo{ VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
-        l_ViewInfo.image = m_SkyboxImage;
+        l_ViewInfo.image = m_SkyboxTextureImage;
         l_ViewInfo.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
-        l_ViewInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
+        l_ViewInfo.format = l_CubemapData.m_Format;
         l_ViewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         l_ViewInfo.subresourceRange.baseMipLevel = 0;
-        l_ViewInfo.subresourceRange.levelCount = 1;
+        l_ViewInfo.subresourceRange.levelCount = l_CubemapData.m_MipCount;
         l_ViewInfo.subresourceRange.baseArrayLayer = 0;
         l_ViewInfo.subresourceRange.layerCount = 6;
 
-        if (vkCreateImageView(Startup::GetDevice(), &l_ViewInfo, nullptr, &m_SkyboxImageView) != VK_SUCCESS)
+        if (vkCreateImageView(Startup::GetDevice(), &l_ViewInfo, nullptr, &m_SkyboxTextureView) != VK_SUCCESS)
         {
-            TR_CORE_CRITICAL("Failed to create fallback skybox cubemap view");
+            TR_CORE_CRITICAL("Failed to create skybox view");
         }
 
         VkSamplerCreateInfo l_SamplerInfo{ VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO };
@@ -1558,49 +1615,54 @@ namespace Trident
         l_SamplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
         l_SamplerInfo.anisotropyEnable = VK_FALSE;
         l_SamplerInfo.maxAnisotropy = 1.0f;
-        l_SamplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_WHITE;
+        l_SamplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
         l_SamplerInfo.unnormalizedCoordinates = VK_FALSE;
         l_SamplerInfo.compareEnable = VK_FALSE;
         l_SamplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
         l_SamplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
         l_SamplerInfo.mipLodBias = 0.0f;
         l_SamplerInfo.minLod = 0.0f;
-        l_SamplerInfo.maxLod = 0.0f;
+        l_SamplerInfo.maxLod = static_cast<float>(l_CubemapData.m_MipCount);
 
-        if (vkCreateSampler(Startup::GetDevice(), &l_SamplerInfo, nullptr, &m_SkyboxSampler) != VK_SUCCESS)
+        if (vkCreateSampler(Startup::GetDevice(), &l_SamplerInfo, nullptr, &m_SkyboxTextureSampler) != VK_SUCCESS)
         {
-            TR_CORE_CRITICAL("Failed to create fallback skybox sampler");
+            TR_CORE_CRITICAL("Failed to create skybox sampler");
         }
 
-        // TODO: Replace the solid-colour cubemap with HDR environment maps once the IBL pipeline lands.
+        CreateSkyboxDescriptorSets();
+
+        // Stage 5: rewrite the main descriptor sets so forward lighting shaders can sample the cubemap.
+        UpdateSkyboxBindingOnMainSets();
+
+        // Leave space for HDR workflow upgrades (prefiltered mip chains, BRDF LUTs) without rewriting the upload path.
     }
 
     void Renderer::DestroySkyboxCubemap()
     {
         VkDevice l_Device = Startup::GetDevice();
 
-        if (m_SkyboxSampler != VK_NULL_HANDLE)
+        if (m_SkyboxTextureSampler != VK_NULL_HANDLE)
         {
-            vkDestroySampler(l_Device, m_SkyboxSampler, nullptr);
-            m_SkyboxSampler = VK_NULL_HANDLE;
+            vkDestroySampler(l_Device, m_SkyboxTextureSampler, nullptr);
+            m_SkyboxTextureSampler = VK_NULL_HANDLE;
         }
 
-        if (m_SkyboxImageView != VK_NULL_HANDLE)
+        if (m_SkyboxTextureView != VK_NULL_HANDLE)
         {
-            vkDestroyImageView(l_Device, m_SkyboxImageView, nullptr);
-            m_SkyboxImageView = VK_NULL_HANDLE;
+            vkDestroyImageView(l_Device, m_SkyboxTextureView, nullptr);
+            m_SkyboxTextureView = VK_NULL_HANDLE;
         }
 
-        if (m_SkyboxImage != VK_NULL_HANDLE)
+        if (m_SkyboxTextureImage != VK_NULL_HANDLE)
         {
-            vkDestroyImage(l_Device, m_SkyboxImage, nullptr);
-            m_SkyboxImage = VK_NULL_HANDLE;
+            vkDestroyImage(l_Device, m_SkyboxTextureImage, nullptr);
+            m_SkyboxTextureImage = VK_NULL_HANDLE;
         }
 
-        if (m_SkyboxImageMemory != VK_NULL_HANDLE)
+        if (m_SkyboxTextureImageMemory != VK_NULL_HANDLE)
         {
-            vkFreeMemory(l_Device, m_SkyboxImageMemory, nullptr);
-            m_SkyboxImageMemory = VK_NULL_HANDLE;
+            vkFreeMemory(l_Device, m_SkyboxTextureImageMemory, nullptr);
+            m_SkyboxTextureImageMemory = VK_NULL_HANDLE;
         }
     }
 
@@ -1669,9 +1731,45 @@ namespace Trident
             vkUpdateDescriptorSets(Startup::GetDevice(), 3, l_Writes, 0, nullptr);
         }
 
+        UpdateSkyboxBindingOnMainSets();
         CreateSkyboxDescriptorSets();
 
         TR_CORE_TRACE("Descriptor Sets Allocated (Main = {}, Skybox = {})", l_ImageCount, m_SkyboxDescriptorSets.size());
+    }
+
+    void Renderer::UpdateSkyboxBindingOnMainSets()
+    {
+        if (m_DescriptorSets.empty())
+        {
+            return;
+        }
+
+        if (m_SkyboxTextureView == VK_NULL_HANDLE || m_SkyboxTextureSampler == VK_NULL_HANDLE)
+        {
+            TR_CORE_WARN("Skipping skybox binding update because the cubemap view or sampler is missing");
+            return;
+        }
+
+        for (size_t it_Image = 0; it_Image < m_DescriptorSets.size(); ++it_Image)
+        {
+            VkDescriptorImageInfo l_SkyboxInfo{};
+            l_SkyboxInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            l_SkyboxInfo.imageView = m_SkyboxTextureView;
+            l_SkyboxInfo.sampler = m_SkyboxTextureSampler;
+
+            VkWriteDescriptorSet l_SkyboxWrite{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
+            l_SkyboxWrite.dstSet = m_DescriptorSets[it_Image];
+            l_SkyboxWrite.dstBinding = 3;
+            l_SkyboxWrite.dstArrayElement = 0;
+            l_SkyboxWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            l_SkyboxWrite.descriptorCount = 1;
+            l_SkyboxWrite.pImageInfo = &l_SkyboxInfo;
+
+            // Synchronization note: descriptor writes are host operations, but consumers must still wait for the
+            // transfer commands recorded in CreateSkyboxCubemap to finish before sampling. Our frame fence makes
+            // sure the upload completes before the next draw touches the cubemap.
+            vkUpdateDescriptorSets(Startup::GetDevice(), 1, &l_SkyboxWrite, 0, nullptr);
+        }
     }
 
     void Renderer::CreateSkyboxDescriptorSets()
@@ -1679,7 +1777,7 @@ namespace Trident
         DestroySkyboxDescriptorSets();
 
         size_t l_ImageCount = m_Swapchain.GetImageCount();
-        if (l_ImageCount == 0 || m_SkyboxImageView == VK_NULL_HANDLE || m_SkyboxSampler == VK_NULL_HANDLE)
+        if (l_ImageCount == 0 || m_SkyboxTextureView == VK_NULL_HANDLE || m_SkyboxTextureSampler == VK_NULL_HANDLE)
         {
             TR_CORE_WARN("Skipped skybox descriptor allocation because required resources are missing");
             return;
@@ -1709,8 +1807,8 @@ namespace Trident
 
             VkDescriptorImageInfo l_CubemapInfo{};
             l_CubemapInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-            l_CubemapInfo.imageView = m_SkyboxImageView;
-            l_CubemapInfo.sampler = m_SkyboxSampler;
+            l_CubemapInfo.imageView = m_SkyboxTextureView;
+            l_CubemapInfo.sampler = m_SkyboxTextureSampler;
 
             VkWriteDescriptorSet l_GlobalWrite{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
             l_GlobalWrite.dstSet = m_SkyboxDescriptorSets[i];

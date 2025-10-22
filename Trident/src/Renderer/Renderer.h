@@ -252,10 +252,10 @@ namespace Trident
         ECS::Registry* m_Registry = nullptr;
         ViewportInfo m_Viewport{};
         Skybox m_Skybox{};
-        VkImage m_SkyboxImage = VK_NULL_HANDLE;
-        VkDeviceMemory m_SkyboxImageMemory = VK_NULL_HANDLE;
-        VkImageView m_SkyboxImageView = VK_NULL_HANDLE;
-        VkSampler m_SkyboxSampler = VK_NULL_HANDLE;
+        VkImage m_SkyboxTextureImage = VK_NULL_HANDLE;
+        VkDeviceMemory m_SkyboxTextureImageMemory = VK_NULL_HANDLE;
+        VkImageView m_SkyboxTextureView = VK_NULL_HANDLE;
+        VkSampler m_SkyboxTextureSampler = VK_NULL_HANDLE;
         std::vector<VkDescriptorSet> m_SkyboxDescriptorSets;
 
         UI::ImGuiLayer* m_ImGuiLayer = nullptr;
@@ -296,6 +296,7 @@ namespace Trident
         void DestroySkyboxDescriptorSets();
         void CreateSkyboxCubemap();
         void DestroySkyboxCubemap();
+        void UpdateSkyboxBindingOnMainSets();
 
         void UpdateUniformBuffer(uint32_t currentImage);
         void UploadMeshFromCache();

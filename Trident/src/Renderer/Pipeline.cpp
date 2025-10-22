@@ -462,11 +462,20 @@ namespace Trident
         l_SamplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
         l_SamplerLayoutBinding.pImmutableSamplers = nullptr;
 
-        VkDescriptorSetLayoutBinding l_Bindings[] = { l_GlobalLayoutBinding, l_MaterialLayoutBinding, l_SamplerLayoutBinding };
+        VkDescriptorSetLayoutBinding l_SkyboxSamplerBinding{};
+        // Binding 3 is reserved for the environment cubemap. Keeping it adjacent to the material sampler makes it
+        // trivial to pivot toward bindless descriptors or texture arrays in a future renderer upgrade.
+        l_SkyboxSamplerBinding.binding = 3;
+        l_SkyboxSamplerBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        l_SkyboxSamplerBinding.descriptorCount = 1;
+        l_SkyboxSamplerBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+        l_SkyboxSamplerBinding.pImmutableSamplers = nullptr;
+
+        std::array<VkDescriptorSetLayoutBinding, 4> l_Bindings{ l_GlobalLayoutBinding, l_MaterialLayoutBinding, l_SamplerLayoutBinding, l_SkyboxSamplerBinding };
 
         VkDescriptorSetLayoutCreateInfo l_LayoutInfo{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
-        l_LayoutInfo.bindingCount = 3;
-        l_LayoutInfo.pBindings = l_Bindings;
+        l_LayoutInfo.bindingCount = static_cast<uint32_t>(l_Bindings.size());
+        l_LayoutInfo.pBindings = l_Bindings.data();
 
         if (vkCreateDescriptorSetLayout(Startup::GetDevice(), &l_LayoutInfo, nullptr, &m_DescriptorSetLayout) != VK_SUCCESS)
         {
