@@ -18,6 +18,7 @@
 #include <iterator>
 #include <system_error>
 #include <string_view>
+#include <vector>
 
 namespace
 {
@@ -220,8 +221,8 @@ namespace Trident
 
         CubemapTextureData SkyboxTextureLoader::LoadFromDirectory(const std::filesystem::path& directoryPath)
         {
-            std::array<std::filesystem::path, 6> l_Faces{};
-            std::array<bool, 6> l_Assigned{};
+            // Track every potential file per cubemap face so HDR (.exr) assets can be prioritized later.
+            std::array<std::vector<std::filesystem::path>, 6> l_FaceCandidates{};
 
             std::error_code l_Error{};
             if (!std::filesystem::is_directory(directoryPath, l_Error))
@@ -243,26 +244,51 @@ namespace Trident
                     continue;
                 }
 
-                if (l_Assigned[l_FaceIndex])
-                {
-                    TR_CORE_WARN("Multiple files mapped to cubemap face {} in '{}'; keeping the first match", s_FaceFriendlyNames[l_FaceIndex], directoryPath.string());
-                    continue;
-                }
-
-                l_Assigned[l_FaceIndex] = true;
-                l_Faces[l_FaceIndex] = NormalizeFsPath(it_Entry.path());
+                // Store the normalized path for later selection based on the preferred file extension.
+                l_FaceCandidates[l_FaceIndex].push_back(NormalizeFsPath(it_Entry.path()));
             }
 
-            for (size_t it_Index = 0; it_Index < l_Assigned.size(); ++it_Index)
+            std::array<std::filesystem::path, 6> l_SelectedFaces{};
+            for (size_t it_Index = 0; it_Index < l_FaceCandidates.size(); ++it_Index)
             {
-                if (!l_Assigned[it_Index])
+                const auto& l_Candidates = l_FaceCandidates[it_Index];
+                if (l_Candidates.empty())
                 {
                     TR_CORE_ERROR("Missing cubemap face {} in directory '{}'", s_FaceFriendlyNames[it_Index], directoryPath.string());
                     return {};
                 }
+
+                const auto l_IsExrExtension = [](const std::filesystem::path& candidate)
+                    {
+                        std::string l_ExtensionLower = ToLowerCopy(candidate.extension().string());
+                        return l_ExtensionLower == ".exr";
+                    };
+
+                // Prefer EXR assets for HDR skyboxes when available.
+                auto l_FirstExr = std::find_if(l_Candidates.begin(), l_Candidates.end(), l_IsExrExtension);
+                if (l_FirstExr != l_Candidates.end())
+                {
+                    l_SelectedFaces[it_Index] = *l_FirstExr;
+
+                    if (std::count_if(l_Candidates.begin(), l_Candidates.end(), l_IsExrExtension) > 1)
+                    {
+                        TR_CORE_WARN("Multiple EXR files mapped to cubemap face {} in '{}'; using '{}'", s_FaceFriendlyNames[it_Index], directoryPath.string(), l_FirstExr->string());
+                    }
+                }
+                else
+                {
+                    l_SelectedFaces[it_Index] = l_Candidates.front();
+
+                    if (l_Candidates.size() > 1)
+                    {
+                        TR_CORE_WARN("Multiple files mapped to cubemap face {} in '{}'; keeping the first match", s_FaceFriendlyNames[it_Index], directoryPath.string());
+                    }
+
+                    TR_CORE_INFO("Using non-EXR cubemap face {} ('{}') because no EXR candidate was found", s_FaceFriendlyNames[it_Index], l_SelectedFaces[it_Index].string());
+                }
             }
 
-            return LoadFromFileList(l_Faces);
+            return LoadFromFileList(l_SelectedFaces);
         }
 
         CubemapTextureData SkyboxTextureLoader::LoadFromKtx(const std::filesystem::path& filePath)
