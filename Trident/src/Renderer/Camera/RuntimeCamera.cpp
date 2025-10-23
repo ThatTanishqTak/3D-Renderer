@@ -334,8 +334,22 @@ namespace Trident
         }
 
         const glm::vec3 l_Radians = glm::radians(l_Transform->Rotation);
-        const glm::quat l_Orientation = glm::quat(l_Radians);
-        const glm::mat4 l_Rotation = glm::mat4_cast(l_Orientation);
+        glm::quat l_Orientation = glm::quat(l_Radians);
+
+        // Normalize the quaternion so accumulated numerical error does not skew the view matrix.
+        const float l_Length = glm::length(l_Orientation);
+        if (l_Length > std::numeric_limits<float>::epsilon())
+        {
+            l_Orientation = glm::normalize(l_Orientation);
+        }
+        else
+        {
+            // Fall back to identity orientation if the quaternion becomes denormalized.
+            l_Orientation = glm::quat{ 1.0f, 0.0f, 0.0f, 0.0f };
+        }
+
+        // Use the conjugate so the view matrix applies the inverse rotation, matching editor camera behavior.
+        const glm::mat4 l_Rotation = glm::mat4_cast(glm::conjugate(l_Orientation));
         const glm::mat4 l_Translation = glm::translate(glm::mat4{ 1.0f }, -l_Transform->Position);
         m_ViewMatrix = l_Rotation * l_Translation;
         m_ViewDirty = false;
