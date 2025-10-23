@@ -48,8 +48,8 @@ void ApplicationLayer::Initialize()
 
     // Seed the editor camera with a comfortable default orbit so the scene appears immediately.
     m_EditorCamera.SetPosition({ 0.0f, 3.0f, 8.0f });
-    m_EditorYawDegrees = -90.0f;
-    m_EditorPitchDegrees = -20.0f;
+    m_EditorYawDegrees = 0.0f;
+    m_EditorPitchDegrees = 0.0f;
     m_EditorCamera.SetRotation({ m_EditorPitchDegrees, m_EditorYawDegrees, 0.0f });
     m_EditorCamera.SetClipPlanes(0.1f, 1000.0f);
     m_EditorCamera.SetProjectionType(Trident::Camera::ProjectionType::Perspective);

@@ -5,6 +5,7 @@
 #include "Renderer/Camera/EditorCamera.h"
 
 #include "Panels/ViewportPanel.h"
+#include "Panels/GameViewportPanel.h"
 #include "Panels/ContentBrowserPanel.h"
 #include "Panels/SceneHierarchyPanel.h"
 #include "Panels/InspectorPanel.h"
@@ -64,6 +65,7 @@ private:
 private:
     GizmoState m_GizmoState;
     ViewportPanel m_ViewportPanel;
+    GameViewportPanel m_GameViewportPanel;
     ContentBrowserPanel m_ContentBrowserPanel;
     SceneHierarchyPanel m_SceneHierarchyPanel;
     InspectorPanel m_InspectorPanel;
