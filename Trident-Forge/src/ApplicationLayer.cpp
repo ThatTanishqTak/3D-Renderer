@@ -24,6 +24,7 @@
 #include <glm/vec2.hpp>
 #include <glm/gtx/norm.hpp>
 #include <glm/geometric.hpp>
+#include <glm/gtc/quaternion.hpp>
 
 static inline float DegToRad(float deg) { return deg * 0.017453292519943295769f; }
 
@@ -451,13 +452,20 @@ void ApplicationLayer::UpdateEditorCamera(float deltaTime)
         m_IsRotateOrbitActive = false;
     }
 
-    glm::vec3 l_TargetForward = ForwardFromYawPitch(m_TargetYawDegrees, m_TargetPitchDegrees);
-    glm::vec3 l_TargetRight = glm::normalize(glm::cross(l_TargetForward, l_WorldUp));
-    if (!std::isfinite(l_TargetRight.x))
+    // Derive the orientation quaternions so forward/right/up all share the same -Z forward frame as the editor camera.
+    const glm::quat l_TargetOrientation = glm::quat(glm::radians(glm::vec3{ m_TargetPitchDegrees, m_TargetYawDegrees, 0.0f }));
+    glm::vec3 l_TargetForward = glm::normalize(l_TargetOrientation * glm::vec3{ 0.0f, 0.0f, -1.0f });
+    glm::vec3 l_TargetRight = glm::normalize(l_TargetOrientation * glm::vec3{ 1.0f, 0.0f, 0.0f });
+    glm::vec3 l_TargetUp = glm::normalize(l_TargetOrientation * glm::vec3{ 0.0f, 1.0f, 0.0f });
+
+    if (!std::isfinite(l_TargetRight.x) || !std::isfinite(l_TargetRight.y) || !std::isfinite(l_TargetRight.z))
     {
         l_TargetRight = { 1.0f, 0.0f, 0.0f };
     }
-    glm::vec3 l_TargetUp = glm::normalize(glm::cross(l_TargetRight, l_TargetForward));
+    if (!std::isfinite(l_TargetUp.x) || !std::isfinite(l_TargetUp.y) || !std::isfinite(l_TargetUp.z))
+    {
+        l_TargetUp = { 0.0f, 1.0f, 0.0f };
+    }
 
     const auto l_IsFiniteVec3 = [](const glm::vec3& a_Value) -> bool
         {
@@ -595,26 +603,33 @@ void ApplicationLayer::FrameSelection()
     m_OrbitDistance = std::clamp(l_Radius * 3.0f, 2.0f, 50.0f);
 
     // Aim camera at pivot using target state so smoothing handles the rest.
-    glm::vec3 l_ToPivot = glm::normalize(m_CameraPivot - m_EditorCamera.GetPosition());
-    const float l_YAW = std::atan2(l_ToPivot.z, l_ToPivot.x) * 57.29577951308232f;  // rad->deg
-    const float l_Pitch = std::asin(std::clamp(l_ToPivot.y, -1.0f, 1.0f)) * 57.29577951308232f;
+    // Aim camera at pivot using target state so smoothing handles the rest.
+    glm::vec3 l_ToPivot = m_CameraPivot - m_EditorCamera.GetPosition();
+    if (glm::length2(l_ToPivot) > std::numeric_limits<float>::epsilon())
+    {
+        l_ToPivot = glm::normalize(l_ToPivot);
 
-    m_TargetYawDegrees = l_YAW;
-    m_TargetPitchDegrees = std::clamp(l_Pitch, -89.0f, 89.0f);
+        // Convert the desired forward vector back into yaw/pitch that respect the -Z forward frame.
+        const float l_Pitch = glm::degrees(std::asin(glm::clamp(-l_ToPivot.y, -1.0f, 1.0f)));
+        const float l_Yaw = glm::degrees(std::atan2(l_ToPivot.x, -l_ToPivot.z));
+
+        m_TargetYawDegrees = l_Yaw;
+        m_TargetPitchDegrees = std::clamp(l_Pitch, -89.0f, 89.0f);
+    }
     const glm::vec3 l_Forward = ForwardFromYawPitch(m_TargetYawDegrees, m_TargetPitchDegrees);
     m_TargetPosition = m_CameraPivot - l_Forward * m_OrbitDistance;
 }
 
 glm::vec3 ApplicationLayer::ForwardFromYawPitch(float yawDegrees, float pitchDegrees)
 {
-    const float l_YAW = DegToRad(yawDegrees);
-    const float l_Pitch = DegToRad(pitchDegrees);
-    const float l_CosPoint  = std::cos(l_Pitch);
-    glm::vec3 l_Forward{ l_CosPoint  * std::cos(l_YAW), std::sin(l_Pitch), l_CosPoint  * std::sin(l_YAW) };
+    // Build the quaternion directly from Euler angles so we match EditorCamera's -Z forward reference frame.
+    const glm::quat l_Orientation = glm::quat(glm::radians(glm::vec3{ pitchDegrees, yawDegrees, 0.0f }));
+    const glm::vec3 l_Forward = l_Orientation * glm::vec3{ 0.0f, 0.0f, -1.0f };
+
     if (!std::isfinite(l_Forward.x) || !std::isfinite(l_Forward.y) || !std::isfinite(l_Forward.z))
     {
         return glm::vec3{ 0.0f, 0.0f, -1.0f };
     }
-    
+
     return glm::normalize(l_Forward);
 }
