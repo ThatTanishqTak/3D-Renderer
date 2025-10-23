@@ -42,6 +42,7 @@ void GameViewportPanel::Render()
         m_IsFocused = false;
         m_IsHovered = false;
         ImGui::End();
+        
         return;
     }
 
@@ -52,6 +53,7 @@ void GameViewportPanel::Render()
         m_IsFocused = false;
         m_IsHovered = false;
         ImGui::End();
+
         return;
     }
 

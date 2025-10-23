@@ -39,9 +39,19 @@ void ApplicationLayer::Initialize()
         {
             ImportDroppedAssets(droppedPaths);
         });
+    // Mirror the same asset import callback into the runtime viewport so designers can drop levels or prefabs there as well.
+    m_GameViewportPanel.SetAssetDropHandler([this](const std::vector<std::string>& droppedPaths)
+        {
+            ImportDroppedAssets(droppedPaths);
+        });
 
     // Bridge viewport rendering back to the application layer so the contextual menu can react to image interactions.
     m_ViewportPanel.SetContextMenuHandler([this](const ImVec2& min, const ImVec2& max)
+        {
+            HandleViewportContextMenu(min, max);
+        });
+    // Share the same hook with the runtime viewport so future gameplay overlays can extend the context menu consistently.
+    m_GameViewportPanel.SetContextMenuHandler([this](const ImVec2& min, const ImVec2& max)
         {
             HandleViewportContextMenu(min, max);
         });
@@ -84,6 +94,8 @@ void ApplicationLayer::Update()
     UpdateEditorCamera(Trident::Utilities::Time::GetDeltaTime());
 
     m_ViewportPanel.Update();
+    // Keep the runtime viewport state aligned with the editor viewport so shared handlers see up-to-date focus/hover data.
+    m_GameViewportPanel.Update();
     m_ContentBrowserPanel.Update();
     m_SceneHierarchyPanel.Update();
 
@@ -97,7 +109,13 @@ void ApplicationLayer::Update()
 
 void ApplicationLayer::Render()
 {
+    // Ensure the editor viewport always renders with the editor camera before handing off to runtime previews.
+    Trident::RenderCommand::SetRuntimeCameraActive(false);
     m_ViewportPanel.Render();
+    // Surface the runtime viewport directly after the scene so future play/pause widgets can live alongside it.
+    m_GameViewportPanel.Render();
+    // Default back to the editor camera so ancillary panels (gizmos, thumbnails) sample predictable state.
+    Trident::RenderCommand::SetRuntimeCameraActive(false);
     m_ContentBrowserPanel.Render();
     m_SceneHierarchyPanel.Render();
     m_InspectorPanel.Render();
@@ -375,6 +393,16 @@ void ApplicationLayer::UpdateEditorCamera(float deltaTime)
         m_IsRotateOrbitActive = false;
         m_ResetRotateOrbitReference = true;
     }
+    // If the gameplay viewport is interacting with the runtime camera we yield editor controls immediately.
+    const bool l_GameViewportActive = m_GameViewportPanel.IsFocused() && m_GameViewportPanel.IsHovered();
+    if (l_GameViewportActive)
+    {
+        m_IsRotateOrbitActive = false;
+        m_ResetRotateOrbitReference = true;
+
+        return;
+    }
+
     const bool l_HasFocus = m_ViewportPanel.IsFocused() && m_ViewportPanel.IsHovered();
     if (!l_HasFocus)
     {
