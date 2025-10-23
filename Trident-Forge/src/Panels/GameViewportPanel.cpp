@@ -28,6 +28,8 @@ void GameViewportPanel::Render()
     {
         // When the window is closed we ensure the editor camera regains control of the renderer.
         Trident::RenderCommand::SetRuntimeCameraActive(false);
+        m_HasRuntimeCamera = false;
+
         return;
     }
 
@@ -39,6 +41,7 @@ void GameViewportPanel::Render()
     {
         // Closing the window immediately hands control back to the editor viewport.
         Trident::RenderCommand::SetRuntimeCameraActive(false);
+        m_HasRuntimeCamera = false;
         m_IsFocused = false;
         m_IsHovered = false;
         ImGui::End();
@@ -50,8 +53,22 @@ void GameViewportPanel::Render()
     {
         // Collapsed windows still need to relinquish runtime camera control for predictable behaviour.
         Trident::RenderCommand::SetRuntimeCameraActive(false);
+        m_HasRuntimeCamera = false;
         m_IsFocused = false;
         m_IsHovered = false;
+        ImGui::End();
+
+        return;
+    }
+
+    if (!m_HasRuntimeCamera)
+    {
+        // Without a runtime camera bound we keep the renderer in editor mode and surface guidance to the user.
+        Trident::RenderCommand::SetRuntimeCameraActive(false);
+        m_IsFocused = ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows);
+        m_IsHovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows);
+        ImGui::TextWrapped("No active runtime camera in the scene.");
+        // TODO: Display contextual actions here once play/pause state management is available.
         ImGui::End();
 
         return;
@@ -89,6 +106,7 @@ void GameViewportPanel::Render()
         {
             // Draw the runtime scene output. Future HUD overlays can layer ImGui draw calls after this image.
             ImGui::Image(reinterpret_cast<ImTextureID>(l_Descriptor), l_ContentRegion, ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f));
+            // TODO: Add HUD overlays (stats, gizmos) when a runtime camera is active.
 
             if (m_OnViewportContextMenu)
             {
@@ -133,11 +151,23 @@ void GameViewportPanel::Render()
 void GameViewportPanel::SetAssetDropHandler(std::function<void(const std::vector<std::string>&)> assetDropHandler)
 {
     // Store the callback so gameplay tooling can capture drag-and-drop events.
-    m_OnAssetDrop = std::move(assetDropHandler);
+    //m_OnAssetDrop = std::move(assetDropHandler);
 }
 
 void GameViewportPanel::SetContextMenuHandler(std::function<void(const ImVec2&, const ImVec2&)> contextMenuHandler)
 {
     // Cache the handler so external systems can attach context menus to the runtime viewport image.
-    m_OnViewportContextMenu = std::move(contextMenuHandler);
+    //m_OnViewportContextMenu = std::move(contextMenuHandler);
+}
+
+void GameViewportPanel::SetRuntimeCameraPresence(bool hasRuntimeCamera)
+{
+    // Cache the runtime camera availability so Render() can avoid toggling renderer state unnecessarily.
+    m_HasRuntimeCamera = hasRuntimeCamera;
+    if (!m_HasRuntimeCamera)
+    {
+        // When no runtime camera is bound we immediately fall back to editor rendering.
+        Trident::RenderCommand::SetRuntimeCameraActive(false);
+    }
+    // TODO: Integrate with play/pause state to keep this flag aligned with future runtime control workflows.
 }

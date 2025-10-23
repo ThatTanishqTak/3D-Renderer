@@ -25,6 +25,8 @@ public:
     void SetAssetDropHandler(std::function<void(const std::vector<std::string>&)> assetDropHandler);
     // Mirrors the editor viewport context menu hook so future gameplay overlays can inject actions.
     void SetContextMenuHandler(std::function<void(const ImVec2&, const ImVec2&)> contextMenuHandler);
+    // Communicates whether a runtime camera is bound so the panel can guard renderer state appropriately.
+    void SetRuntimeCameraPresence(bool hasRuntimeCamera);
 
     // Exposes whether the panel's ImGui window is currently hovered.
     bool IsHovered() const { return m_IsHovered; }
@@ -44,6 +46,8 @@ private:
     bool m_IsFocused = false;
     // Stores whether the window is currently open so the runtime camera can be suspended when hidden.
     bool m_IsWindowOpen = true;
+    // Remembers whether the renderer currently has a valid runtime camera bound for this frame.
+    bool m_HasRuntimeCamera = false;
     // Callback invoked when payloads are dropped on the viewport image.
     std::function<void(const std::vector<std::string>&)> m_OnAssetDrop{};
     // Callback surfaced immediately after drawing so overlays can register context menus.
