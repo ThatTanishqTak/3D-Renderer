@@ -6,6 +6,8 @@
 #include <glm/gtx/quaternion.hpp>
 
 #include <algorithm>
+#include <cassert>
+#include <cmath>
 #include <limits>
 
 namespace Trident
@@ -365,22 +367,52 @@ namespace Trident
             return;
         }
 
-        const float l_Aspect = m_ViewportSize.x / std::max(m_ViewportSize.y, 0.0001f);
-        if (l_Component->m_FixedAspectRatio)
+        const float l_RawAspect = m_ViewportSize.x / std::max(m_ViewportSize.y, 0.0001f);
+        const ProjectionType l_ProjectionType = l_Component->m_ProjectionType;
+
+        if (l_ProjectionType == ProjectionType::Perspective)
         {
-            const float l_AspectOverride = std::max(l_Component->m_AspectRatio, 0.0001f);
-            m_ProjectionMatrix = glm::perspective(glm::radians(l_Component->m_FieldOfView), l_AspectOverride, l_Component->m_NearClip, l_Component->m_FarClip);
-        }
-        else if (l_Component->m_ProjectionType == ProjectionType::Orthographic)
-        {
-            const float l_HalfHeight = l_Component->m_OrthographicSize * 0.5f;
-            const float l_HalfWidth = l_HalfHeight * l_Aspect;
-            m_ProjectionMatrix = glm::ortho(-l_HalfWidth, l_HalfWidth, -l_HalfHeight, l_HalfHeight, l_Component->m_NearClip, l_Component->m_FarClip);
+            // Respect the component's explicit aspect ratio when requested so cinematic cameras stay locked to authored values.
+            const float l_EffectiveAspect = l_Component->m_FixedAspectRatio ? std::max(l_Component->m_AspectRatio, 0.0001f) : std::max(l_RawAspect, 0.0001f);
+            const float l_FieldOfViewRadians = glm::radians(l_Component->m_FieldOfView);
+            m_ProjectionMatrix = glm::perspective(l_FieldOfViewRadians, l_EffectiveAspect, l_Component->m_NearClip, l_Component->m_FarClip);
+
+#ifndef NDEBUG
+            // Validate that perspective projections continue to honour viewport aspect changes when the ratio is not fixed.
+            const float l_TanHalfFov = std::tan(l_FieldOfViewRadians * 0.5f);
+            if (!glm::epsilonEqual(l_TanHalfFov, 0.0f, 0.0001f))
+            {
+                const float l_ExpectedX = 1.0f / (l_EffectiveAspect * l_TanHalfFov);
+                assert(glm::epsilonEqual(m_ProjectionMatrix[0][0], l_ExpectedX, 0.0005f) && "Perspective frustum lost aspect scaling after viewport resize");
+            }
+#endif
         }
         else
         {
-            m_ProjectionMatrix = glm::perspective(glm::radians(l_Component->m_FieldOfView), std::max(l_Aspect, 0.0001f), l_Component->m_NearClip, l_Component->m_FarClip);
+            // Orthographic projections must also differentiate between runtime and fixed aspect calculations.
+            const float l_EffectiveAspect = l_Component->m_FixedAspectRatio ? std::max(l_Component->m_AspectRatio, 0.0001f) : std::max(l_RawAspect, 0.0001f);
+            const float l_HalfHeight = l_Component->m_OrthographicSize * 0.5f;
+            const float l_HalfWidth = l_HalfHeight * l_EffectiveAspect;
+            m_ProjectionMatrix = glm::ortho(-l_HalfWidth, l_HalfWidth, -l_HalfHeight, l_HalfHeight, l_Component->m_NearClip, l_Component->m_FarClip);
+
+#ifndef NDEBUG
+            // Confirm orthographic frusta keep the correct width when the viewport is resized.
+            if (!glm::epsilonEqual(l_HalfWidth, 0.0f, 0.0001f))
+            {
+                const float l_ExpectedX = 1.0f / l_HalfWidth;
+                assert(glm::epsilonEqual(m_ProjectionMatrix[0][0], l_ExpectedX, 0.0005f) && "Orthographic frustum lost aspect scaling after viewport resize");
+            }
+#endif
         }
+
+#ifndef NDEBUG
+        // Guard against regressions where fixed aspect ratios produced the wrong projection type when toggled at runtime.
+        const bool l_IsPerspectiveMatrix = glm::epsilonEqual(m_ProjectionMatrix[3][3], 0.0f, 0.0001f);
+        const bool l_IsOrthographicMatrix = glm::epsilonEqual(m_ProjectionMatrix[3][3], 1.0f, 0.0001f);
+        assert((l_ProjectionType == ProjectionType::Perspective && l_IsPerspectiveMatrix) ||
+            (l_ProjectionType == ProjectionType::Orthographic && l_IsOrthographicMatrix) &&
+            "Runtime camera projection matrix does not match the component's projection type after toggling the fixed aspect ratio flag.");
+#endif
 
         // Vulkan clip space is inverted on the Y axis.
         m_ProjectionMatrix[1][1] *= -1.0f;
