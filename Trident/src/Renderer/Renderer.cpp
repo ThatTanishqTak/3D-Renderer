@@ -12,7 +12,9 @@
 
 #include <stdexcept>
 #include <algorithm>
+#include <array>
 #include <string>
+#include <string_view>
 #include <chrono>
 #include <fstream>
 #include <sstream>
@@ -23,6 +25,7 @@
 #include <memory>
 #include <system_error>
 #include <cstring>
+#include <cctype>
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/matrix_inverse.hpp>
@@ -1434,6 +1437,7 @@ namespace Trident
         TR_CORE_TRACE("Creating skybox cubemap");
 
         Loader::CubemapTextureData l_CubemapData{};
+        std::string l_CubemapSource{};
 
         // Try loading a pre-authored cubemap from disk. This keeps the renderer flexible and allows
         // artists to swap between KTX packages and loose face images without touching the code.
@@ -1443,6 +1447,7 @@ namespace Trident
         if (std::filesystem::exists(l_DefaultKtx, l_FileError))
         {
             l_CubemapData = Loader::SkyboxTextureLoader::LoadFromKtx(l_DefaultKtx);
+            l_CubemapSource = "DefaultSkybox.ktx";
         }
         else
         {
@@ -1450,6 +1455,82 @@ namespace Trident
             if (std::filesystem::exists(l_DefaultFaces, l_FileError))
             {
                 l_CubemapData = Loader::SkyboxTextureLoader::LoadFromDirectory(l_DefaultFaces);
+                l_CubemapSource = "Default directory";
+            }
+            else if (std::filesystem::is_directory(l_DefaultSkyboxRoot, l_FileError))
+            {
+                // Discover loose PNG faces named using the short px/nx/... format so older assets continue to load.
+                std::array<std::filesystem::path, 6> l_FallbackFaces{};
+                std::array<bool, 6> l_FoundFaces{};
+                const auto a_ToLower = [](std::string a_Text)
+                    {
+                        std::transform(a_Text.begin(), a_Text.end(), a_Text.begin(), [](unsigned char a_Char)
+                            {
+                                return static_cast<char>(std::tolower(a_Char));
+                            });
+                        return a_Text;
+                    };
+                constexpr std::array<std::array<std::string_view, 2>, 6> s_ShortFaceTokens{ {
+                    { "posx", "px" },
+                    { "negx", "nx" },
+                    { "posy", "py" },
+                    { "negy", "ny" },
+                    { "posz", "pz" },
+                    { "negz", "nz" }
+                } };
+
+                std::error_code l_IterError{};
+                for (const auto& it_Entry : std::filesystem::directory_iterator(l_DefaultSkyboxRoot, l_IterError))
+                {
+                    if (!it_Entry.is_regular_file())
+                    {
+                        continue;
+                    }
+
+                    std::string l_StemLower = a_ToLower(it_Entry.path().stem().string());
+                    for (size_t it_FaceIndex = 0; it_FaceIndex < s_ShortFaceTokens.size(); ++it_FaceIndex)
+                    {
+                        if (l_FoundFaces[it_FaceIndex])
+                        {
+                            continue;
+                        }
+
+                        for (std::string_view it_Token : s_ShortFaceTokens[it_FaceIndex])
+                        {
+                            if (it_Token.empty())
+                            {
+                                continue;
+                            }
+
+                            if (l_StemLower.find(it_Token) != std::string::npos)
+                            {
+                                l_FallbackFaces[it_FaceIndex] = it_Entry.path();
+                                l_FoundFaces[it_FaceIndex] = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (l_IterError)
+                {
+                    TR_CORE_ERROR("Failed to enumerate fallback skybox directory '{}': {}", l_DefaultSkyboxRoot.string(), l_IterError.message());
+                }
+
+                const bool l_AllFacesDiscovered = std::all_of(l_FoundFaces.begin(), l_FoundFaces.end(), [](bool a_Found)
+                    {
+                        return a_Found;
+                    });
+
+                if (l_AllFacesDiscovered)
+                {
+                    l_CubemapData = Loader::SkyboxTextureLoader::LoadFromFaces(l_FallbackFaces);
+                    l_CubemapSource = "PNG fallback";
+                }
+                else
+                {
+                    TR_CORE_WARN("PNG fallback skybox faces are incomplete; expected 6 unique matches in '{}'", l_DefaultSkyboxRoot.string());
+                }
             }
         }
 
@@ -1457,6 +1538,11 @@ namespace Trident
         {
             TR_CORE_WARN("Falling back to a solid colour cubemap because no skybox textures were found on disk");
             l_CubemapData = Loader::CubemapTextureData::CreateSolidColor(0xffffffffu);
+        }
+        else if (!l_CubemapSource.empty())
+        {
+            TR_CORE_INFO("Skybox cubemap successfully loaded from {}", l_CubemapSource);
+            // TODO: Extend this path with HDR pre-integration and IBL convolutions when the asset pipeline provides them.
         }
 
         if (l_CubemapData.m_Format == VK_FORMAT_UNDEFINED)

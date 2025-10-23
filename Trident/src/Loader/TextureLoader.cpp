@@ -23,7 +23,16 @@
 namespace
 {
     // Faces are listed in Vulkan's expected order so uploads can bind directly without swizzling.
-    constexpr std::array<std::string_view, 6> s_FaceTokens{ "posx", "negx", "posy", "negy", "posz", "negz" };
+    // Support both verbose (posx) and abbreviated (px) file name patterns so artists can
+    // quickly swap cubemap assets without renaming files manually.
+    constexpr std::array<std::array<std::string_view, 2>, 6> s_FaceTokens{ {
+        { "posx", "px" },
+        { "negx", "nx" },
+        { "posy", "py" },
+        { "negy", "ny" },
+        { "posz", "pz" },
+        { "negz", "nz" }
+    } };
     constexpr std::array<std::string_view, 6> s_FaceFriendlyNames{ "+X", "-X", "+Y", "-Y", "+Z", "-Z" };
 
     size_t AlignToDword(size_t value)
@@ -45,10 +54,18 @@ namespace
         std::string l_Stem = ToLowerCopy(path.stem().string());
         for (size_t it_Index = 0; it_Index < s_FaceTokens.size(); ++it_Index)
         {
-            if (l_Stem.find(s_FaceTokens[it_Index]) != std::string::npos)
+            for (std::string_view it_Token : s_FaceTokens[it_Index])
             {
-                outIndex = it_Index;
-                return true;
+                if (it_Token.empty())
+                {
+                    continue;
+                }
+
+                if (l_Stem.find(it_Token) != std::string::npos)
+                {
+                    outIndex = it_Index;
+                    return true;
+                }
             }
         }
         return false;
