@@ -841,10 +841,12 @@ namespace Trident
 
             // Problem: the editor camera adopted runtime preview extents, stretching authoring controls when panes diverged.
             // Fix: locate the viewport that actually relies on the editor camera before propagating the size.
-            const auto a_UsesEditorCamera = [this](const ViewportContext& a_Context) -> bool
+            const auto a_UsesEditorCamera = [this](const ViewportContext& context) -> bool
                 {
+                    const bool l_IsRuntimeViewport = (context.m_Info.ViewportID == m_RuntimeViewportId) && (m_RuntimeCamera != nullptr);
+
                     // Editor camera renders any viewport that is not explicitly driven by the runtime camera.
-                    return !a_Context.m_IsRuntimeCameraDriven || !m_RuntimeCamera;
+                    return !l_IsRuntimeViewport;
                 };
 
             if (l_Context && a_UsesEditorCamera(*l_Context))
@@ -880,9 +882,9 @@ namespace Trident
 
             // Problem: gameplay camera sizing was overwritten by editor pane resizes, causing mismatched runtime framing.
             // Fix: identify the runtime-driven viewport so the gameplay camera only reads dimensions from its preview.
-            const auto a_UsesRuntimeCamera = [](const ViewportContext& a_Context) -> bool
+            const auto a_UsesRuntimeCamera = [this](const ViewportContext& context) -> bool
                 {
-                    return a_Context.m_IsRuntimeCameraDriven;
+                    return (context.m_Info.ViewportID == m_RuntimeViewportId);
                 };
 
             if (l_Context && a_UsesRuntimeCamera(*l_Context))
@@ -918,12 +920,25 @@ namespace Trident
             // Only a single viewport should receive runtime camera input at a time to keep editor controls predictable.
             for (auto& it_Context : m_ViewportContexts)
             {
-                it_Context.second.m_IsRuntimeCameraDriven = (it_Context.first == viewportId);
+                const bool l_IsRuntimeViewport = (it_Context.first == viewportId);
+                it_Context.second.m_IsRuntimeCameraDriven = l_IsRuntimeViewport;
             }
+            // Track the runtime viewport explicitly so later queries cannot misinterpret the boolean flags.
+            m_RuntimeViewportId = viewportId;
+            // TODO: Allow multiple runtime previews once per-camera isolation supports broadcasting distinct render targets.
         }
         else
         {
             l_Context.m_IsRuntimeCameraDriven = false;
+            if (m_RuntimeViewportId == viewportId)
+            {
+                // No viewport currently claims the runtime camera, so fall back to editor rendering.
+                m_RuntimeViewportId = s_InvalidViewportId;
+                for (auto& it_Context : m_ViewportContexts)
+                {
+                    it_Context.second.m_IsRuntimeCameraDriven = false;
+                }
+            }
         }
     }
 
@@ -998,7 +1013,12 @@ namespace Trident
 
         // Problem: resizing a runtime-driven panel forced both cameras to match, skewing aspect ratios in the other viewport.
         // Fix: forward dimensions only to the camera actively rendering this context.
-        if (l_Context.m_IsRuntimeCameraDriven && m_RuntimeCamera)
+        const bool l_UsesRuntimeCamera = (viewportId == m_RuntimeViewportId) && (m_RuntimeCamera != nullptr);
+        l_Context.m_IsRuntimeCameraDriven = l_UsesRuntimeCamera;
+
+        // Problem: resizing a runtime-driven panel forced both cameras to match, skewing aspect ratios in the other viewport.
+        // Fix: forward dimensions only to the camera actively rendering this context.
+        if (l_UsesRuntimeCamera)
         {
             // Runtime preview isolates gameplay camera sizing to mimic the shipped experience.
             m_RuntimeCamera->SetViewportSize(info.Size);
@@ -1557,13 +1577,13 @@ namespace Trident
                 // Discover loose PNG faces named using the short px/nx/... format so older assets continue to load.
                 std::array<std::filesystem::path, 6> l_FallbackFaces{};
                 std::array<bool, 6> l_FoundFaces{};
-                const auto a_ToLower = [](std::string a_Text)
+                const auto a_ToLower = [](std::string text)
                     {
-                        std::transform(a_Text.begin(), a_Text.end(), a_Text.begin(), [](unsigned char a_Char)
+                        std::transform(text.begin(), text.end(), text.begin(), [](unsigned char a_Char)
                             {
                                 return static_cast<char>(std::tolower(a_Char));
                             });
-                        return a_Text;
+                        return text;
                     };
                 constexpr std::array<std::array<std::string_view, 2>, 6> s_ShortFaceTokens{ {
                     { "posx", "px" },
@@ -2151,7 +2171,8 @@ namespace Trident
 
     const Camera* Renderer::GetActiveCamera(const ViewportContext& context) const
     {
-        if (context.m_IsRuntimeCameraDriven && m_RuntimeCamera)
+        const bool l_ContextUsesRuntime = (context.m_Info.ViewportID == m_RuntimeViewportId) && (m_RuntimeCamera != nullptr);
+        if (l_ContextUsesRuntime)
         {
             return m_RuntimeCamera;
         }
@@ -2507,10 +2528,10 @@ namespace Trident
         // Prepare the shared draw lists once so each viewport iteration can reuse the same data set.
         GatherMeshDraws();
 
-        auto a_RenderViewport = [&](uint32_t a_ViewportId, ViewportContext& a_Context, bool a_IsPrimary)
+        auto a_RenderViewport = [&](uint32_t a_ViewportId, ViewportContext& context, bool a_IsPrimary)
             {
-                OffscreenTarget& l_Target = a_Context.m_Target;
-                if (!IsValidViewport(a_Context.m_Info) || l_Target.m_Framebuffer == VK_NULL_HANDLE)
+                OffscreenTarget& l_Target = context.m_Target;
+                if (!IsValidViewport(context.m_Info) || l_Target.m_Framebuffer == VK_NULL_HANDLE)
                 {
                     return;
                 }
@@ -2522,7 +2543,7 @@ namespace Trident
 
                 l_RenderedViewport = true;
 
-                const Camera* l_ContextCamera = GetActiveCamera(a_Context);
+                const Camera* l_ContextCamera = GetActiveCamera(context);
                 UpdateUniformBuffer(imageIndex, l_ContextCamera);
 
                 VkPipelineStageFlags l_PreviousStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
@@ -3206,10 +3227,10 @@ namespace Trident
             }
             case Utilities::FileWatcher::WatchType::Texture:
             {
-                auto a_Texture = Loader::TextureLoader::Load(a_Event->Path);
-                if (!a_Texture.Pixels.empty())
+                auto texture = Loader::TextureLoader::Load(a_Event->Path);
+                if (!texture.Pixels.empty())
                 {
-                    UploadTexture(a_Texture);
+                    UploadTexture(texture);
                     l_Success = true;
                     l_Message = "Texture refreshed";
                 }

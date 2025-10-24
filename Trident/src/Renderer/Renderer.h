@@ -32,6 +32,7 @@
 #include <functional>
 #include <chrono>
 #include <unordered_map>
+#include <limits>
 
 namespace Trident
 {
@@ -245,6 +246,8 @@ namespace Trident
 
         std::unordered_map<uint32_t, ViewportContext> m_ViewportContexts;
         uint32_t m_ActiveViewportId = 0;
+        static constexpr uint32_t s_InvalidViewportId = std::numeric_limits<uint32_t>::max();
+        uint32_t m_RuntimeViewportId = s_InvalidViewportId; ///< Viewport currently bound to the runtime camera.
         ECS::Entity m_ViewportCamera = std::numeric_limits<ECS::Entity>::max();
 
         Buffers m_Buffers;
