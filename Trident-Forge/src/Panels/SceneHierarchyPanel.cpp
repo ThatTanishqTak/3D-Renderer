@@ -5,8 +5,6 @@
 #include "ECS/Components/TagComponent.h"
 #include "ECS/Registry.h"
 
-#include <imgui.h>
-
 #include <algorithm>
 #include <cstdint>
 #include <string>
@@ -98,4 +96,10 @@ void SceneHierarchyPanel::DrawEntityNode(Trident::ECS::Entity entity, Trident::E
     }
 
     // Future improvement: add context menus here for creating and deleting entities.
+}
+
+void SceneHierarchyPanel::SetContextMenuHandler(std::function<void(const ImVec2&, const ImVec2&)> contextMenuHandler)
+{
+    // Cache the handler so external systems can attach context menus to the runtime viewport image.
+    m_OnSceneHierarchyContextMenu = std::move(contextMenuHandler);
 }

@@ -59,7 +59,7 @@ private:
     // Unity-like helpers
     void FrameSelection();
     static glm::vec3 ForwardFromYawPitch(float yawDeg, float pitchDeg);
-    void HandleViewportContextMenu(const ImVec2& min, const ImVec2& max);
+    void HandleSceneHierarchyContextMenu(const ImVec2& min, const ImVec2& max);
     void CreatePrimitiveEntity(PrimitiveType type);
     std::string MakeUniqueName(const std::string& baseName) const;
     void RefreshRuntimeCameraBinding();

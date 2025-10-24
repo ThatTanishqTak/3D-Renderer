@@ -3,6 +3,9 @@
 #include "ECS/Entity.h"
 
 #include <limits>
+#include <functional>
+
+#include <imgui.h>
 
 namespace Trident
 {
@@ -29,10 +32,16 @@ public:
     // can surface component data without duplicating hierarchy logic.
     Trident::ECS::Entity GetSelectedEntity() const;
 
+    void SetContextMenuHandler(std::function<void(const ImVec2&, const ImVec2&)> contextMenuHandler);
+
 private:
     // Helper that renders a single entity row, including tag display and selection logic.
     void DrawEntityNode(Trident::ECS::Entity entity, Trident::ECS::Registry& registry);
 
+private:
     // Sentinel value indicating that no entity is currently selected.
     Trident::ECS::Entity m_SelectedEntity = std::numeric_limits<Trident::ECS::Entity>::max();
+    // Callback surfaced immediately after drawing so overlays can register context menus.
+    std::function<void(const ImVec2&, const ImVec2&)> m_OnSceneHierarchyContextMenu{};
+
 };

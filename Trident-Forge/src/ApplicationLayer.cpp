@@ -48,14 +48,9 @@ void ApplicationLayer::Initialize()
         });
 
     // Bridge viewport rendering back to the application layer so the contextual menu can react to image interactions.
-    m_ViewportPanel.SetContextMenuHandler([this](const ImVec2& min, const ImVec2& max)
+    m_SceneHierarchyPanel.SetContextMenuHandler([this](const ImVec2& min, const ImVec2& max)
         {
-            HandleViewportContextMenu(min, max);
-        });
-    // Share the same hook with the runtime viewport so future gameplay overlays can extend the context menu consistently.
-    m_GameViewportPanel.SetContextMenuHandler([this](const ImVec2& min, const ImVec2& max)
-        {
-            HandleViewportContextMenu(min, max);
+            HandleSceneHierarchyContextMenu(min, max);
         });
 
     // Seed the editor camera with a comfortable default orbit so the scene appears immediately.
@@ -176,13 +171,13 @@ void ApplicationLayer::RefreshRuntimeCameraBinding()
     // TODO: Extend this binding to honour explicit user selection and pause/play states when the runtime gains controls.
 }
 
-void ApplicationLayer::HandleViewportContextMenu(const ImVec2& min, const ImVec2& max)
+void ApplicationLayer::HandleSceneHierarchyContextMenu(const ImVec2& min, const ImVec2& max)
 {
     // The viewport image is hosted within an ImGui window, so we verify the cursor lies inside the draw rectangle before
     // responding to mouse releases. This keeps the context menu from appearing while resizing docks or dragging overlays.
     const bool l_IsHovered = ImGui::IsMouseHoveringRect(min, max, true);
     Trident::Input& l_Input = Trident::Input::Get();
-    const bool l_IsMousePressed = l_Input.IsMouseButtonPressed(Trident::Mouse::ButtonRight);
+    const bool l_IsMousePressed = l_Input.WasMouseButtonReleased(Trident::Mouse::ButtonRight);
 
     // Block popups when the editor is actively dragging a widget or resizing splitters to avoid double consumption of inputs.
     const bool l_IsDragging = l_Input.IsMouseButtonDown(Trident::Mouse::ButtonLeft) || l_Input.IsMouseButtonDown(Trident::Mouse::ButtonRight) ||
@@ -191,10 +186,10 @@ void ApplicationLayer::HandleViewportContextMenu(const ImVec2& min, const ImVec2
 
     if (l_IsHovered && l_IsMousePressed && !l_IsDragging && !l_IsManipulatingItem)
     {
-        ImGui::OpenPopup("ViewportContextMenu");
+        ImGui::OpenPopup("HierarchyContextMenu");
     }
 
-    if (ImGui::BeginPopup("ViewportContextMenu"))
+    if (ImGui::BeginPopup("HierarchyContextMenu"))
     {
         // Provide a dedicated submenu so the primitive list scales cleanly as future shapes are added.
         if (ImGui::BeginMenu("Add Primitive"))
