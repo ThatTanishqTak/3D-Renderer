@@ -28,7 +28,11 @@ public:
     void Update();
     // Draw the entity list inside an ImGui window and respond to user selection.
     void Render();
-    // Expose the currently focused entity so companion panels (e.g. the inspector)
+
+    // Allow the application layer to configure actions used by the hierarchy's context menu.
+    void SetContextMenuActions(std::function<void()> createEmptyEntityAction, std::function<void()> createCubeAction, std::function<void()> createSphereAction,
+        std::function<void()> createQuadAction);
+
     // can surface component data without duplicating hierarchy logic.
     Trident::ECS::Entity GetSelectedEntity() const;
 
@@ -39,4 +43,10 @@ private:
 private:
     // Sentinel value indicating that no entity is currently selected.
     Trident::ECS::Entity m_SelectedEntity = std::numeric_limits<Trident::ECS::Entity>::max();
+
+    // Editor-provided actions that allow the hierarchy to spawn new entities from its context menu.
+    std::function<void()> m_CreateEmptyEntityAction;
+    std::function<void()> m_CreateCubePrimitiveAction;
+    std::function<void()> m_CreateSpherePrimitiveAction;
+    std::function<void()> m_CreateQuadPrimitiveAction;
 };

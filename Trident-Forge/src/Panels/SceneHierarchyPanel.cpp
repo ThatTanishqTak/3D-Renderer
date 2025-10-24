@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <string>
 #include <vector>
+#include <utility>
 
 void SceneHierarchyPanel::Update()
 {
@@ -39,6 +40,44 @@ void SceneHierarchyPanel::Render()
     Trident::ECS::Registry& l_Registry = Trident::Startup::GetRegistry();
     const std::vector<Trident::ECS::Entity>& l_Entities = l_Registry.GetEntities();
 
+    // Track focus/hover state so the hierarchy can offer a contextual creation menu when right-clicked.
+    const bool l_WindowFocused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
+    const bool l_WindowHovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows);
+    if (l_WindowFocused && l_WindowHovered && ImGui::IsMouseClicked(Trident::Mouse::ButtonRight))
+    {
+        ImGui::OpenPopup("SceneHierarchyContextMenu");
+    }
+
+    if (ImGui::BeginPopup("SceneHierarchyContextMenu"))
+    {
+        // Offer entity creation helpers when the owning application supplied callbacks.
+        if (ImGui::MenuItem("Create Empty Entity", nullptr, false, static_cast<bool>(m_CreateEmptyEntityAction)))
+        {
+            m_CreateEmptyEntityAction();
+        }
+
+        const bool l_HasAnyPrimitiveCreator = static_cast<bool>(m_CreateCubePrimitiveAction) || static_cast<bool>(m_CreateSpherePrimitiveAction) ||
+            static_cast<bool>(m_CreateQuadPrimitiveAction);
+        if (ImGui::BeginMenu("Create Primitive", l_HasAnyPrimitiveCreator))
+        {
+            if (ImGui::MenuItem("Cube", nullptr, false, static_cast<bool>(m_CreateCubePrimitiveAction)))
+            {
+                m_CreateCubePrimitiveAction();
+            }
+            if (ImGui::MenuItem("Sphere", nullptr, false, static_cast<bool>(m_CreateSpherePrimitiveAction)))
+            {
+                m_CreateSpherePrimitiveAction();
+            }
+            if (ImGui::MenuItem("Quad", nullptr, false, static_cast<bool>(m_CreateQuadPrimitiveAction)))
+            {
+                m_CreateQuadPrimitiveAction();
+            }
+            ImGui::EndMenu();
+        }
+
+        ImGui::EndPopup();
+    }
+
     for (Trident::ECS::Entity it_Entity : l_Entities)
     {
         DrawEntityNode(it_Entity, l_Registry);
@@ -61,6 +100,16 @@ void SceneHierarchyPanel::Render()
 Trident::ECS::Entity SceneHierarchyPanel::GetSelectedEntity() const
 {
     return m_SelectedEntity;
+}
+
+void SceneHierarchyPanel::SetContextMenuActions(std::function<void()> createEmptyEntityAction, std::function<void()> createCubeAction, std::function<void()> createSphereAction,
+    std::function<void()> createQuadAction)
+{
+    // Cache the editor-provided callbacks so the context menu can invoke them later.
+    m_CreateEmptyEntityAction = std::move(createEmptyEntityAction);
+    m_CreateCubePrimitiveAction = std::move(createCubeAction);
+    m_CreateSpherePrimitiveAction = std::move(createSphereAction);
+    m_CreateQuadPrimitiveAction = std::move(createQuadAction);
 }
 
 void SceneHierarchyPanel::DrawEntityNode(Trident::ECS::Entity entity, Trident::ECS::Registry& registry)
