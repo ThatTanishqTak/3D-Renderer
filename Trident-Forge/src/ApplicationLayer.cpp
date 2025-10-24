@@ -48,7 +48,8 @@ void ApplicationLayer::Initialize()
         });
 
     // Wire the hierarchy context menu into the layer so right-click creation routes through our helpers.
-    m_SceneHierarchyPanel.SetContextMenuActions(
+    m_SceneHierarchyPanel.SetContextMenuActions
+    (
         [this]()
         {
             // Allow artists to spawn an empty entity directly from the hierarchy context menu.
@@ -68,7 +69,8 @@ void ApplicationLayer::Initialize()
         {
             // Spawn a quad primitive so flat geometry is quickly accessible.
             CreatePrimitiveEntity(PrimitiveType::Quad);
-        });
+        }
+    );
 
     // Seed the editor camera with a comfortable default orbit so the scene appears immediately.
     m_EditorCamera.SetPosition({ 0.0f, 3.0f, 8.0f });
@@ -135,8 +137,6 @@ void ApplicationLayer::Render()
     RefreshRuntimeCameraBinding();
     m_GameViewportPanel.SetRuntimeCameraPresence(m_HasRuntimeCamera);
     m_GameViewportPanel.Render();
-    // Default back to the editor camera so ancillary panels (gizmos, thumbnails) sample predictable state.
-    Trident::RenderCommand::SetRuntimeCameraActive(false);
     m_ContentBrowserPanel.Render();
     m_SceneHierarchyPanel.Render();
     m_InspectorPanel.Render();
