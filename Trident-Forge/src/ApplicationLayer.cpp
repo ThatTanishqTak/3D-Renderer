@@ -182,14 +182,14 @@ void ApplicationLayer::HandleViewportContextMenu(const ImVec2& min, const ImVec2
     // responding to mouse releases. This keeps the context menu from appearing while resizing docks or dragging overlays.
     const bool l_IsHovered = ImGui::IsMouseHoveringRect(min, max, true);
     Trident::Input& l_Input = Trident::Input::Get();
-    const bool l_IsMouseReleased = l_Input.WasMouseButtonReleased(Trident::Mouse::ButtonRight);
+    const bool l_IsMousePressed = l_Input.IsMouseButtonPressed(Trident::Mouse::ButtonRight);
 
     // Block popups when the editor is actively dragging a widget or resizing splitters to avoid double consumption of inputs.
     const bool l_IsDragging = l_Input.IsMouseButtonDown(Trident::Mouse::ButtonLeft) || l_Input.IsMouseButtonDown(Trident::Mouse::ButtonRight) ||
         l_Input.IsMouseButtonDown(Trident::Mouse::ButtonMiddle);
     const bool l_IsManipulatingItem = ImGui::IsAnyItemActive();
 
-    if (l_IsHovered && l_IsMouseReleased && !l_IsDragging && !l_IsManipulatingItem)
+    if (l_IsHovered && l_IsMousePressed && !l_IsDragging && !l_IsManipulatingItem)
     {
         ImGui::OpenPopup("ViewportContextMenu");
     }
@@ -431,7 +431,180 @@ bool ApplicationLayer::ImportDroppedAssets(const std::vector<std::string>& dropp
 
 void ApplicationLayer::UpdateEditorCamera(float deltaTime)
 {
+    // Keep Trident's input system synchronised with ImGui so mouse/keyboard queries honour UI captures while still
+    // permitting viewport interaction whenever the scene window is hovered or focused.
+    Trident::Input& l_Input = Trident::Input::Get();
+    ImGuiIO& l_ImGuiIO = ImGui::GetIO();
+    const bool l_ViewportHovered = m_ViewportPanel.IsHovered();
+    const bool l_ViewportFocused = m_ViewportPanel.IsFocused();
+    const bool l_BlockMouse = l_ImGuiIO.WantCaptureMouse && !l_ViewportHovered;
+    const bool l_BlockKeyboard = l_ImGuiIO.WantCaptureKeyboard && !l_ViewportFocused;
+    l_Input.SetUICapture(l_BlockMouse, l_BlockKeyboard);
 
+    // Abort navigation when the viewport is not the active recipient of input, but continue to interpolate toward the
+    // latest target to keep smoothing responsive after the mouse leaves the window.
+    const bool l_CanProcessMouse = l_ViewportHovered && !l_BlockMouse;
+    const bool l_CanProcessKeyboard = l_ViewportFocused && !l_BlockKeyboard;
+
+    if (l_CanProcessKeyboard && l_Input.IsKeyPressed(Trident::Key::F))
+    {
+        // Provide a Unity-like focus shortcut so artists can frame the current selection quickly.
+        FrameSelection();
+    }
+
+    glm::vec2 l_MouseDelta = l_CanProcessMouse ? l_Input.GetMouseDelta() : glm::vec2{ 0.0f, 0.0f };
+    const glm::vec2 l_ScrollDelta = l_CanProcessMouse ? l_Input.GetScrollDelta() : glm::vec2{ 0.0f, 0.0f };
+
+    const bool l_IsAltDown = l_Input.IsKeyDown(Trident::Key::LeftAlt) || l_Input.IsKeyDown(Trident::Key::RightAlt);
+    const bool l_IsShiftDown = l_Input.IsKeyDown(Trident::Key::LeftShift) || l_Input.IsKeyDown(Trident::Key::RightShift);
+    const bool l_IsLeftMouseDown = l_Input.IsMouseButtonDown(Trident::Mouse::ButtonLeft);
+    const bool l_IsRightMouseDown = l_Input.IsMouseButtonDown(Trident::Mouse::ButtonRight);
+    const bool l_IsMiddleMouseDown = l_Input.IsMouseButtonDown(Trident::Mouse::ButtonMiddle);
+
+    // Determine which navigation mode should run this frame. Alt + LMB orbits, MMB pans, Alt + RMB dollies, and RMB
+    // without Alt enables fly navigation with WASD style controls.
+    const bool l_ShouldOrbit = l_CanProcessMouse && l_IsAltDown && l_IsLeftMouseDown;
+    const bool l_ShouldPan = l_CanProcessMouse && l_IsMiddleMouseDown && !l_ShouldOrbit;
+    const bool l_ShouldDolly = l_CanProcessMouse && l_IsAltDown && l_IsRightMouseDown;
+    const bool l_IsFlyMode = l_CanProcessMouse && l_IsRightMouseDown && !l_IsAltDown;
+    const bool l_ShouldFlyRotate = l_IsFlyMode;
+    const bool l_IsRotating = l_ShouldOrbit || l_ShouldFlyRotate;
+
+    // Reset the first frame of a drag so accumulated deltas do not cause a jump when buttons are pressed mid-frame.
+    if (l_IsRotating)
+    {
+        if (m_ResetRotateOrbitReference)
+        {
+            l_MouseDelta = glm::vec2{ 0.0f, 0.0f };
+            m_ResetRotateOrbitReference = false;
+        }
+    }
+    else
+    {
+        m_ResetRotateOrbitReference = true;
+    }
+    m_IsRotateOrbitActive = l_ShouldOrbit;
+
+    // Apply pitch/yaw adjustments using mouse movement for orbit and fly modes, clamping the pitch to avoid flipping.
+    if (l_IsRotating)
+    {
+        m_TargetYawDegrees += l_MouseDelta.x * m_MouseRotationSpeed;
+        m_TargetPitchDegrees -= l_MouseDelta.y * m_MouseRotationSpeed;
+        m_TargetPitchDegrees = std::clamp(m_TargetPitchDegrees, -89.0f, 89.0f);
+    }
+
+    // Derive the camera basis vectors from the updated target orientation so translation modes move relative to view.
+    const glm::quat l_TargetOrientation = glm::quat(glm::radians(glm::vec3{ m_TargetPitchDegrees, m_TargetYawDegrees, 0.0f }));
+    glm::vec3 l_Forward = l_TargetOrientation * glm::vec3{ 0.0f, 0.0f, -1.0f };
+    glm::vec3 l_Right = l_TargetOrientation * glm::vec3{ 1.0f, 0.0f, 0.0f };
+    glm::vec3 l_Up = l_TargetOrientation * glm::vec3{ 0.0f, 1.0f, 0.0f };
+
+    if (glm::length2(l_Forward) <= std::numeric_limits<float>::epsilon())
+    {
+        l_Forward = glm::vec3{ 0.0f, 0.0f, -1.0f };
+    }
+    if (glm::length2(l_Right) <= std::numeric_limits<float>::epsilon())
+    {
+        l_Right = glm::vec3{ 1.0f, 0.0f, 0.0f };
+    }
+    if (glm::length2(l_Up) <= std::numeric_limits<float>::epsilon())
+    {
+        l_Up = glm::vec3{ 0.0f, 1.0f, 0.0f };
+    }
+
+    l_Forward = glm::normalize(l_Forward);
+    l_Right = glm::normalize(l_Right);
+    l_Up = glm::normalize(l_Up);
+
+    if (l_ShouldOrbit)
+    {
+        // Maintain orbit distance around the stored pivot whenever Alt + LMB drags occur.
+        m_TargetPosition = m_CameraPivot - l_Forward * m_OrbitDistance;
+    }
+
+    if (l_ShouldPan)
+    {
+        // Translate both the camera and pivot laterally so orbiting continues around the same relative point.
+        const float l_Distance = std::max(m_OrbitDistance, m_MinOrbitDistance);
+        const float l_PanSpeed = l_Distance * m_PanSpeedFactor * 0.0015f;
+        const glm::vec3 l_PanOffset = (-l_MouseDelta.x * l_Right + l_MouseDelta.y * l_Up) * l_PanSpeed;
+        m_TargetPosition += l_PanOffset;
+        m_CameraPivot += l_PanOffset;
+    }
+
+    if (l_ShouldDolly)
+    {
+        // Alt + RMB dolly adjusts the orbit radius, clamping to avoid inverting around the pivot.
+        m_OrbitDistance += -l_MouseDelta.y * m_DollySpeedFactor;
+        m_OrbitDistance = std::max(m_OrbitDistance, m_MinOrbitDistance);
+        m_TargetPosition = m_CameraPivot - l_Forward * m_OrbitDistance;
+    }
+
+    if (l_CanProcessMouse && l_ScrollDelta.y != 0.0f)
+    {
+        // Scroll wheel zooms along the forward axis for quick framing adjustments.
+        m_OrbitDistance -= l_ScrollDelta.y * m_MouseZoomSpeed;
+        m_OrbitDistance = std::max(m_OrbitDistance, m_MinOrbitDistance);
+        m_TargetPosition = m_CameraPivot - l_Forward * m_OrbitDistance;
+    }
+
+    if (l_IsFlyMode && l_CanProcessKeyboard)
+    {
+        // RMB + WASD style fly camera that respects boost and vertical translation.
+        glm::vec3 l_MoveDirection{ 0.0f, 0.0f, 0.0f };
+        if (l_Input.IsKeyDown(Trident::Key::W))
+        {
+            l_MoveDirection += l_Forward;
+        }
+        if (l_Input.IsKeyDown(Trident::Key::S))
+        {
+            l_MoveDirection -= l_Forward;
+        }
+        if (l_Input.IsKeyDown(Trident::Key::D))
+        {
+            l_MoveDirection += l_Right;
+        }
+        if (l_Input.IsKeyDown(Trident::Key::A))
+        {
+            l_MoveDirection -= l_Right;
+        }
+        if (l_Input.IsKeyDown(Trident::Key::E) || l_Input.IsKeyDown(Trident::Key::Space))
+        {
+            l_MoveDirection += l_Up;
+        }
+        if (l_Input.IsKeyDown(Trident::Key::Q) || l_Input.IsKeyDown(Trident::Key::LeftControl))
+        {
+            l_MoveDirection -= l_Up;
+        }
+
+        if (glm::length2(l_MoveDirection) > std::numeric_limits<float>::epsilon())
+        {
+            l_MoveDirection = glm::normalize(l_MoveDirection);
+            float l_MoveSpeed = m_CameraMoveSpeed;
+            if (l_IsShiftDown)
+            {
+                l_MoveSpeed *= m_CameraBoostMultiplier;
+            }
+
+            m_TargetPosition += l_MoveDirection * l_MoveSpeed * deltaTime;
+            m_CameraPivot = m_TargetPosition + l_Forward * m_OrbitDistance;
+        }
+    }
+
+    // Re-evaluate orbit distance after all translations so scroll/orbit remain in sync with the new position.
+    m_OrbitDistance = std::max(glm::length(m_CameraPivot - m_TargetPosition), m_MinOrbitDistance);
+
+    // Smoothly interpolate the actual camera toward the desired state to avoid abrupt jumps when switching modes.
+    const glm::vec3 l_CurrentPosition = m_EditorCamera.GetPosition();
+    const float l_PosAlpha = (m_PosSmoothing <= 0.0f) ? 1.0f : std::clamp(1.0f - std::exp(-m_PosSmoothing * deltaTime), 0.0f, 1.0f);
+    const glm::vec3 l_NewPosition = l_CurrentPosition + (m_TargetPosition - l_CurrentPosition) * l_PosAlpha;
+    m_EditorCamera.SetPosition(l_NewPosition);
+
+    const glm::vec3 l_CurrentRotation = m_EditorCamera.GetRotation();
+    const float l_RotAlpha = (m_RotSmoothing <= 0.0f) ? 1.0f : std::clamp(1.0f - std::exp(-m_RotSmoothing * deltaTime), 0.0f, 1.0f);
+    const float l_NewPitch = std::lerp(l_CurrentRotation.x, m_TargetPitchDegrees, l_RotAlpha);
+    const float l_NewYaw = std::lerp(l_CurrentRotation.y, m_TargetYawDegrees, l_RotAlpha);
+    m_EditorCamera.SetRotation({ l_NewPitch, l_NewYaw, 0.0f });
 }
 
 void ApplicationLayer::FrameSelection()
