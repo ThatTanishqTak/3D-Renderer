@@ -47,12 +47,6 @@ void ApplicationLayer::Initialize()
             ImportDroppedAssets(droppedPaths);
         });
 
-    // Bridge viewport rendering back to the application layer so the contextual menu can react to image interactions.
-    m_SceneHierarchyPanel.SetContextMenuHandler([this](const ImVec2& min, const ImVec2& max)
-        {
-            HandleSceneHierarchyContextMenu(min, max);
-        });
-
     // Seed the editor camera with a comfortable default orbit so the scene appears immediately.
     m_EditorCamera.SetPosition({ 0.0f, 3.0f, 8.0f });
     m_EditorYawDegrees = 0.0f;
@@ -173,7 +167,52 @@ void ApplicationLayer::RefreshRuntimeCameraBinding()
 
 void ApplicationLayer::HandleSceneHierarchyContextMenu(const ImVec2& min, const ImVec2& max)
 {
+    // Pull the shared input manager so context menu activation respects the editor's capture rules.
+    Trident::Input& l_Input = Trident::Input::Get();
+    if (!l_Input.HasMousePosition())
+    {
+        // Without a valid cursor position there is no reliable way to perform hit-testing on the hierarchy window.
+        return;
+    }
 
+    const glm::vec2 l_MousePosition = l_Input.GetMousePosition();
+    const bool l_MouseInsideHierarchy = (l_MousePosition.x >= min.x) && (l_MousePosition.x <= max.x) &&
+        (l_MousePosition.y >= min.y) && (l_MousePosition.y <= max.y);
+    const bool l_WindowFocused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
+
+    // When the hierarchy owns focus and receives a right-click, surface the contextual options popup.
+    if (l_WindowFocused && l_MouseInsideHierarchy && l_Input.WasMouseButtonPressed(Trident::Mouse::ButtonRight))
+    {
+        ImGui::OpenPopup("SceneHierarchyContextMenu");
+    }
+
+    // Author the popup entries that allow quick creation of common entity types directly from the hierarchy.
+    if (ImGui::BeginPopup("SceneHierarchyContextMenu"))
+    {
+        if (ImGui::MenuItem("Create Empty Entity"))
+        {
+            CreateEmptyEntity();
+        }
+
+        if (ImGui::BeginMenu("Create Primitive"))
+        {
+            if (ImGui::MenuItem("Cube"))
+            {
+                CreatePrimitiveEntity(PrimitiveType::Cube);
+            }
+            if (ImGui::MenuItem("Sphere"))
+            {
+                CreatePrimitiveEntity(PrimitiveType::Sphere);
+            }
+            if (ImGui::MenuItem("Quad"))
+            {
+                CreatePrimitiveEntity(PrimitiveType::Quad);
+            }
+            ImGui::EndMenu();
+        }
+
+        ImGui::EndPopup();
+    }
 }
 
 void ApplicationLayer::CreateEmptyEntity()
