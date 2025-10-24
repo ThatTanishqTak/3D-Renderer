@@ -44,6 +44,15 @@ void SceneHierarchyPanel::Render()
         DrawEntityNode(it_Entity, l_Registry);
     }
 
+    if (m_OnSceneHierarchyContextMenu)
+    {
+        // Forward the window bounds so the application layer can surface hierarchy context menus.
+        const ImVec2 l_WindowMin = ImGui::GetWindowPos();
+        const ImVec2 l_WindowSize = ImGui::GetWindowSize();
+        const ImVec2 l_WindowMax{ l_WindowMin.x + l_WindowSize.x, l_WindowMin.y + l_WindowSize.y };
+        m_OnSceneHierarchyContextMenu(l_WindowMin, l_WindowMax);
+    }
+
     // Allow deselection by clicking an empty portion of the window.
     // Use engine mouse codes so hierarchy deselection honours the shared input layer.
     if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(Trident::Mouse::ButtonLeft))

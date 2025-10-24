@@ -1537,7 +1537,7 @@ namespace Trident
         if (!l_CubemapData.IsValid())
         {
             TR_CORE_WARN("Falling back to a solid colour cubemap because no skybox textures were found on disk");
-            l_CubemapData = Loader::CubemapTextureData::CreateSolidColor(0xffffffffu);
+            l_CubemapData = Loader::CubemapTextureData::CreateSolidColor(0x808080);
         }
         else if (!l_CubemapSource.empty())
         {

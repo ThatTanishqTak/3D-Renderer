@@ -22,24 +22,24 @@ class ApplicationLayer : public Trident::Layer
 {
 public:
     /**
-     * Prepare application-specific resources (scenes, editor state, etc.).
+     Prepare application-specific resources (scenes, editor state, etc.).
      */
     void Initialize() override;
     /**
-     * Release resources acquired during Initialize().
+     Release resources acquired during Initialize().
      */
     void Shutdown() override;
 
     /**
-     * Execute per-frame simulation such as tools or gameplay logic.
+     Execute per-frame simulation such as tools or gameplay logic.
      */
     void Update() override;
     /**
-     * Submit draw calls and UI for the current frame.
+     Submit draw calls and UI for the current frame.
      */
     void Render() override;
     /**
-     * React to engine events, including file drops routed from the operating system.
+     React to engine events, including file drops routed from the operating system.
      */
     void OnEvent(Trident::Events& event) override;
 
@@ -60,6 +60,7 @@ private:
     void FrameSelection();
     static glm::vec3 ForwardFromYawPitch(float yawDeg, float pitchDeg);
     void HandleSceneHierarchyContextMenu(const ImVec2& min, const ImVec2& max);
+    void CreateEmptyEntity();
     void CreatePrimitiveEntity(PrimitiveType type);
     std::string MakeUniqueName(const std::string& baseName) const;
     void RefreshRuntimeCameraBinding();

@@ -36,8 +36,13 @@ public:
 private:
     // Helper that draws a read-only tag field when present on the entity.
     void DrawTagComponent(Trident::ECS::Registry& registry);
-    // Helper that exposes transform controls for translation, rotation, and scale.
+    // Helpers that expose optional component data and support removal.
     void DrawTransformComponent(Trident::ECS::Registry& registry);
+    void DrawCameraComponent(Trident::ECS::Registry& registry);
+    void DrawLightComponent(Trident::ECS::Registry& registry);
+    void DrawMeshComponent(Trident::ECS::Registry& registry);
+    void DrawSpriteComponent(Trident::ECS::Registry& registry);
+    void DrawScriptComponent(Trident::ECS::Registry& registry);
     // Helper that renders the add component popup and handles the search workflow.
     void DrawAddComponentMenu(Trident::ECS::Registry& registry);
     // Helper that runs a case-insensitive contains check against the search buffer.

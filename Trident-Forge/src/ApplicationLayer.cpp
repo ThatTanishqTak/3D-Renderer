@@ -191,6 +191,14 @@ void ApplicationLayer::HandleSceneHierarchyContextMenu(const ImVec2& min, const 
 
     if (ImGui::BeginPopup("HierarchyContextMenu"))
     {
+        if (ImGui::MenuItem("Add Empty Entity"))
+        {
+            // Spawn an authoring placeholder that carries the minimum viable components.
+            CreateEmptyEntity();
+        }
+
+        ImGui::Separator();
+
         // Provide a dedicated submenu so the primitive list scales cleanly as future shapes are added.
         if (ImGui::BeginMenu("Add Primitive"))
         {
@@ -212,6 +220,27 @@ void ApplicationLayer::HandleSceneHierarchyContextMenu(const ImVec2& min, const 
         // TODO: Extend the context menu with lighting helpers, cameras, and custom authoring tools.
         ImGui::EndPopup();
     }
+}
+
+void ApplicationLayer::CreateEmptyEntity()
+{
+    // Resolve the registry so the new entity integrates with the hierarchy and inspector immediately.
+    Trident::ECS::Registry& l_Registry = Trident::Startup::GetRegistry();
+
+    Trident::ECS::Entity l_NewEntity = l_Registry.CreateEntity();
+
+    // Authoring defaults keep the entity centred at the origin with identity rotation and unit scale.
+    Trident::Transform l_DefaultTransform{};
+    l_DefaultTransform.Position = glm::vec3{ 0.0f, 0.0f, 0.0f };
+    l_DefaultTransform.Rotation = glm::vec3{ 0.0f, 0.0f, 0.0f };
+    l_DefaultTransform.Scale = glm::vec3{ 1.0f, 1.0f, 1.0f };
+    l_Registry.AddComponent<Trident::Transform>(l_NewEntity, l_DefaultTransform);
+
+    // Assign a readable label so the hierarchy stays organised even when multiple empties are created.
+    Trident::TagComponent& l_TagComponent = l_Registry.AddComponent<Trident::TagComponent>(l_NewEntity);
+    l_TagComponent.m_Tag = MakeUniqueName("Empty Entity");
+
+    // TODO: Expose a selection setter on the hierarchy so new entities can auto-focus after creation.
 }
 
 void ApplicationLayer::CreatePrimitiveEntity(PrimitiveType type)
