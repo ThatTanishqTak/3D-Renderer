@@ -47,6 +47,29 @@ void ApplicationLayer::Initialize()
             ImportDroppedAssets(droppedPaths);
         });
 
+    // Wire the hierarchy context menu into the layer so right-click creation routes through our helpers.
+    m_SceneHierarchyPanel.SetContextMenuActions(
+        [this]()
+        {
+            // Allow artists to spawn an empty entity directly from the hierarchy context menu.
+            CreateEmptyEntity();
+        },
+        [this]()
+        {
+            // Spawn a cube primitive near the camera when requested from the context menu.
+            CreatePrimitiveEntity(PrimitiveType::Cube);
+        },
+        [this]()
+        {
+            // Spawn a sphere primitive via the hierarchy context menu callback.
+            CreatePrimitiveEntity(PrimitiveType::Sphere);
+        },
+        [this]()
+        {
+            // Spawn a quad primitive so flat geometry is quickly accessible.
+            CreatePrimitiveEntity(PrimitiveType::Quad);
+        });
+
     // Seed the editor camera with a comfortable default orbit so the scene appears immediately.
     m_EditorCamera.SetPosition({ 0.0f, 3.0f, 8.0f });
     m_EditorYawDegrees = 0.0f;
