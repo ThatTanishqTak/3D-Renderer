@@ -80,8 +80,8 @@ void GameViewportPanel::Render()
 
     // Only drive the renderer with the runtime camera while the window is actively interacted with.
     // This avoids stealing control from the editor viewport once the new runtime panel is open.
-    const bool l_ShouldUseRuntimeCamera = (m_IsFocused || m_IsHovered);
-    Trident::RenderCommand::SetRuntimeCameraActive(l_ShouldUseRuntimeCamera);
+    // TODO: Evaluate a dual-render path so editor and runtime previews can draw concurrently without flipping state.
+    Trident::RenderCommand::SetRuntimeCameraActive(true);
 
     const ImVec2 l_ContentRegion = ImGui::GetContentRegionAvail();
     const glm::vec2 l_NewViewportSize{ l_ContentRegion.x, l_ContentRegion.y };
