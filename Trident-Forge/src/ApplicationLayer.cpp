@@ -173,53 +173,7 @@ void ApplicationLayer::RefreshRuntimeCameraBinding()
 
 void ApplicationLayer::HandleSceneHierarchyContextMenu(const ImVec2& min, const ImVec2& max)
 {
-    // The viewport image is hosted within an ImGui window, so we verify the cursor lies inside the draw rectangle before
-    // responding to mouse releases. This keeps the context menu from appearing while resizing docks or dragging overlays.
-    const bool l_IsHovered = ImGui::IsMouseHoveringRect(min, max, true);
-    Trident::Input& l_Input = Trident::Input::Get();
-    const bool l_IsMousePressed = l_Input.WasMouseButtonReleased(Trident::Mouse::ButtonRight);
 
-    // Block popups when the editor is actively dragging a widget or resizing splitters to avoid double consumption of inputs.
-    const bool l_IsDragging = l_Input.IsMouseButtonDown(Trident::Mouse::ButtonLeft) || l_Input.IsMouseButtonDown(Trident::Mouse::ButtonRight) ||
-        l_Input.IsMouseButtonDown(Trident::Mouse::ButtonMiddle);
-    const bool l_IsManipulatingItem = ImGui::IsAnyItemActive();
-
-    if (l_IsHovered && l_IsMousePressed && !l_IsDragging && !l_IsManipulatingItem)
-    {
-        ImGui::OpenPopup("HierarchyContextMenu");
-    }
-
-    if (ImGui::BeginPopup("HierarchyContextMenu"))
-    {
-        if (ImGui::MenuItem("Add Empty Entity"))
-        {
-            // Spawn an authoring placeholder that carries the minimum viable components.
-            CreateEmptyEntity();
-        }
-
-        ImGui::Separator();
-
-        // Provide a dedicated submenu so the primitive list scales cleanly as future shapes are added.
-        if (ImGui::BeginMenu("Add Primitive"))
-        {
-            if (ImGui::MenuItem("Cube"))
-            {
-                CreatePrimitiveEntity(PrimitiveType::Cube);
-            }
-            if (ImGui::MenuItem("Sphere"))
-            {
-                CreatePrimitiveEntity(PrimitiveType::Sphere);
-            }
-            if (ImGui::MenuItem("Quad"))
-            {
-                CreatePrimitiveEntity(PrimitiveType::Quad);
-            }
-            ImGui::EndMenu();
-        }
-
-        // TODO: Extend the context menu with lighting helpers, cameras, and custom authoring tools.
-        ImGui::EndPopup();
-    }
 }
 
 void ApplicationLayer::CreateEmptyEntity()
