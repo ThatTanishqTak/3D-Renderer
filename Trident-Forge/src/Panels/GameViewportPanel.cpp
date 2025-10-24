@@ -34,7 +34,7 @@ void GameViewportPanel::Render()
     }
 
     bool l_WindowOpen = m_IsWindowOpen;
-    const bool l_ShouldRender = ImGui::Begin("Game", &l_WindowOpen);
+    const bool l_ShouldRender = ImGui::Begin("Game");
     m_IsWindowOpen = l_WindowOpen;
 
     if (!m_IsWindowOpen)
@@ -74,12 +74,14 @@ void GameViewportPanel::Render()
         return;
     }
 
-    // While the panel is visible we enable the runtime camera so gameplay cameras drive the renderer.
-    Trident::RenderCommand::SetRuntimeCameraActive(true);
-
     // Record hover/focus state so gameplay shortcuts can respect editor UI conventions.
     m_IsFocused = ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows);
     m_IsHovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows);
+
+    // Only drive the renderer with the runtime camera while the window is actively interacted with.
+    // This avoids stealing control from the editor viewport once the new runtime panel is open.
+    const bool l_ShouldUseRuntimeCamera = (m_IsFocused || m_IsHovered);
+    Trident::RenderCommand::SetRuntimeCameraActive(l_ShouldUseRuntimeCamera);
 
     const ImVec2 l_ContentRegion = ImGui::GetContentRegionAvail();
     const glm::vec2 l_NewViewportSize{ l_ContentRegion.x, l_ContentRegion.y };
