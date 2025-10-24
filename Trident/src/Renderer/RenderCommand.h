@@ -15,7 +15,7 @@ namespace Trident
         static void RecreateSwapchain();
 
         static void SetTransform(const Transform& props);
-        static void SetViewport(const ViewportInfo& info);
+        static void SetViewport(uint32_t viewportId, const ViewportInfo& info);
         // Allow tooling to update the renderer's selected entity so gizmos operate on the expected transform.
         static void SetSelectedEntity(ECS::Entity entity);
         // Mirror Renderer::SetClearColor so editor widgets can adjust the background tone live.
@@ -23,13 +23,13 @@ namespace Trident
         static void AppendMeshes(std::vector<Geometry::Mesh> meshes, std::vector<Geometry::Material> materials);
         static void SetEditorCamera(Camera* camera);
         static void SetRuntimeCamera(Camera* camera);
-        static void SetRuntimeCameraActive(bool active);
+        static void SetViewportRuntimeCameraDriven(uint32_t viewportId, bool active);
 
         static Transform GetTransform();
         static ViewportInfo GetViewport();
-        static VkDescriptorSet GetViewportTexture();
-        static glm::mat4 GetViewportViewMatrix();
-        static glm::mat4 GetViewportProjectionMatrix();
+        static VkDescriptorSet GetViewportTexture(uint32_t viewportId);
+        static glm::mat4 GetViewportViewMatrix(uint32_t viewportId);
+        static glm::mat4 GetViewportProjectionMatrix(uint32_t viewportId);
         static size_t GetCurrentFrame();
         // Expose the active clear colour so UI panels can stay in sync with renderer preferences.
         static glm::vec4 GetClearColor();

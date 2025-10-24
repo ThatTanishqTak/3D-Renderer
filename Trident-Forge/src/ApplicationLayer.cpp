@@ -131,7 +131,7 @@ void ApplicationLayer::Update()
 void ApplicationLayer::Render()
 {
     // Ensure the editor viewport always renders with the editor camera before handing off to runtime previews.
-    Trident::RenderCommand::SetRuntimeCameraActive(false);
+    Trident::RenderCommand::SetViewportRuntimeCameraDriven(m_ViewportPanel.GetViewportID(), false);
     m_ViewportPanel.Render();
     // Surface the runtime viewport directly after the scene so future play/pause widgets can live alongside it.
     RefreshRuntimeCameraBinding();

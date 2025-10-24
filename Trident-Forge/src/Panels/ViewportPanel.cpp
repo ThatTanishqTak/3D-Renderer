@@ -172,13 +172,13 @@ void ViewportPanel::Render()
             l_Info.ViewportID = m_ViewportID;
             l_Info.Position = { l_ViewportPos.x, l_ViewportPos.y };
             l_Info.Size = l_NewViewportSize;
-            Trident::RenderCommand::SetViewport(l_Info);
+            Trident::RenderCommand::SetViewport(m_ViewportID, l_Info);
 
             m_CachedViewportSize = l_NewViewportSize;
         }
 
         // Pull the Vulkan descriptor that ImGui understands so we can blit the scene into the panel.
-        const VkDescriptorSet l_Descriptor = Trident::RenderCommand::GetViewportTexture();
+        const VkDescriptorSet l_Descriptor = Trident::RenderCommand::GetViewportTexture(m_ViewportID);
         if (l_Descriptor != VK_NULL_HANDLE)
         {
             // Reset ImGuizmo's per-frame state before drawing the viewport so overlays start cleanly.
@@ -213,8 +213,8 @@ void ViewportPanel::Render()
             if (l_CanDisplayGizmo)
             {
                 // Fetch the camera matrices used for the rendered image so the gizmo aligns perfectly.
-                const glm::mat4 l_ViewMatrix = Trident::RenderCommand::GetViewportViewMatrix();
-                const glm::mat4 l_ProjectionMatrix = Trident::RenderCommand::GetViewportProjectionMatrix();
+                const glm::mat4 l_ViewMatrix = Trident::RenderCommand::GetViewportViewMatrix(m_ViewportID);
+                const glm::mat4 l_ProjectionMatrix = Trident::RenderCommand::GetViewportProjectionMatrix(m_ViewportID);
                 glm::mat4 l_GizmoProjectionMatrix = l_ProjectionMatrix;
                 // ImGuizmo assumes a standard clip space where the Y axis points upwards. The renderer already flips
                 // the projection matrix to satisfy Vulkan's coordinate system, so we unflip the matrix here to ensure

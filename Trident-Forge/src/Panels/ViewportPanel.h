@@ -39,6 +39,8 @@ public:
     bool IsHovered() const { return m_IsHovered; }
     // Reports whether the viewport window currently owns keyboard focus for camera control decisions.
     bool IsFocused() const { return m_IsFocused; }
+    // Provide read-only access to the viewport identifier so callers can forward it into renderer APIs.
+    uint32_t GetViewportID() const { return m_ViewportID; }
     // Allows callers to check whether a screen-space point falls within the viewport image.
     bool ContainsPoint(const ImVec2& point) const;
 

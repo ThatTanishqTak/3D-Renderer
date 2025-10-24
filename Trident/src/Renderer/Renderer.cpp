@@ -102,10 +102,14 @@ namespace Trident
         // Prepare shared quad geometry so every sprite draw can reference the same GPU buffers.
         BuildSpriteGeometry();
 
-        m_Viewport.Position = { 0.0f, 0.0f };
-        m_Viewport.Size = { static_cast<float>(m_Swapchain.GetExtent().width), static_cast<float>(m_Swapchain.GetExtent().height) };
-        m_Viewport.ViewportID = 0;
+        m_ViewportContexts.clear();
         m_ActiveViewportId = 0;
+
+        ViewportContext& l_DefaultContext = GetOrCreateViewportContext(m_ActiveViewportId);
+        l_DefaultContext.m_Info.ViewportID = m_ActiveViewportId;
+        l_DefaultContext.m_Info.Position = { 0.0f, 0.0f };
+        l_DefaultContext.m_Info.Size = { static_cast<float>(m_Swapchain.GetExtent().width), static_cast<float>(m_Swapchain.GetExtent().height) };
+        l_DefaultContext.m_CachedExtent = { 0, 0 };
 
         VkFenceCreateInfo l_FenceInfo{ VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
         l_FenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
@@ -125,6 +129,7 @@ namespace Trident
 
         // Tear down any editor viewport resources before the core pipeline disappears.
         DestroyAllOffscreenResources();
+        m_ViewportContexts.clear();
 
         // Release shared sprite geometry before the buffer allocator clears tracked allocations.
         DestroySpriteGeometry();
@@ -831,7 +836,14 @@ namespace Trident
         m_EditorCamera = camera;
         if (m_EditorCamera)
         {
-            m_EditorCamera->SetViewportSize(m_Viewport.Size);
+            glm::vec2 l_ViewportSize{ static_cast<float>(m_Swapchain.GetExtent().width), static_cast<float>(m_Swapchain.GetExtent().height) };
+            const ViewportContext* l_Context = FindViewportContext(m_ActiveViewportId);
+            if (l_Context)
+            {
+                l_ViewportSize = l_Context->m_Info.Size;
+            }
+            // Keep the editor camera aligned with the most recently active viewport so controls feel responsive.
+            m_EditorCamera->SetViewportSize(l_ViewportSize);
         }
     }
 
@@ -840,13 +852,33 @@ namespace Trident
         m_RuntimeCamera = camera;
         if (m_RuntimeCamera)
         {
-            m_RuntimeCamera->SetViewportSize(m_Viewport.Size);
+            glm::vec2 l_ViewportSize{ static_cast<float>(m_Swapchain.GetExtent().width), static_cast<float>(m_Swapchain.GetExtent().height) };
+            const ViewportContext* l_Context = FindViewportContext(m_ActiveViewportId);
+            if (l_Context)
+            {
+                l_ViewportSize = l_Context->m_Info.Size;
+            }
+            // Runtime previews inherit the active viewport size until per-panel overrides are requested.
+            m_RuntimeCamera->SetViewportSize(l_ViewportSize);
         }
     }
 
-    void Renderer::SetRuntimeCameraActive(bool active)
+    void Renderer::SetViewportRuntimeCameraDriven(uint32_t viewportId, bool active)
     {
-        m_IsRuntimeCameraActive = active;
+        ViewportContext& l_Context = GetOrCreateViewportContext(viewportId);
+
+        if (active)
+        {
+            // Only a single viewport should receive runtime camera input at a time to keep editor controls predictable.
+            for (auto& it_Context : m_ViewportContexts)
+            {
+                it_Context.second.m_IsRuntimeCameraDriven = (it_Context.first == viewportId);
+            }
+        }
+        else
+        {
+            l_Context.m_IsRuntimeCameraDriven = false;
+        }
     }
 
     void Renderer::SetClearColor(const glm::vec4& color)
@@ -855,23 +887,17 @@ namespace Trident
         m_ClearColor = color;
     }
 
-    VkDescriptorSet Renderer::GetViewportTexture() const
+    VkDescriptorSet Renderer::GetViewportTexture(uint32_t viewportId) const
     {
         // Provide the descriptor set that ImGui::Image expects when the viewport is active.
-        // The actual colour output inside this texture is driven by the camera selected via RenderCommand::SetViewportCamera.
-        if (!IsValidViewport())
+        // The actual colour output inside this texture is driven by the camera selected via RenderCommand::SetViewportRuntimeCameraDriven.
+        const ViewportContext* l_Context = FindViewportContext(viewportId);
+        if (!l_Context || !IsValidViewport(l_Context->m_Info))
         {
             return VK_NULL_HANDLE;
         }
 
-        const uint32_t l_ViewportId = m_Viewport.ViewportID;
-        const auto it_Target = m_OffscreenTargets.find(l_ViewportId);
-        if (it_Target == m_OffscreenTargets.end())
-        {
-            return VK_NULL_HANDLE;
-        }
-
-        const OffscreenTarget& l_Target = it_Target->second;
+        const OffscreenTarget& l_Target = l_Context->m_Target;
         if (l_Target.m_TextureID != VK_NULL_HANDLE)
         {
             return l_Target.m_TextureID;
@@ -882,17 +908,19 @@ namespace Trident
 
     const Camera* Renderer::GetActiveCamera() const
     {
-        if (m_IsRuntimeCameraActive && m_RuntimeCamera)
+        const ViewportContext* l_Context = FindViewportContext(m_ActiveViewportId);
+        if (!l_Context)
         {
-            return m_RuntimeCamera;
+            return m_EditorCamera;
         }
 
-        return m_EditorCamera;
+        return GetActiveCamera(*l_Context);
     }
 
-    glm::mat4 Renderer::GetViewportViewMatrix() const
+    glm::mat4 Renderer::GetViewportViewMatrix(uint32_t viewportId) const
     {
-        const Camera* l_Camera = GetActiveCamera();
+        const ViewportContext* l_Context = FindViewportContext(viewportId);
+        const Camera* l_Camera = l_Context ? GetActiveCamera(*l_Context) : nullptr;
         if (!l_Camera)
         {
             return glm::mat4{ 1.0f };
@@ -901,9 +929,10 @@ namespace Trident
         return l_Camera->GetViewMatrix();
     }
 
-    glm::mat4 Renderer::GetViewportProjectionMatrix() const
+    glm::mat4 Renderer::GetViewportProjectionMatrix(uint32_t viewportId) const
     {
-        const Camera* l_Camera = GetActiveCamera();
+        const ViewportContext* l_Context = FindViewportContext(viewportId);
+        const Camera* l_Camera = l_Context ? GetActiveCamera(*l_Context) : nullptr;
         if (!l_Camera)
         {
             return glm::mat4{ 1.0f };
@@ -912,11 +941,14 @@ namespace Trident
         return l_Camera->GetProjectionMatrix();
     }
 
-    void Renderer::SetViewport(const ViewportInfo& info)
+    void Renderer::SetViewport(uint32_t viewportId, const ViewportInfo& info)
     {
         const uint32_t l_PreviousViewportId = m_ActiveViewportId;
-        m_Viewport = info;
-        m_ActiveViewportId = info.ViewportID;
+        m_ActiveViewportId = viewportId;
+
+        ViewportContext& l_Context = GetOrCreateViewportContext(viewportId);
+        l_Context.m_Info = info;
+        l_Context.m_Info.ViewportID = viewportId;
 
         if (m_EditorCamera)
         {
@@ -928,7 +960,7 @@ namespace Trident
             m_RuntimeCamera->SetViewportSize(info.Size);
         }
 
-        if (!IsValidViewport())
+        if (!IsValidViewport(info))
         {
             // The viewport was closed or minimized, so free the auxiliary render target when possible.
             DestroyOffscreenResources(l_PreviousViewportId);
@@ -940,14 +972,16 @@ namespace Trident
         l_RequestedExtent.width = static_cast<uint32_t>(std::max(info.Size.x, 0.0f));
         l_RequestedExtent.height = static_cast<uint32_t>(std::max(info.Size.y, 0.0f));
 
+        l_Context.m_CachedExtent = l_RequestedExtent;
+
         if (l_RequestedExtent.width == 0 || l_RequestedExtent.height == 0)
         {
-            DestroyOffscreenResources(m_ActiveViewportId);
+            DestroyOffscreenResources(viewportId);
 
             return;
         }
 
-        OffscreenTarget& l_Target = GetOrCreateOffscreenTarget(m_ActiveViewportId);
+        OffscreenTarget& l_Target = l_Context.m_Target;
         if (l_Target.m_Extent.width == l_RequestedExtent.width && l_Target.m_Extent.height == l_RequestedExtent.height)
         {
             // Nothing to do – the backing image already matches the requested size.
@@ -957,6 +991,17 @@ namespace Trident
         CreateOrResizeOffscreenResources(l_Target, l_RequestedExtent);
 
         // Future: consider pooling and recycling detached targets so background viewports can warm-start when reopened.
+    }
+
+    ViewportInfo Renderer::GetViewport() const
+    {
+        const ViewportContext* l_Context = FindViewportContext(m_ActiveViewportId);
+        if (l_Context)
+        {
+            return l_Context->m_Info;
+        }
+
+        return {};
     }
 
     void Renderer::BuildSpriteGeometry()
@@ -1229,16 +1274,17 @@ namespace Trident
                 l_ImageCount, m_GlobalUniformBuffers.size(), m_MaterialUniformBuffers.size(), l_ImageCount, m_DescriptorSets.size());
         }
 
-        if (IsValidViewport() && m_ActiveViewportId != 0)
+        const ViewportContext* l_ActiveContext = FindViewportContext(m_ActiveViewportId);
+        if (l_ActiveContext && IsValidViewport(l_ActiveContext->m_Info) && m_ActiveViewportId != 0)
         {
             VkExtent2D l_ViewportExtent{};
-            l_ViewportExtent.width = static_cast<uint32_t>(std::max(m_Viewport.Size.x, 0.0f));
-            l_ViewportExtent.height = static_cast<uint32_t>(std::max(m_Viewport.Size.y, 0.0f));
+            l_ViewportExtent.width = static_cast<uint32_t>(std::max(l_ActiveContext->m_Info.Size.x, 0.0f));
+            l_ViewportExtent.height = static_cast<uint32_t>(std::max(l_ActiveContext->m_Info.Size.y, 0.0f));
 
             if (l_ViewportExtent.width > 0 && l_ViewportExtent.height > 0)
             {
-                OffscreenTarget& l_Target = GetOrCreateOffscreenTarget(m_ActiveViewportId);
-                CreateOrResizeOffscreenResources(l_Target, l_ViewportExtent);
+                ViewportContext& l_MutableContext = GetOrCreateViewportContext(m_ActiveViewportId);
+                CreateOrResizeOffscreenResources(l_MutableContext.m_Target, l_ViewportExtent);
             }
             else
             {
@@ -1934,14 +1980,14 @@ namespace Trident
             return;
         }
 
-        const auto it_Target = m_OffscreenTargets.find(viewportId);
-        if (it_Target == m_OffscreenTargets.end())
+        ViewportContext* l_Context = FindViewportContext(viewportId);
+        if (l_Context == nullptr)
         {
             return;
         }
 
         VkDevice l_Device = Startup::GetDevice();
-        OffscreenTarget& l_Target = it_Target->second;
+        OffscreenTarget& l_Target = l_Context->m_Target;
 
         vkDeviceWaitIdle(l_Device);
 
@@ -2003,18 +2049,18 @@ namespace Trident
         l_Target.m_Extent = { 0, 0 };
         l_Target.m_CurrentLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         l_Target.m_DepthLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-
-        m_OffscreenTargets.erase(it_Target);
+        l_Context->m_CachedExtent = { 0, 0 };
+        l_Context->m_Info.Size = { 0.0f, 0.0f };
     }
 
     void Renderer::DestroyAllOffscreenResources()
     {
         // Iterate carefully so erasing entries mid-loop remains valid across MSVC/STL implementations.
-        auto it_Target = m_OffscreenTargets.begin();
-        while (it_Target != m_OffscreenTargets.end())
+        auto it_Context = m_ViewportContexts.begin();
+        while (it_Context != m_ViewportContexts.end())
         {
-            const uint32_t l_ViewportId = it_Target->first;
-            ++it_Target;
+            const uint32_t l_ViewportId = it_Context->first;
+            ++it_Context;
             DestroyOffscreenResources(l_ViewportId);
         }
 
@@ -2022,18 +2068,47 @@ namespace Trident
         m_ActiveViewportId = 0;
     }
 
-    Renderer::OffscreenTarget& Renderer::GetOrCreateOffscreenTarget(uint32_t viewportId)
+    Renderer::ViewportContext& Renderer::GetOrCreateViewportContext(uint32_t viewportId)
     {
-        auto [it_Target, l_Inserted] = m_OffscreenTargets.try_emplace(viewportId);
-        OffscreenTarget& l_Target = it_Target->second;
+        auto [it_Context, l_Inserted] = m_ViewportContexts.try_emplace(viewportId);
+        ViewportContext& l_Context = it_Context->second;
 
         if (l_Inserted)
         {
-            // New viewport render targets default to a clean state until the first resize allocates GPU memory.
-            l_Target.m_Extent = { 0, 0 };
+            l_Context.m_Info.ViewportID = viewportId;
+            l_Context.m_Target.m_Extent = { 0, 0 };
+            l_Context.m_Target.m_CurrentLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            l_Context.m_Target.m_DepthLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         }
 
-        return l_Target;
+        return l_Context;
+    }
+
+    const Renderer::ViewportContext* Renderer::FindViewportContext(uint32_t viewportId) const
+    {
+        const auto it_Context = m_ViewportContexts.find(viewportId);
+        if (it_Context == m_ViewportContexts.end())
+        {
+            return nullptr;
+        }
+
+        return &it_Context->second;
+    }
+
+    Renderer::ViewportContext* Renderer::FindViewportContext(uint32_t viewportId)
+    {
+        return const_cast<ViewportContext*>(static_cast<const Renderer*>(this)->FindViewportContext(viewportId));
+    }
+
+    const Camera* Renderer::GetActiveCamera(const ViewportContext& context) const
+    {
+        if (context.m_IsRuntimeCameraDriven && m_RuntimeCamera)
+        {
+            return m_RuntimeCamera;
+        }
+
+        // Default to the editor camera so panels without runtime control still render a scene preview.
+        return m_EditorCamera;
     }
 
     void Renderer::CreateOrResizeOffscreenResources(OffscreenTarget& target, VkExtent2D extent)
@@ -2360,18 +2435,6 @@ namespace Trident
         VkCommandBufferBeginInfo l_BeginInfo{ VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
         vkBeginCommandBuffer(l_CommandBuffer, &l_BeginInfo);
 
-        OffscreenTarget* l_ActiveTarget = nullptr;
-        if (IsValidViewport())
-        {
-            const auto it_Target = m_OffscreenTargets.find(m_ActiveViewportId);
-            if (it_Target != m_OffscreenTargets.end())
-            {
-                l_ActiveTarget = &it_Target->second;
-            }
-        }
-
-        const bool l_ViewportActive = l_ActiveTarget != nullptr && l_ActiveTarget->m_Framebuffer != VK_NULL_HANDLE;
-
         auto a_BuildClearValue = [this]() -> VkClearValue
             {
                 VkClearValue l_Value{};
@@ -2383,195 +2446,261 @@ namespace Trident
                 return l_Value;
             };
 
-        if (l_ViewportActive)
+        ViewportContext* l_PrimaryContext = FindViewportContext(m_ActiveViewportId);
+        OffscreenTarget* l_PrimaryTarget = nullptr;
+        if (l_PrimaryContext && IsValidViewport(l_PrimaryContext->m_Info) && l_PrimaryContext->m_Target.m_Framebuffer != VK_NULL_HANDLE)
         {
-            // Ensure the offscreen image is ready for color attachment writes before we begin the render pass.
-            VkPipelineStageFlags l_PreviousStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-            VkAccessFlags l_PreviousAccess = 0;
-            if (l_ActiveTarget->m_CurrentLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-            {
-                l_PreviousStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-                l_PreviousAccess = VK_ACCESS_SHADER_READ_BIT;
-            }
-            else if (l_ActiveTarget->m_CurrentLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL)
-            {
-                l_PreviousStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-                l_PreviousAccess = VK_ACCESS_TRANSFER_READ_BIT;
-            }
-
-            VkPipelineStageFlags l_DepthPreviousStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-            VkAccessFlags l_DepthPreviousAccess = 0;
-            if (l_ActiveTarget->m_DepthLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
-            {
-                l_DepthPreviousStage = VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-                l_DepthPreviousAccess = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-            }
-
-            VkImageMemoryBarrier l_PrepareDepth{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
-            l_PrepareDepth.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            l_PrepareDepth.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            l_PrepareDepth.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-            l_PrepareDepth.subresourceRange.baseMipLevel = 0;
-            l_PrepareDepth.subresourceRange.levelCount = 1;
-            l_PrepareDepth.subresourceRange.baseArrayLayer = 0;
-            l_PrepareDepth.subresourceRange.layerCount = 1;
-            l_PrepareDepth.oldLayout = l_ActiveTarget->m_DepthLayout;
-            l_PrepareDepth.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-            l_PrepareDepth.srcAccessMask = l_DepthPreviousAccess;
-            l_PrepareDepth.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-            l_PrepareDepth.image = l_ActiveTarget->m_DepthImage;
-
-            vkCmdPipelineBarrier(l_CommandBuffer, l_DepthPreviousStage, VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, 0, 0, nullptr, 0, nullptr, 1, &l_PrepareDepth);
-            l_ActiveTarget->m_DepthLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
-            VkImageMemoryBarrier l_PrepareOffscreen{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
-            l_PrepareOffscreen.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            l_PrepareOffscreen.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            l_PrepareOffscreen.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            l_PrepareOffscreen.subresourceRange.baseMipLevel = 0;
-            l_PrepareOffscreen.subresourceRange.levelCount = 1;
-            l_PrepareOffscreen.subresourceRange.baseArrayLayer = 0;
-            l_PrepareOffscreen.subresourceRange.layerCount = 1;
-            l_PrepareOffscreen.oldLayout = l_ActiveTarget->m_CurrentLayout;
-            l_PrepareOffscreen.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-            l_PrepareOffscreen.srcAccessMask = l_PreviousAccess;
-            l_PrepareOffscreen.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-            l_PrepareOffscreen.image = l_ActiveTarget->m_Image;
-
-            vkCmdPipelineBarrier(l_CommandBuffer, l_PreviousStage, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, nullptr, 0, nullptr, 1, &l_PrepareOffscreen);
-            l_ActiveTarget->m_CurrentLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-            // First pass: render the scene into the offscreen target that backs the editor viewport.
-            VkRenderPassBeginInfo l_OffscreenPass{ VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO };
-            l_OffscreenPass.renderPass = m_Pipeline.GetRenderPass();
-            l_OffscreenPass.framebuffer = l_ActiveTarget->m_Framebuffer;
-            l_OffscreenPass.renderArea.offset = { 0, 0 };
-            l_OffscreenPass.renderArea.extent = l_ActiveTarget->m_Extent;
-
-            // Reuse the configured clear colour for both render passes so the viewport preview matches the swapchain output.
-            std::array<VkClearValue, 2> l_OffscreenClearValues{};
-            l_OffscreenClearValues[0] = a_BuildClearValue();
-            l_OffscreenClearValues[1].depthStencil.depth = 1.0f;
-            l_OffscreenClearValues[1].depthStencil.stencil = 0;
-            l_OffscreenPass.clearValueCount = static_cast<uint32_t>(l_OffscreenClearValues.size());
-            l_OffscreenPass.pClearValues = l_OffscreenClearValues.data();
-
-            vkCmdBeginRenderPass(l_CommandBuffer, &l_OffscreenPass, VK_SUBPASS_CONTENTS_INLINE);
-
-            // Explicitly clear the colour attachment so the viewport image always starts from the requested editor clear colour.
-            VkClearAttachment l_ColorAttachmentClear{};
-            l_ColorAttachmentClear.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            l_ColorAttachmentClear.colorAttachment = 0;
-            l_ColorAttachmentClear.clearValue.color.float32[0] = m_ClearColor.r;
-            l_ColorAttachmentClear.clearValue.color.float32[1] = m_ClearColor.g;
-            l_ColorAttachmentClear.clearValue.color.float32[2] = m_ClearColor.b;
-            l_ColorAttachmentClear.clearValue.color.float32[3] = m_ClearColor.a;
-
-            VkClearRect l_ColorClearRect{};
-            l_ColorClearRect.rect.offset = { 0, 0 };
-            l_ColorClearRect.rect.extent = l_ActiveTarget->m_Extent;
-            l_ColorClearRect.baseArrayLayer = 0;
-            l_ColorClearRect.layerCount = 1;
-
-            vkCmdClearAttachments(l_CommandBuffer, 1, &l_ColorAttachmentClear, 1, &l_ColorClearRect);
-            // Future improvement: consider a dedicated render pass with VK_ATTACHMENT_LOAD_OP_CLEAR for the editor path to simplify state management.
-
-            VkViewport l_OffscreenViewport{};
-            l_OffscreenViewport.x = 0.0f;
-            l_OffscreenViewport.y = 0.0f;
-            l_OffscreenViewport.width = static_cast<float>(l_ActiveTarget->m_Extent.width);
-            l_OffscreenViewport.height = static_cast<float>(l_ActiveTarget->m_Extent.height);
-            l_OffscreenViewport.minDepth = 0.0f;
-            l_OffscreenViewport.maxDepth = 1.0f;
-            vkCmdSetViewport(l_CommandBuffer, 0, 1, &l_OffscreenViewport);
-
-            VkRect2D l_OffscreenScissor{};
-            l_OffscreenScissor.offset = { 0, 0 };
-            l_OffscreenScissor.extent = l_ActiveTarget->m_Extent;
-            vkCmdSetScissor(l_CommandBuffer, 0, 1, &l_OffscreenScissor);
-            const bool l_HasSkyboxDescriptors = imageIndex < m_SkyboxDescriptorSets.size() && m_SkyboxDescriptorSets[imageIndex] != VK_NULL_HANDLE;
-            if (l_HasSkyboxDescriptors && m_Pipeline.GetSkyboxPipeline() != VK_NULL_HANDLE)
-            {
-                // Draw the cubemap with its dedicated pipeline so future tone-mapping additions remain isolated from mesh draws.
-                vkCmdBindPipeline(l_CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline.GetSkyboxPipeline());
-                m_Skybox.Record(l_CommandBuffer, m_Pipeline.GetSkyboxPipelineLayout(), m_SkyboxDescriptorSets.data(), imageIndex);
-            }
-
-            // Switch back to the main forward pipeline for scene geometry.
-
-            vkCmdBindPipeline(l_CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline.GetPipeline());
-
-            const bool l_HasDescriptorSet = imageIndex < m_DescriptorSets.size();
-            if (l_HasDescriptorSet)
-            {
-                vkCmdBindDescriptorSets(l_CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline.GetPipelineLayout(), 0, 1, &m_DescriptorSets[imageIndex], 0, nullptr);
-            }
-
-            GatherMeshDraws();
-
-            if (m_VertexBuffer != VK_NULL_HANDLE && m_IndexBuffer != VK_NULL_HANDLE && !m_MeshDrawInfo.empty() && !m_MeshDrawCommands.empty() && l_HasDescriptorSet)
-            {
-                VkBuffer l_VertexBuffers[] = { m_VertexBuffer };
-                VkDeviceSize l_Offsets[] = { 0 };
-                vkCmdBindVertexBuffers(l_CommandBuffer, 0, 1, l_VertexBuffers, l_Offsets);
-                vkCmdBindIndexBuffer(l_CommandBuffer, m_IndexBuffer, 0, VK_INDEX_TYPE_UINT32);
-
-                for (const MeshDrawCommand& l_Command : m_MeshDrawCommands)
-                {
-                    if (!l_Command.m_Component)
-                    {
-                        continue;
-                    }
-
-                    const MeshComponent& l_Component = *l_Command.m_Component;
-                    if (l_Component.m_MeshIndex >= m_MeshDrawInfo.size())
-                    {
-                        continue;
-                    }
-
-                    const MeshDrawInfo& l_DrawInfo = m_MeshDrawInfo[l_Component.m_MeshIndex];
-                    if (l_DrawInfo.m_IndexCount == 0)
-                    {
-                        continue;
-                    }
-
-                    RenderablePushConstant l_PushConstant{};
-                    l_PushConstant.m_ModelMatrix = l_Command.m_ModelMatrix;
-                    l_PushConstant.m_TextureIndex = l_Component.m_MaterialIndex;
-                    vkCmdPushConstants(l_CommandBuffer, m_Pipeline.GetPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(RenderablePushConstant), &l_PushConstant);
-
-                    vkCmdDrawIndexed(l_CommandBuffer, l_DrawInfo.m_IndexCount, 1, l_DrawInfo.m_FirstIndex, l_DrawInfo.m_BaseVertex, 0);
-                }
-            }
-
-            if (l_HasDescriptorSet)
-            {
-                DrawSprites(l_CommandBuffer, imageIndex);
-            }
-
-            vkCmdEndRenderPass(l_CommandBuffer);
-
-            // Layout plan:
-            // 1) COLOR_ATTACHMENT_OPTIMAL -> SHADER_READ_ONLY_OPTIMAL so ImGui can sample the image.
-            // 2) TRANSFER_SRC will also be available for future blit workflows before compositing on the swapchain.
-            VkImageMemoryBarrier l_OffscreenBarrier{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
-            l_OffscreenBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            l_OffscreenBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            l_OffscreenBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            l_OffscreenBarrier.subresourceRange.baseMipLevel = 0;
-            l_OffscreenBarrier.subresourceRange.levelCount = 1;
-            l_OffscreenBarrier.subresourceRange.baseArrayLayer = 0;
-            l_OffscreenBarrier.subresourceRange.layerCount = 1;
-            l_OffscreenBarrier.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-            l_OffscreenBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-            l_OffscreenBarrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-            l_OffscreenBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-            l_OffscreenBarrier.image = l_ActiveTarget->m_Image;
-
-            vkCmdPipelineBarrier(l_CommandBuffer, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                0, 0, nullptr, 0, nullptr, 1, &l_OffscreenBarrier);
-            l_ActiveTarget->m_CurrentLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+            l_PrimaryTarget = &l_PrimaryContext->m_Target;
         }
+
+        bool l_RenderedViewport = false;
+
+        // Prepare the shared draw lists once so each viewport iteration can reuse the same data set.
+        GatherMeshDraws();
+
+        auto a_RenderViewport = [&](uint32_t a_ViewportId, ViewportContext& a_Context, bool a_IsPrimary)
+            {
+                OffscreenTarget& l_Target = a_Context.m_Target;
+                if (!IsValidViewport(a_Context.m_Info) || l_Target.m_Framebuffer == VK_NULL_HANDLE)
+                {
+                    return;
+                }
+
+                if (l_Target.m_Extent.width == 0 || l_Target.m_Extent.height == 0)
+                {
+                    return;
+                }
+
+                l_RenderedViewport = true;
+
+                const Camera* l_ContextCamera = GetActiveCamera(a_Context);
+                UpdateUniformBuffer(imageIndex, l_ContextCamera);
+
+                VkPipelineStageFlags l_PreviousStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+                VkAccessFlags l_PreviousAccess = 0;
+                if (l_Target.m_CurrentLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+                {
+                    l_PreviousStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+                    l_PreviousAccess = VK_ACCESS_SHADER_READ_BIT;
+                }
+                else if (l_Target.m_CurrentLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL)
+                {
+                    l_PreviousStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+                    l_PreviousAccess = VK_ACCESS_TRANSFER_READ_BIT;
+                }
+
+                VkPipelineStageFlags l_DepthPreviousStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+                VkAccessFlags l_DepthPreviousAccess = 0;
+                if (l_Target.m_DepthLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
+                {
+                    l_DepthPreviousStage = VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+                    l_DepthPreviousAccess = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+                }
+
+                VkImageMemoryBarrier l_PrepareDepth{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+                l_PrepareDepth.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                l_PrepareDepth.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                l_PrepareDepth.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+                l_PrepareDepth.subresourceRange.baseMipLevel = 0;
+                l_PrepareDepth.subresourceRange.levelCount = 1;
+                l_PrepareDepth.subresourceRange.baseArrayLayer = 0;
+                l_PrepareDepth.subresourceRange.layerCount = 1;
+                l_PrepareDepth.oldLayout = l_Target.m_DepthLayout;
+                l_PrepareDepth.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+                l_PrepareDepth.srcAccessMask = l_DepthPreviousAccess;
+                l_PrepareDepth.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+                l_PrepareDepth.image = l_Target.m_DepthImage;
+
+                vkCmdPipelineBarrier(l_CommandBuffer, l_DepthPreviousStage, VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, 0, 0, nullptr, 0, nullptr, 1, &l_PrepareDepth);
+                l_Target.m_DepthLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+                VkImageMemoryBarrier l_PrepareOffscreen{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+                l_PrepareOffscreen.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                l_PrepareOffscreen.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                l_PrepareOffscreen.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                l_PrepareOffscreen.subresourceRange.baseMipLevel = 0;
+                l_PrepareOffscreen.subresourceRange.levelCount = 1;
+                l_PrepareOffscreen.subresourceRange.baseArrayLayer = 0;
+                l_PrepareOffscreen.subresourceRange.layerCount = 1;
+                l_PrepareOffscreen.oldLayout = l_Target.m_CurrentLayout;
+                l_PrepareOffscreen.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+                l_PrepareOffscreen.srcAccessMask = l_PreviousAccess;
+                l_PrepareOffscreen.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+                l_PrepareOffscreen.image = l_Target.m_Image;
+
+                vkCmdPipelineBarrier(l_CommandBuffer, l_PreviousStage, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, nullptr, 0, nullptr, 1, &l_PrepareOffscreen);
+                l_Target.m_CurrentLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+                VkRenderPassBeginInfo l_OffscreenPass{ VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO };
+                l_OffscreenPass.renderPass = m_Pipeline.GetRenderPass();
+                l_OffscreenPass.framebuffer = l_Target.m_Framebuffer;
+                l_OffscreenPass.renderArea.offset = { 0, 0 };
+                l_OffscreenPass.renderArea.extent = l_Target.m_Extent;
+
+                std::array<VkClearValue, 2> l_OffscreenClearValues{};
+                l_OffscreenClearValues[0] = a_BuildClearValue();
+                l_OffscreenClearValues[1].depthStencil.depth = 1.0f;
+                l_OffscreenClearValues[1].depthStencil.stencil = 0;
+                l_OffscreenPass.clearValueCount = static_cast<uint32_t>(l_OffscreenClearValues.size());
+                l_OffscreenPass.pClearValues = l_OffscreenClearValues.data();
+
+                vkCmdBeginRenderPass(l_CommandBuffer, &l_OffscreenPass, VK_SUBPASS_CONTENTS_INLINE);
+
+                VkClearAttachment l_ColorAttachmentClear{};
+                l_ColorAttachmentClear.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                l_ColorAttachmentClear.colorAttachment = 0;
+                l_ColorAttachmentClear.clearValue.color.float32[0] = m_ClearColor.r;
+                l_ColorAttachmentClear.clearValue.color.float32[1] = m_ClearColor.g;
+                l_ColorAttachmentClear.clearValue.color.float32[2] = m_ClearColor.b;
+                l_ColorAttachmentClear.clearValue.color.float32[3] = m_ClearColor.a;
+
+                VkClearRect l_ColorClearRect{};
+                l_ColorClearRect.rect.offset = { 0, 0 };
+                l_ColorClearRect.rect.extent = l_Target.m_Extent;
+                l_ColorClearRect.baseArrayLayer = 0;
+                l_ColorClearRect.layerCount = 1;
+
+                vkCmdClearAttachments(l_CommandBuffer, 1, &l_ColorAttachmentClear, 1, &l_ColorClearRect);
+                // Manual QA: Scene and Game panels now show independent images driven by their respective camera selections.
+                // TODO: Explore asynchronous command recording so runtime and editor paths can execute in parallel where feasible.
+
+                VkViewport l_OffscreenViewport{};
+                l_OffscreenViewport.x = 0.0f;
+                l_OffscreenViewport.y = 0.0f;
+                l_OffscreenViewport.width = static_cast<float>(l_Target.m_Extent.width);
+                l_OffscreenViewport.height = static_cast<float>(l_Target.m_Extent.height);
+                l_OffscreenViewport.minDepth = 0.0f;
+                l_OffscreenViewport.maxDepth = 1.0f;
+                vkCmdSetViewport(l_CommandBuffer, 0, 1, &l_OffscreenViewport);
+
+                VkRect2D l_OffscreenScissor{};
+                l_OffscreenScissor.offset = { 0, 0 };
+                l_OffscreenScissor.extent = l_Target.m_Extent;
+                vkCmdSetScissor(l_CommandBuffer, 0, 1, &l_OffscreenScissor);
+
+                const bool l_HasSkyboxDescriptors = imageIndex < m_SkyboxDescriptorSets.size() && m_SkyboxDescriptorSets[imageIndex] != VK_NULL_HANDLE;
+                if (l_HasSkyboxDescriptors && m_Pipeline.GetSkyboxPipeline() != VK_NULL_HANDLE)
+                {
+                    vkCmdBindPipeline(l_CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline.GetSkyboxPipeline());
+                    m_Skybox.Record(l_CommandBuffer, m_Pipeline.GetSkyboxPipelineLayout(), m_SkyboxDescriptorSets.data(), imageIndex);
+                }
+
+                vkCmdBindPipeline(l_CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline.GetPipeline());
+
+                const bool l_HasDescriptorSet = imageIndex < m_DescriptorSets.size();
+                if (l_HasDescriptorSet)
+                {
+                    vkCmdBindDescriptorSets(l_CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline.GetPipelineLayout(), 0, 1, &m_DescriptorSets[imageIndex], 0, nullptr);
+                }
+
+                if (m_VertexBuffer != VK_NULL_HANDLE && m_IndexBuffer != VK_NULL_HANDLE && !m_MeshDrawInfo.empty() && !m_MeshDrawCommands.empty() && l_HasDescriptorSet)
+                {
+                    VkBuffer l_VertexBuffers[] = { m_VertexBuffer };
+                    VkDeviceSize l_Offsets[] = { 0 };
+                    vkCmdBindVertexBuffers(l_CommandBuffer, 0, 1, l_VertexBuffers, l_Offsets);
+                    vkCmdBindIndexBuffer(l_CommandBuffer, m_IndexBuffer, 0, VK_INDEX_TYPE_UINT32);
+
+                    for (const MeshDrawCommand& l_Command : m_MeshDrawCommands)
+                    {
+                        if (!l_Command.m_Component)
+                        {
+                            continue;
+                        }
+
+                        const MeshComponent& l_Component = *l_Command.m_Component;
+                        if (l_Component.m_MeshIndex >= m_MeshDrawInfo.size())
+                        {
+                            continue;
+                        }
+
+                        const MeshDrawInfo& l_DrawInfo = m_MeshDrawInfo[l_Component.m_MeshIndex];
+                        if (l_DrawInfo.m_IndexCount == 0)
+                        {
+                            continue;
+                        }
+
+                        RenderablePushConstant l_PushConstant{};
+                        l_PushConstant.m_ModelMatrix = l_Command.m_ModelMatrix;
+                        l_PushConstant.m_TextureIndex = l_Component.m_MaterialIndex;
+                        vkCmdPushConstants(l_CommandBuffer, m_Pipeline.GetPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(RenderablePushConstant), &l_PushConstant);
+
+                        vkCmdDrawIndexed(l_CommandBuffer, l_DrawInfo.m_IndexCount, 1, l_DrawInfo.m_FirstIndex, l_DrawInfo.m_BaseVertex, 0);
+                    }
+                }
+
+                if (l_HasDescriptorSet)
+                {
+                    DrawSprites(l_CommandBuffer, imageIndex);
+                }
+
+                vkCmdEndRenderPass(l_CommandBuffer);
+
+                VkImageMemoryBarrier l_OffscreenBarrier{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+                l_OffscreenBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                l_OffscreenBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                l_OffscreenBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                l_OffscreenBarrier.subresourceRange.baseMipLevel = 0;
+                l_OffscreenBarrier.subresourceRange.levelCount = 1;
+                l_OffscreenBarrier.subresourceRange.baseArrayLayer = 0;
+                l_OffscreenBarrier.subresourceRange.layerCount = 1;
+                l_OffscreenBarrier.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+                l_OffscreenBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+                l_OffscreenBarrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+                l_OffscreenBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+                l_OffscreenBarrier.image = l_Target.m_Image;
+
+                vkCmdPipelineBarrier(l_CommandBuffer, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                    0, 0, nullptr, 0, nullptr, 1, &l_OffscreenBarrier);
+                l_Target.m_CurrentLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+
+                if (!a_IsPrimary)
+                {
+                    VkImageMemoryBarrier l_ToSample{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+                    l_ToSample.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                    l_ToSample.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                    l_ToSample.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                    l_ToSample.subresourceRange.baseMipLevel = 0;
+                    l_ToSample.subresourceRange.levelCount = 1;
+                    l_ToSample.subresourceRange.baseArrayLayer = 0;
+                    l_ToSample.subresourceRange.layerCount = 1;
+                    l_ToSample.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+                    l_ToSample.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                    l_ToSample.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+                    l_ToSample.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+                    l_ToSample.image = l_Target.m_Image;
+
+                    vkCmdPipelineBarrier(l_CommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                        0, 0, nullptr, 0, nullptr, 1, &l_ToSample);
+                    l_Target.m_CurrentLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                }
+            };
+
+        for (auto& it_Context : m_ViewportContexts)
+        {
+            if (it_Context.first == m_ActiveViewportId)
+            {
+                continue;
+            }
+
+            a_RenderViewport(it_Context.first, it_Context.second, false);
+        }
+
+        if (l_PrimaryContext && l_PrimaryTarget)
+        {
+            a_RenderViewport(m_ActiveViewportId, *l_PrimaryContext, true);
+        }
+
+        if (!l_RenderedViewport)
+        {
+            UpdateUniformBuffer(imageIndex, nullptr);
+        }
+
+        if (l_PrimaryTarget && (l_PrimaryTarget->m_Framebuffer == VK_NULL_HANDLE || l_PrimaryTarget->m_Extent.width == 0 || l_PrimaryTarget->m_Extent.height == 0))
+        {
+            l_PrimaryTarget = nullptr;
+        }
+
+        const bool l_PrimaryViewportActive = l_PrimaryTarget != nullptr;
 
         VkImage l_SwapchainImage = m_Swapchain.GetImages()[imageIndex];
         VkImage l_SwapchainDepthImage = VK_NULL_HANDLE;
@@ -2635,7 +2764,7 @@ namespace Trident
             m_SwapchainImageLayouts[imageIndex] = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
         }
 
-        if (l_ViewportActive)
+        if (l_PrimaryViewportActive)
         {
             // Multi-panel path: copy the rendered viewport into the swapchain image so every editor panel sees a synchronized back buffer.
             VkImageBlit l_BlitRegion{};
@@ -2644,7 +2773,7 @@ namespace Trident
             l_BlitRegion.srcSubresource.baseArrayLayer = 0;
             l_BlitRegion.srcSubresource.layerCount = 1;
             l_BlitRegion.srcOffsets[0] = { 0, 0, 0 };
-            l_BlitRegion.srcOffsets[1] = { static_cast<int32_t>(l_ActiveTarget->m_Extent.width), static_cast<int32_t>(l_ActiveTarget->m_Extent.height), 1 };
+            l_BlitRegion.srcOffsets[1] = { static_cast<int32_t>(l_PrimaryTarget->m_Extent.width), static_cast<int32_t>(l_PrimaryTarget->m_Extent.height), 1 };
             l_BlitRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
             l_BlitRegion.dstSubresource.mipLevel = 0;
             l_BlitRegion.dstSubresource.baseArrayLayer = 0;
@@ -2653,7 +2782,7 @@ namespace Trident
             l_BlitRegion.dstOffsets[1] = { static_cast<int32_t>(m_Swapchain.GetExtent().width), static_cast<int32_t>(m_Swapchain.GetExtent().height), 1 };
 
             vkCmdBlitImage(l_CommandBuffer,
-                l_ActiveTarget->m_Image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                l_PrimaryTarget->m_Image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                 l_SwapchainImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                 1, &l_BlitRegion, VK_FILTER_LINEAR);
 
@@ -2670,11 +2799,11 @@ namespace Trident
             l_ToSample.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
             l_ToSample.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
             l_ToSample.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-            l_ToSample.image = l_ActiveTarget->m_Image;
+            l_ToSample.image = l_PrimaryTarget->m_Image;
 
             vkCmdPipelineBarrier(l_CommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
                 0, 0, nullptr, 0, nullptr, 1, &l_ToSample);
-            l_ActiveTarget->m_CurrentLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            l_PrimaryTarget->m_CurrentLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
             // Future improvement: evaluate layered compositing so multiple render targets can blend before hitting the back buffer.
         }
@@ -2787,7 +2916,7 @@ namespace Trident
         l_SwapchainScissor.extent = m_Swapchain.GetExtent();
         vkCmdSetScissor(l_CommandBuffer, 0, 1, &l_SwapchainScissor);
 
-        if (!l_ViewportActive)
+        if (!l_PrimaryViewportActive)
         {
             // Legacy rendering path: draw directly to the back buffer when the editor viewport is hidden.
             const bool l_HasSkyboxDescriptors = imageIndex < m_SkyboxDescriptorSets.size() && m_SkyboxDescriptorSets[imageIndex] != VK_NULL_HANDLE;
@@ -3059,7 +3188,7 @@ namespace Trident
         }
     }
 
-    void Renderer::UpdateUniformBuffer(uint32_t currentImage)
+    void Renderer::UpdateUniformBuffer(uint32_t currentImage, const Camera* cameraOverride)
     {
         if (currentImage >= m_GlobalUniformBuffersMemory.size() || currentImage >= m_MaterialUniformBuffersMemory.size())
         {
@@ -3067,7 +3196,7 @@ namespace Trident
         }
 
         GlobalUniformBuffer l_Global{};
-        const Camera* l_ActiveCamera = GetActiveCamera();
+        const Camera* l_ActiveCamera = cameraOverride ? cameraOverride : GetActiveCamera();
         if (l_ActiveCamera)
         {
             l_Global.View = l_ActiveCamera->GetViewMatrix();

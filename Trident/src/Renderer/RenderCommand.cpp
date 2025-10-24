@@ -29,9 +29,9 @@ namespace Trident
         Startup::GetRenderer().SetTransform(props);
     }
 
-    void RenderCommand::SetViewport(const ViewportInfo& info)
+    void RenderCommand::SetViewport(uint32_t viewportId, const ViewportInfo& info)
     {
-        Startup::GetRenderer().SetViewport(info);
+        Startup::GetRenderer().SetViewport(viewportId, info);
     }
 
     void RenderCommand::SetSelectedEntity(ECS::Entity entity)
@@ -62,9 +62,9 @@ namespace Trident
         Startup::GetRenderer().SetRuntimeCamera(camera);
     }
 
-    void RenderCommand::SetRuntimeCameraActive(bool active)
+    void RenderCommand::SetViewportRuntimeCameraDriven(uint32_t viewportId, bool active)
     {
-        Startup::GetRenderer().SetRuntimeCameraActive(active);
+        Startup::GetRenderer().SetViewportRuntimeCameraDriven(viewportId, active);
     }
 
     Transform RenderCommand::GetTransform()
@@ -77,19 +77,19 @@ namespace Trident
         return Startup::GetRenderer().GetViewport();
     }
 
-    VkDescriptorSet RenderCommand::GetViewportTexture()
+    VkDescriptorSet RenderCommand::GetViewportTexture(uint32_t viewportId)
     {
-        return Startup::GetRenderer().GetViewportTexture();
+        return Startup::GetRenderer().GetViewportTexture(viewportId);
     }
 
-    glm::mat4 RenderCommand::GetViewportViewMatrix()
+    glm::mat4 RenderCommand::GetViewportViewMatrix(uint32_t viewportId)
     {
-        return Startup::GetRenderer().GetViewportViewMatrix();
+        return Startup::GetRenderer().GetViewportViewMatrix(viewportId);
     }
 
-    glm::mat4 RenderCommand::GetViewportProjectionMatrix()
+    glm::mat4 RenderCommand::GetViewportProjectionMatrix(uint32_t viewportId)
     {
-        return Startup::GetRenderer().GetViewportProjectionMatrix();
+        return Startup::GetRenderer().GetViewportProjectionMatrix(viewportId);
     }
 
     size_t RenderCommand::GetCurrentFrame()

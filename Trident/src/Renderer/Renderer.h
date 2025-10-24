@@ -79,7 +79,7 @@ namespace Trident
         void SetImGuiLayer(UI::ImGuiLayer* layer);
         void SetEditorCamera(Camera* camera);
         void SetRuntimeCamera(Camera* camera);
-        void SetRuntimeCameraActive(bool active);
+        void SetViewportRuntimeCameraDriven(uint32_t viewportId, bool active);
 
         // Lightweight wrapper describing an ImGui-ready texture along with the Vulkan
         // resources required to keep it alive for the duration of the renderer.
@@ -117,18 +117,18 @@ namespace Trident
         void SetPerformanceCaptureEnabled(bool enabled);
 
         void SetTransform(const Transform& props);
-        void SetViewport(const ViewportInfo& info);
+        void SetViewport(uint32_t viewportId, const ViewportInfo& info);
         // Cache the inspector's selection so gizmo transforms lock onto the same entity as the editor UI.
         void SetSelectedEntity(ECS::Entity entity);
 
         Transform GetTransform() const;
-        ViewportInfo GetViewport() const { return m_Viewport; }
-        VkDescriptorSet GetViewportTexture() const;
+        ViewportInfo GetViewport() const;
+        VkDescriptorSet GetViewportTexture(uint32_t viewportId) const;
         ECS::Entity GetViewportCamera() const { return m_ViewportCamera; }
 
         // Provide tooling with the matrices required for gizmo overlay composition.
-        glm::mat4 GetViewportViewMatrix() const;
-        glm::mat4 GetViewportProjectionMatrix() const;
+        glm::mat4 GetViewportViewMatrix(uint32_t viewportId) const;
+        glm::mat4 GetViewportProjectionMatrix(uint32_t viewportId) const;
         const Camera* GetActiveCamera() const;
 
         // Access to the CPU-side material cache so editor widgets can tweak shading values.
@@ -235,7 +235,15 @@ namespace Trident
         };
 
         // Offscreen rendering resources keyed by viewport identifier so multiple panels can co-exist.
-        std::unordered_map<uint32_t, OffscreenTarget> m_OffscreenTargets;
+        struct ViewportContext
+        {
+            ViewportInfo m_Info{};                     ///< Latest position/size reported by the owning panel.
+            VkExtent2D m_CachedExtent{ 0, 0 };         ///< Cached Vulkan extent used to avoid redundant resizes.
+            bool m_IsRuntimeCameraDriven = false;      ///< Tracks whether this viewport should use the runtime camera.
+            OffscreenTarget m_Target{};                ///< Offscreen render target backing the viewport.
+        };
+
+        std::unordered_map<uint32_t, ViewportContext> m_ViewportContexts;
         uint32_t m_ActiveViewportId = 0;
         ECS::Entity m_ViewportCamera = std::numeric_limits<ECS::Entity>::max();
 
@@ -250,7 +258,6 @@ namespace Trident
 
         ECS::Entity m_Entity = 0;
         ECS::Registry* m_Registry = nullptr;
-        ViewportInfo m_Viewport{};
         Skybox m_Skybox{};
         VkImage m_SkyboxTextureImage = VK_NULL_HANDLE;
         VkDeviceMemory m_SkyboxTextureImageMemory = VK_NULL_HANDLE;
@@ -261,7 +268,6 @@ namespace Trident
         UI::ImGuiLayer* m_ImGuiLayer = nullptr;
         Camera* m_EditorCamera = nullptr;          ///< Camera used while authoring scenes in the viewport.
         Camera* m_RuntimeCamera = nullptr;         ///< Camera driven by gameplay systems when the scene is playing.
-        bool m_IsRuntimeCameraActive = false;      ///< Flag toggled when the runtime should drive the render pipeline.
         size_t m_FrameAllocationCount = 0;
 
         size_t m_ModelCount = 0;
@@ -298,7 +304,7 @@ namespace Trident
         void DestroySkyboxCubemap();
         void UpdateSkyboxBindingOnMainSets();
 
-        void UpdateUniformBuffer(uint32_t currentImage);
+        void UpdateUniformBuffer(uint32_t currentImage, const Camera* cameraOverride = nullptr);
         void UploadMeshFromCache();
 
         bool AcquireNextImage(uint32_t& imageIndex, VkFence inFlightFence);
@@ -306,14 +312,17 @@ namespace Trident
         bool SubmitFrame(uint32_t imageIndex, VkFence inFlightFence);
         void PresentFrame(uint32_t imageIndex);
 
-        bool IsValidViewport() const { return m_Viewport.Size.x > 0 && m_Viewport.Size.y > 0; }
+        bool IsValidViewport(const ViewportInfo& info) const { return info.Size.x > 0 && info.Size.y > 0; }
         void ProcessReloadEvents();
         void AccumulateFrameTiming(double frameMilliseconds, double framesPerSecond, VkExtent2D extent, std::chrono::system_clock::time_point captureTimestamp);
         void UpdateFrameTimingStats();
         void ExportPerformanceCapture();
         void DestroyOffscreenResources(uint32_t viewportId);
         void DestroyAllOffscreenResources();
-        OffscreenTarget& GetOrCreateOffscreenTarget(uint32_t viewportId);
+        ViewportContext& GetOrCreateViewportContext(uint32_t viewportId);
+        const ViewportContext* FindViewportContext(uint32_t viewportId) const;
+        ViewportContext* FindViewportContext(uint32_t viewportId);
         void CreateOrResizeOffscreenResources(OffscreenTarget& target, VkExtent2D extent);
+        const Camera* GetActiveCamera(const ViewportContext& context) const;
     };
 }
