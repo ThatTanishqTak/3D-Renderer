@@ -838,11 +838,34 @@ namespace Trident
         {
             glm::vec2 l_ViewportSize{ static_cast<float>(m_Swapchain.GetExtent().width), static_cast<float>(m_Swapchain.GetExtent().height) };
             const ViewportContext* l_Context = FindViewportContext(m_ActiveViewportId);
-            if (l_Context)
+
+            // Problem: the editor camera adopted runtime preview extents, stretching authoring controls when panes diverged.
+            // Fix: locate the viewport that actually relies on the editor camera before propagating the size.
+            const auto a_UsesEditorCamera = [this](const ViewportContext& a_Context) -> bool
+                {
+                    // Editor camera renders any viewport that is not explicitly driven by the runtime camera.
+                    return !a_Context.m_IsRuntimeCameraDriven || !m_RuntimeCamera;
+                };
+
+            if (l_Context && a_UsesEditorCamera(*l_Context))
             {
+                // Scene viewport keeps editor camera aspect so manipulation controls remain accurate.
                 l_ViewportSize = l_Context->m_Info.Size;
             }
-            // Keep the editor camera aligned with the most recently active viewport so controls feel responsive.
+            else
+            {
+                for (const std::pair<const uint32_t, ViewportContext>& it_ContextPair : m_ViewportContexts)
+                {
+                    if (a_UsesEditorCamera(it_ContextPair.second))
+                    {
+                        // Fall back to any viewport sharing the editor camera when the active panel is runtime focused.
+                        l_ViewportSize = it_ContextPair.second.m_Info.Size;
+                        break;
+                    }
+                }
+            }
+
+            // Keep the editor camera aligned with the viewport that currently renders it so controls feel responsive.
             m_EditorCamera->SetViewportSize(l_ViewportSize);
         }
     }
@@ -854,12 +877,35 @@ namespace Trident
         {
             glm::vec2 l_ViewportSize{ static_cast<float>(m_Swapchain.GetExtent().width), static_cast<float>(m_Swapchain.GetExtent().height) };
             const ViewportContext* l_Context = FindViewportContext(m_ActiveViewportId);
-            if (l_Context)
+
+            // Problem: gameplay camera sizing was overwritten by editor pane resizes, causing mismatched runtime framing.
+            // Fix: identify the runtime-driven viewport so the gameplay camera only reads dimensions from its preview.
+            const auto a_UsesRuntimeCamera = [](const ViewportContext& a_Context) -> bool
+                {
+                    return a_Context.m_IsRuntimeCameraDriven;
+                };
+
+            if (l_Context && a_UsesRuntimeCamera(*l_Context))
             {
+                // Runtime preview isolates gameplay camera sizing so it matches in-game framing.
                 l_ViewportSize = l_Context->m_Info.Size;
             }
-            // Runtime previews inherit the active viewport size until per-panel overrides are requested.
+            else
+            {
+                for (const std::pair<const uint32_t, ViewportContext>& it_ContextPair : m_ViewportContexts)
+                {
+                    if (a_UsesRuntimeCamera(it_ContextPair.second))
+                    {
+                        // Reuse the first runtime preview we find to keep aspect ratios stable across editor sessions.
+                        l_ViewportSize = it_ContextPair.second.m_Info.Size;
+                        break;
+                    }
+                }
+            }
+
+            // Runtime previews inherit their dedicated viewport size until per-panel overrides are requested.
             m_RuntimeCamera->SetViewportSize(l_ViewportSize);
+            // TODO: Support configuring multiple runtime preview viewports so each gameplay camera maintains its own sizing.
         }
     }
 
@@ -950,14 +996,17 @@ namespace Trident
         l_Context.m_Info = info;
         l_Context.m_Info.ViewportID = viewportId;
 
-        if (m_EditorCamera)
+        // Problem: resizing a runtime-driven panel forced both cameras to match, skewing aspect ratios in the other viewport.
+        // Fix: forward dimensions only to the camera actively rendering this context.
+        if (l_Context.m_IsRuntimeCameraDriven && m_RuntimeCamera)
         {
-            m_EditorCamera->SetViewportSize(info.Size);
-        }
-
-        if (m_RuntimeCamera)
-        {
+            // Runtime preview isolates gameplay camera sizing to mimic the shipped experience.
             m_RuntimeCamera->SetViewportSize(info.Size);
+        }
+        else if (m_EditorCamera)
+        {
+            // Scene viewport keeps editor camera aspect so editing tools remain predictable.
+            m_EditorCamera->SetViewportSize(info.Size);
         }
 
         if (!IsValidViewport(info))

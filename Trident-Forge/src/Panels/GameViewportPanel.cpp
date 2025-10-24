@@ -27,7 +27,7 @@ void GameViewportPanel::Render()
     if (!m_IsWindowOpen)
     {
         // When the window is closed we ensure the editor camera regains control of the renderer.
-        Trident::RenderCommand::SetViewportRuntimeCameraDriven(m_ViewportID, false);
+        Trident::RenderCommand::SetViewportRuntimeCameraDriven(m_ViewportID, true);
         m_HasRuntimeCamera = false;
 
         return;
@@ -40,7 +40,7 @@ void GameViewportPanel::Render()
     if (!m_IsWindowOpen)
     {
         // Closing the window immediately hands control back to the editor viewport.
-        Trident::RenderCommand::SetViewportRuntimeCameraDriven(m_ViewportID, false);
+        Trident::RenderCommand::SetViewportRuntimeCameraDriven(m_ViewportID, true);
         m_HasRuntimeCamera = false;
         m_IsFocused = false;
         m_IsHovered = false;
@@ -52,7 +52,7 @@ void GameViewportPanel::Render()
     if (!l_ShouldRender)
     {
         // Collapsed windows still need to relinquish runtime camera control for predictable behaviour.
-        Trident::RenderCommand::SetViewportRuntimeCameraDriven(m_ViewportID, false);
+        Trident::RenderCommand::SetViewportRuntimeCameraDriven(m_ViewportID, true);
         m_HasRuntimeCamera = false;
         m_IsFocused = false;
         m_IsHovered = false;
