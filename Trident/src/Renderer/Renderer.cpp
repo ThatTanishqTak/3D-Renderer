@@ -2575,7 +2575,7 @@ namespace Trident
                     l_ContextCamera = nullptr;
                 }
 
-                UpdateUniformBuffer(imageIndex, l_ContextCamera);
+                UpdateUniformBuffer(imageIndex, l_ContextCamera, l_CommandBuffer);
 
                 // Restore the previously active viewport so editor interactions remain consistent outside this pass.
                 m_ActiveViewportId = l_PreviousViewportId;
@@ -2796,7 +2796,7 @@ namespace Trident
 
         if (!l_RenderedViewport)
         {
-            UpdateUniformBuffer(imageIndex, nullptr);
+            UpdateUniformBuffer(imageIndex, nullptr, l_CommandBuffer);
         }
 
         if (l_PrimaryTarget && (l_PrimaryTarget->m_Framebuffer == VK_NULL_HANDLE || l_PrimaryTarget->m_Extent.width == 0 || l_PrimaryTarget->m_Extent.height == 0))
@@ -3292,7 +3292,7 @@ namespace Trident
         }
     }
 
-    void Renderer::UpdateUniformBuffer(uint32_t currentImage, const Camera* cameraOverride)
+    void Renderer::UpdateUniformBuffer(uint32_t currentImage, const Camera* cameraOverride, VkCommandBuffer commandBuffer)
     {
         if (currentImage >= m_GlobalUniformBuffersMemory.size() || currentImage >= m_MaterialUniformBuffersMemory.size())
         {
@@ -3399,14 +3399,43 @@ namespace Trident
             l_Material.MaterialFactors = glm::vec4(1.0f, 1.0f, 1.0f, 0.0f);
         }
 
-        void* l_Data = nullptr;
-        vkMapMemory(Startup::GetDevice(), m_GlobalUniformBuffersMemory[currentImage], 0, sizeof(l_Global), 0, &l_Data);
-        std::memcpy(l_Data, &l_Global, sizeof(l_Global));
-        vkUnmapMemory(Startup::GetDevice(), m_GlobalUniformBuffersMemory[currentImage]);
+        if (commandBuffer != VK_NULL_HANDLE)
+        {
+            // Record GPU-side buffer updates so each viewport captures the correct camera state before its render pass begins.
+            vkCmdUpdateBuffer(commandBuffer, m_GlobalUniformBuffers[currentImage], 0, sizeof(l_Global), &l_Global);
+            vkCmdUpdateBuffer(commandBuffer, m_MaterialUniformBuffers[currentImage], 0, sizeof(l_Material), &l_Material);
 
-        vkMapMemory(Startup::GetDevice(), m_MaterialUniformBuffersMemory[currentImage], 0, sizeof(l_Material), 0, &l_Data);
-        std::memcpy(l_Data, &l_Material, sizeof(l_Material));
-        vkUnmapMemory(Startup::GetDevice(), m_MaterialUniformBuffersMemory[currentImage]);
+            // Guarantee the transfer writes are visible before the shader stages fetch the uniform data.
+            std::array<VkBufferMemoryBarrier, 2> l_Barriers{};
+            l_Barriers[0].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+            l_Barriers[0].srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            l_Barriers[0].dstAccessMask = VK_ACCESS_UNIFORM_READ_BIT;
+            l_Barriers[0].buffer = m_GlobalUniformBuffers[currentImage];
+            l_Barriers[0].offset = 0;
+            l_Barriers[0].size = sizeof(l_Global);
+
+            l_Barriers[1].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+            l_Barriers[1].srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            l_Barriers[1].dstAccessMask = VK_ACCESS_UNIFORM_READ_BIT;
+            l_Barriers[1].buffer = m_MaterialUniformBuffers[currentImage];
+            l_Barriers[1].offset = 0;
+            l_Barriers[1].size = sizeof(l_Material);
+
+            vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                0, 0, nullptr, static_cast<uint32_t>(l_Barriers.size()), l_Barriers.data(), 0, nullptr);
+        }
+        else
+        {
+            // Fall back to direct CPU writes when no command buffer is available (e.g., pre-frame initialisation).
+            void* l_Data = nullptr;
+            vkMapMemory(Startup::GetDevice(), m_GlobalUniformBuffersMemory[currentImage], 0, sizeof(l_Global), 0, &l_Data);
+            std::memcpy(l_Data, &l_Global, sizeof(l_Global));
+            vkUnmapMemory(Startup::GetDevice(), m_GlobalUniformBuffersMemory[currentImage]);
+
+            vkMapMemory(Startup::GetDevice(), m_MaterialUniformBuffersMemory[currentImage], 0, sizeof(l_Material), 0, &l_Data);
+            std::memcpy(l_Data, &l_Material, sizeof(l_Material));
+            vkUnmapMemory(Startup::GetDevice(), m_MaterialUniformBuffersMemory[currentImage]);
+        }
 
         // TODO: Expand the uniform population to handle per-camera post-processing once those systems exist.
     }

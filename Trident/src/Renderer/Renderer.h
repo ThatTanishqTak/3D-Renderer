@@ -307,7 +307,7 @@ namespace Trident
         void DestroySkyboxCubemap();
         void UpdateSkyboxBindingOnMainSets();
 
-        void UpdateUniformBuffer(uint32_t currentImage, const Camera* cameraOverride = nullptr);
+        void UpdateUniformBuffer(uint32_t currentImage, const Camera* cameraOverride = nullptr, VkCommandBuffer commandBuffer = VK_NULL_HANDLE);
         void UploadMeshFromCache();
 
         bool AcquireNextImage(uint32_t& imageIndex, VkFence inFlightFence);
