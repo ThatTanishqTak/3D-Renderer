@@ -41,6 +41,22 @@ target_include_directories(tinyexr INTERFACE
 target_sources(tinyexr INTERFACE
   ${CMAKE_CURRENT_SOURCE_DIR}/vendor/tinyexr/deps/miniz/miniz.c
 )
+# Provide KTX texture loading headers and import library to the build.
+add_library(libktx INTERFACE IMPORTED)
+set_target_properties(libktx PROPERTIES
+  INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/vendor/libktx/include"
+)
+if(WIN32)
+  # Visual Studio/MSVC consumes the static import library.
+  set_target_properties(libktx PROPERTIES
+    IMPORTED_LOCATION "${CMAKE_CURRENT_SOURCE_DIR}/vendor/libktx/lib/ktx.lib"
+  )
+else()
+  # Non-Windows toolchains expect the shared object name.
+  set_target_properties(libktx PROPERTIES
+    IMPORTED_LOCATION "${CMAKE_CURRENT_SOURCE_DIR}/vendor/libktx/lib/libktx.so"
+  )
+endif()
 
 include(FetchContent)
 
