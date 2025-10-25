@@ -1,6 +1,10 @@
 #include "Renderer/Camera/RuntimeCamera.h"
 
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/epsilon.hpp>
+
+#include <cmath>
+#include <limits>
 
 namespace Trident
 {
@@ -43,7 +47,9 @@ namespace Trident
 
     void RuntimeCamera::SetPosition(const glm::vec3& position)
     {
-        if (m_Position == position)
+        constexpr float l_PositionTolerance = 0.0001f;
+        const bool l_PositionUnchanged = glm::all(glm::epsilonEqual(m_Position, position, l_PositionTolerance));
+        if (l_PositionUnchanged)
         {
             return;
         }
@@ -54,7 +60,9 @@ namespace Trident
 
     void RuntimeCamera::SetRotation(const glm::vec3& eulerDegrees)
     {
-        if (m_Rotation == eulerDegrees)
+        constexpr float l_RotationTolerance = 0.0001f;
+        const bool l_RotationUnchanged = glm::all(glm::epsilonEqual(m_Rotation, eulerDegrees, l_RotationTolerance));
+        if (l_RotationUnchanged)
         {
             return;
         }
@@ -76,7 +84,8 @@ namespace Trident
 
     void RuntimeCamera::SetFieldOfView(float fieldOfViewDegrees)
     {
-        if (m_FieldOfView == fieldOfViewDegrees)
+        const bool l_FieldOfViewUnchanged = std::fabs(m_FieldOfView - fieldOfViewDegrees) <= std::numeric_limits<float>::epsilon();
+        if (l_FieldOfViewUnchanged)
         {
             return;
         }
@@ -87,7 +96,8 @@ namespace Trident
 
     void RuntimeCamera::SetOrthographicSize(float size)
     {
-        if (m_OrthographicSize == size)
+        const bool l_SizeUnchanged = std::fabs(m_OrthographicSize - size) <= std::numeric_limits<float>::epsilon();
+        if (l_SizeUnchanged)
         {
             return;
         }
@@ -98,7 +108,9 @@ namespace Trident
 
     void RuntimeCamera::SetClipPlanes(float nearClip, float farClip)
     {
-        if (m_NearClip == nearClip && m_FarClip == farClip)
+        const bool l_NearUnchanged = std::fabs(m_NearClip - nearClip) <= std::numeric_limits<float>::epsilon();
+        const bool l_FarUnchanged = std::fabs(m_FarClip - farClip) <= std::numeric_limits<float>::epsilon();
+        if (l_NearUnchanged && l_FarUnchanged)
         {
             return;
         }
@@ -110,7 +122,9 @@ namespace Trident
 
     void RuntimeCamera::SetViewportSize(const glm::vec2& viewportSize)
     {
-        if (m_ViewportSize == viewportSize)
+        constexpr float l_SizeTolerance = 0.0001f;
+        const bool l_SizeUnchanged = glm::all(glm::epsilonEqual(m_ViewportSize, viewportSize, l_SizeTolerance));
+        if (l_SizeUnchanged)
         {
             return;
         }
