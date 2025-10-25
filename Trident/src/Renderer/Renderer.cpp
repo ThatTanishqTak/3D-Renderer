@@ -26,6 +26,7 @@
 #include <system_error>
 #include <cstring>
 #include <cctype>
+#include <cassert>
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/matrix_inverse.hpp>
@@ -45,13 +46,13 @@ namespace
         return l_Mat;
     }
 
-    std::tm ToLocalTime(std::time_t a_Time)
+    std::tm ToLocalTime(std::time_t time)
     {
         std::tm l_LocalTime{};
 #ifdef _WIN32
-        localtime_s(&l_LocalTime, &a_Time);
+        localtime_s(&l_LocalTime, &time);
 #else
-        localtime_r(&a_Time, &l_LocalTime);
+        localtime_r(&time, &l_LocalTime);
 #endif
         return l_LocalTime;
     }
@@ -1578,9 +1579,9 @@ namespace Trident
                 std::array<bool, 6> l_FoundFaces{};
                 const auto a_ToLower = [](std::string text)
                     {
-                        std::transform(text.begin(), text.end(), text.begin(), [](unsigned char a_Char)
+                        std::transform(text.begin(), text.end(), text.begin(), [](unsigned char character)
                             {
-                                return static_cast<char>(std::tolower(a_Char));
+                                return static_cast<char>(std::tolower(character));
                             });
                         return text;
                     };
@@ -1631,9 +1632,9 @@ namespace Trident
                     TR_CORE_ERROR("Failed to enumerate fallback skybox directory '{}': {}", l_DefaultSkyboxRoot.string(), l_IterError.message());
                 }
 
-                const bool l_AllFacesDiscovered = std::all_of(l_FoundFaces.begin(), l_FoundFaces.end(), [](bool a_Found)
+                const bool l_AllFacesDiscovered = std::all_of(l_FoundFaces.begin(), l_FoundFaces.end(), [](bool found)
                     {
-                        return a_Found;
+                        return found;
                     });
 
                 if (l_AllFacesDiscovered)
@@ -2174,18 +2175,29 @@ namespace Trident
 
         if (l_ViewportId == 1U)
         {
-            // The editor viewport always favours the editor camera to avoid runtime state leaking into tooling.
-            return m_EditorCamera ? m_EditorCamera : m_RuntimeCamera;
+            // The Scene viewport must always reflect the editor's navigation camera.
+            return m_EditorCamera;
         }
 
         if (l_ViewportId == 2U)
         {
-            // Runtime viewport requests draw from the gameplay camera, falling back to editor when no simulation is active.
-            return m_RuntimeCamera ? m_RuntimeCamera : m_EditorCamera;
+            // The Game viewport only exposes the runtime camera once the simulation has produced valid matrices.
+            if (m_RuntimeCameraReady && m_RuntimeCamera)
+            {
+                return m_RuntimeCamera;
+            }
+
+            // Fall back to the editor camera so the viewport continues to display a useful image.
+            return m_EditorCamera;
         }
 
-        // Additional viewports can choose whichever camera makes sense; prioritise editor output for determinism today.
-        return m_EditorCamera ? m_EditorCamera : m_RuntimeCamera;
+        // Additional viewports prefer the editor output; if none exist allow the caller to fall back to identity matrices.
+        if (m_EditorCamera)
+        {
+            return m_EditorCamera;
+        }
+
+        return (m_RuntimeCameraReady && m_RuntimeCamera) ? m_RuntimeCamera : nullptr;
     }
 
     void Renderer::CreateOrResizeOffscreenResources(OffscreenTarget& target, VkExtent2D extent)
@@ -2195,65 +2207,65 @@ namespace Trident
         // Ensure the GPU is idle before we reuse or release any image memory.
         vkDeviceWaitIdle(l_Device);
 
-        auto a_ResetTarget = [l_Device](OffscreenTarget& a_Target)
+        auto a_ResetTarget = [l_Device](OffscreenTarget& target)
             {
-                if (a_Target.m_TextureID != VK_NULL_HANDLE)
+                if (target.m_TextureID != VK_NULL_HANDLE)
                 {
-                    ImGui_ImplVulkan_RemoveTexture(a_Target.m_TextureID);
-                    a_Target.m_TextureID = VK_NULL_HANDLE;
+                    ImGui_ImplVulkan_RemoveTexture(target.m_TextureID);
+                    target.m_TextureID = VK_NULL_HANDLE;
                 }
 
-                if (a_Target.m_Framebuffer != VK_NULL_HANDLE)
+                if (target.m_Framebuffer != VK_NULL_HANDLE)
                 {
-                    vkDestroyFramebuffer(l_Device, a_Target.m_Framebuffer, nullptr);
-                    a_Target.m_Framebuffer = VK_NULL_HANDLE;
+                    vkDestroyFramebuffer(l_Device, target.m_Framebuffer, nullptr);
+                    target.m_Framebuffer = VK_NULL_HANDLE;
                 }
 
-                if (a_Target.m_DepthView != VK_NULL_HANDLE)
+                if (target.m_DepthView != VK_NULL_HANDLE)
                 {
-                    vkDestroyImageView(l_Device, a_Target.m_DepthView, nullptr);
-                    a_Target.m_DepthView = VK_NULL_HANDLE;
+                    vkDestroyImageView(l_Device, target.m_DepthView, nullptr);
+                    target.m_DepthView = VK_NULL_HANDLE;
                 }
 
-                if (a_Target.m_ImageView != VK_NULL_HANDLE)
+                if (target.m_ImageView != VK_NULL_HANDLE)
                 {
-                    vkDestroyImageView(l_Device, a_Target.m_ImageView, nullptr);
-                    a_Target.m_ImageView = VK_NULL_HANDLE;
+                    vkDestroyImageView(l_Device, target.m_ImageView, nullptr);
+                    target.m_ImageView = VK_NULL_HANDLE;
                 }
 
-                if (a_Target.m_DepthImage != VK_NULL_HANDLE)
+                if (target.m_DepthImage != VK_NULL_HANDLE)
                 {
-                    vkDestroyImage(l_Device, a_Target.m_DepthImage, nullptr);
-                    a_Target.m_DepthImage = VK_NULL_HANDLE;
+                    vkDestroyImage(l_Device, target.m_DepthImage, nullptr);
+                    target.m_DepthImage = VK_NULL_HANDLE;
                 }
 
-                if (a_Target.m_Image != VK_NULL_HANDLE)
+                if (target.m_Image != VK_NULL_HANDLE)
                 {
-                    vkDestroyImage(l_Device, a_Target.m_Image, nullptr);
-                    a_Target.m_Image = VK_NULL_HANDLE;
+                    vkDestroyImage(l_Device, target.m_Image, nullptr);
+                    target.m_Image = VK_NULL_HANDLE;
                 }
 
-                if (a_Target.m_DepthMemory != VK_NULL_HANDLE)
+                if (target.m_DepthMemory != VK_NULL_HANDLE)
                 {
-                    vkFreeMemory(l_Device, a_Target.m_DepthMemory, nullptr);
-                    a_Target.m_DepthMemory = VK_NULL_HANDLE;
+                    vkFreeMemory(l_Device, target.m_DepthMemory, nullptr);
+                    target.m_DepthMemory = VK_NULL_HANDLE;
                 }
 
-                if (a_Target.m_Memory != VK_NULL_HANDLE)
+                if (target.m_Memory != VK_NULL_HANDLE)
                 {
-                    vkFreeMemory(l_Device, a_Target.m_Memory, nullptr);
-                    a_Target.m_Memory = VK_NULL_HANDLE;
+                    vkFreeMemory(l_Device, target.m_Memory, nullptr);
+                    target.m_Memory = VK_NULL_HANDLE;
                 }
 
-                if (a_Target.m_Sampler != VK_NULL_HANDLE)
+                if (target.m_Sampler != VK_NULL_HANDLE)
                 {
-                    vkDestroySampler(l_Device, a_Target.m_Sampler, nullptr);
-                    a_Target.m_Sampler = VK_NULL_HANDLE;
+                    vkDestroySampler(l_Device, target.m_Sampler, nullptr);
+                    target.m_Sampler = VK_NULL_HANDLE;
                 }
 
-                a_Target.m_Extent = { 0, 0 };
-                a_Target.m_CurrentLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-                a_Target.m_DepthLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+                target.m_Extent = { 0, 0 };
+                target.m_CurrentLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+                target.m_DepthLayout = VK_IMAGE_LAYOUT_UNDEFINED;
             };
 
         a_ResetTarget(target);
@@ -2535,7 +2547,7 @@ namespace Trident
         // Prepare the shared draw lists once so each viewport iteration can reuse the same data set.
         GatherMeshDraws();
 
-        auto a_RenderViewport = [&](uint32_t a_ViewportId, ViewportContext& context, bool a_IsPrimary)
+        auto a_RenderViewport = [&](uint32_t viewportID, ViewportContext& context, bool isPrimary)
             {
                 OffscreenTarget& l_Target = context.m_Target;
                 if (!IsValidViewport(context.m_Info) || l_Target.m_Framebuffer == VK_NULL_HANDLE)
@@ -2550,8 +2562,23 @@ namespace Trident
 
                 l_RenderedViewport = true;
 
+                // Temporarily mark the context as active so shared helpers resolve relative camera state correctly.
+                const uint32_t l_PreviousViewportId = m_ActiveViewportId;
+                m_ActiveViewportId = context.m_Info.ViewportID;
+
                 const Camera* l_ContextCamera = GetActiveCamera(context);
+
+                if (context.m_Info.ViewportID == 2U && !m_RuntimeCameraReady)
+                {
+                    // When the runtime camera has not been initialised we expect to reuse the editor matrices instead.
+                    assert(l_ContextCamera == nullptr || l_ContextCamera == m_EditorCamera);
+                    l_ContextCamera = nullptr;
+                }
+
                 UpdateUniformBuffer(imageIndex, l_ContextCamera);
+
+                // Restore the previously active viewport so editor interactions remain consistent outside this pass.
+                m_ActiveViewportId = l_PreviousViewportId;
 
                 VkPipelineStageFlags l_PreviousStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
                 VkAccessFlags l_PreviousAccess = 0;
@@ -2730,7 +2757,7 @@ namespace Trident
                     0, 0, nullptr, 0, nullptr, 1, &l_OffscreenBarrier);
                 l_Target.m_CurrentLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
 
-                if (!a_IsPrimary)
+                if (!isPrimary)
                 {
                     VkImageMemoryBarrier l_ToSample{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
                     l_ToSample.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
