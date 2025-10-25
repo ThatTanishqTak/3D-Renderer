@@ -3,7 +3,6 @@
 #include "Layer/Layer.h"
 #include "Events/ApplicationEvents.h"
 #include "Renderer/Camera/EditorCamera.h"
-#include "Renderer/Camera/RuntimeCamera.h"
 
 #include "Panels/ViewportPanel.h"
 #include "Panels/GameViewportPanel.h"
@@ -63,7 +62,6 @@ private:
     void CreateEmptyEntity();
     void CreatePrimitiveEntity(PrimitiveType type);
     std::string MakeUniqueName(const std::string& baseName) const;
-    void RefreshRuntimeCameraBinding();
 
 private:
     GizmoState m_GizmoState;
@@ -90,9 +88,6 @@ private:
     // Cursor tracking
     bool m_IsRotateOrbitActive = false;             ///< Flags whether the current frame is processing an orbit drag.
     bool m_ResetRotateOrbitReference = true;        ///< Ensures the next drag discards the initial delta for stability.
-
-    Trident::RuntimeCamera m_RuntimeCamera;         ///< Runtime camera mirroring ECS state for in-editor previews.
-    bool m_HasRuntimeCamera = false;                ///< Tracks whether a valid runtime camera is bound this frame.
 
     // Orbit + framing
     glm::vec3 m_CameraPivot{ 0.0f, 0.0f, 0.0f };    ///< Orbit center used by Alt+LMB and Frame (F).

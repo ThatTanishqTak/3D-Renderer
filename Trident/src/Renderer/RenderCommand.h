@@ -22,8 +22,6 @@ namespace Trident
         static void SetClearColor(const glm::vec4& color);
         static void AppendMeshes(std::vector<Geometry::Mesh> meshes, std::vector<Geometry::Material> materials);
         static void SetEditorCamera(Camera* camera);
-        static void SetRuntimeCamera(Camera* camera);
-        static void SetViewportRuntimeCameraDriven(uint32_t viewportId, bool active);
 
         static Transform GetTransform();
         static ViewportInfo GetViewport();

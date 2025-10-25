@@ -21,7 +21,6 @@
 #include <cmath>
 #include <iterator>
 #include <limits>
-#include <optional>
 
 #include <glm/vec2.hpp>
 #include <glm/gtx/norm.hpp>
@@ -82,8 +81,7 @@ void ApplicationLayer::Initialize()
 
     // Hand the configured camera to the renderer once the panels are bound so subsequent renders use it immediately.
     Trident::RenderCommand::SetEditorCamera(&m_EditorCamera);
-    // Provide the runtime camera access to the registry so it can resolve ECS state without additional allocations.
-    m_RuntimeCamera.SetRegistry(&Trident::Startup::GetRegistry());
+    // Future runtime previews may reintroduce an additional camera path; for now the editor camera drives every viewport.
 
     // Initialize Unity-like target state and pivot/distance
     m_TargetYawDegrees = m_EditorYawDegrees;
@@ -102,9 +100,6 @@ void ApplicationLayer::Shutdown()
 {
     // Detach the editor camera before destruction to avoid dangling references inside the renderer singleton.
     Trident::RenderCommand::SetEditorCamera(nullptr);
-    // Clear the runtime camera pointer to prevent dangling references when the layer shuts down.
-    Trident::RenderCommand::SetRuntimeCamera(nullptr);
-    m_HasRuntimeCamera = false;
 }
 
 void ApplicationLayer::Update()
@@ -130,62 +125,15 @@ void ApplicationLayer::Update()
 
 void ApplicationLayer::Render()
 {
-    // Ensure the editor viewport always renders with the editor camera before handing off to runtime previews.
-    Trident::RenderCommand::SetViewportRuntimeCameraDriven(m_ViewportPanel.GetViewportID(), false);
+    // The editor viewport always renders with the editor camera; runtime previews will reuse this camera until
+    // gameplay simulation introduces its own output again.
     m_ViewportPanel.Render();
     // Surface the runtime viewport directly after the scene so future play/pause widgets can live alongside it.
-    RefreshRuntimeCameraBinding();
-    m_GameViewportPanel.SetRuntimeCameraPresence(m_HasRuntimeCamera);
+    // Only the editor camera drives rendering right now, so the runtime panel simply mirrors the scene output.
     m_GameViewportPanel.Render();
     m_ContentBrowserPanel.Render();
     m_SceneHierarchyPanel.Render();
     m_InspectorPanel.Render();
-}
-
-void ApplicationLayer::RefreshRuntimeCameraBinding()
-{
-    // The runtime viewport should favour a camera explicitly marked as primary and otherwise fall back to the first camera.
-    Trident::ECS::Registry& l_Registry = Trident::Startup::GetRegistry();
-    const std::vector<Trident::ECS::Entity>& l_Entities = l_Registry.GetEntities();
-
-    std::optional<Trident::ECS::Entity> l_PrimaryCamera{};
-    std::optional<Trident::ECS::Entity> l_FirstCamera{};
-
-    for (Trident::ECS::Entity it_Entity : l_Entities)
-    {
-        if (!l_Registry.HasComponent<Trident::CameraComponent>(it_Entity))
-        {
-            continue;
-        }
-
-        if (!l_FirstCamera.has_value())
-        {
-            l_FirstCamera = it_Entity;
-        }
-
-        const Trident::CameraComponent& l_CameraComponent = l_Registry.GetComponent<Trident::CameraComponent>(it_Entity);
-        if (l_CameraComponent.m_Primary)
-        {
-            // Prefer the first primary camera we encounter so authors can explicitly choose the gameplay view.
-            l_PrimaryCamera = it_Entity;
-            break;
-        }
-    }
-
-    const std::optional<Trident::ECS::Entity> l_SelectedCamera = l_PrimaryCamera.has_value() ? l_PrimaryCamera : l_FirstCamera;
-    if (!l_SelectedCamera.has_value())
-    {
-        // Without a camera in the scene the renderer must hand control back to the editor camera.
-        Trident::RenderCommand::SetRuntimeCamera(nullptr);
-        m_HasRuntimeCamera = false;
-        // TODO: Revisit this once explicit scene play states can provide a temporary camera override.
-        return;
-    }
-
-    m_RuntimeCamera.SetEntity(*l_SelectedCamera);
-    Trident::RenderCommand::SetRuntimeCamera(&m_RuntimeCamera);
-    m_HasRuntimeCamera = true;
-    // TODO: Extend this binding to honour explicit user selection and pause/play states when the runtime gains controls.
 }
 
 void ApplicationLayer::HandleSceneHierarchyContextMenu(const ImVec2& min, const ImVec2& max)

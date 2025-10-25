@@ -79,8 +79,6 @@ namespace Trident
         void UploadTexture(const Loader::TextureData& texture);
         void SetImGuiLayer(UI::ImGuiLayer* layer);
         void SetEditorCamera(Camera* camera);
-        void SetRuntimeCamera(Camera* camera);
-        void SetViewportRuntimeCameraDriven(uint32_t viewportId, bool active);
 
         // Lightweight wrapper describing an ImGui-ready texture along with the Vulkan
         // resources required to keep it alive for the duration of the renderer.
@@ -240,14 +238,12 @@ namespace Trident
         {
             ViewportInfo m_Info{};                     ///< Latest position/size reported by the owning panel.
             VkExtent2D m_CachedExtent{ 0, 0 };         ///< Cached Vulkan extent used to avoid redundant resizes.
-            bool m_IsRuntimeCameraDriven = false;      ///< Tracks whether this viewport should use the runtime camera.
             OffscreenTarget m_Target{};                ///< Offscreen render target backing the viewport.
         };
 
         std::unordered_map<uint32_t, ViewportContext> m_ViewportContexts;
         uint32_t m_ActiveViewportId = 0;
         static constexpr uint32_t s_InvalidViewportId = std::numeric_limits<uint32_t>::max();
-        uint32_t m_RuntimeViewportId = s_InvalidViewportId; ///< Viewport currently bound to the runtime camera.
         ECS::Entity m_ViewportCamera = std::numeric_limits<ECS::Entity>::max();
 
         Buffers m_Buffers;
@@ -270,7 +266,6 @@ namespace Trident
 
         UI::ImGuiLayer* m_ImGuiLayer = nullptr;
         Camera* m_EditorCamera = nullptr;          ///< Camera used while authoring scenes in the viewport.
-        Camera* m_RuntimeCamera = nullptr;         ///< Camera driven by gameplay systems when the scene is playing.
         size_t m_FrameAllocationCount = 0;
 
         size_t m_ModelCount = 0;

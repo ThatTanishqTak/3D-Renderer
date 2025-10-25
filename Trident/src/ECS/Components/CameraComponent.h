@@ -7,11 +7,11 @@ namespace Trident
     /**
      * @brief Stores camera properties for ECS driven entities.
      *
-     * Runtime cameras mirror the editor configuration so gameplay code can
-     * animate or swap projection parameters without direct renderer access.
      * The component is intentionally lightweight and serialisation friendly;
      * future versions can extend it with exposure values, post-processing
      * toggles, or physical camera attributes (lens shift, sensor size, etc.).
+     * Once runtime playback returns, these settings will once again feed a
+     * dedicated camera path alongside the editor preview.
      */
     struct CameraComponent
     {

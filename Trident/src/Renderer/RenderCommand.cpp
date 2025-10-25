@@ -57,16 +57,6 @@ namespace Trident
         Startup::GetRenderer().SetEditorCamera(camera);
     }
 
-    void RenderCommand::SetRuntimeCamera(Camera* camera)
-    {
-        Startup::GetRenderer().SetRuntimeCamera(camera);
-    }
-
-    void RenderCommand::SetViewportRuntimeCameraDriven(uint32_t viewportId, bool active)
-    {
-        Startup::GetRenderer().SetViewportRuntimeCameraDriven(viewportId, active);
-    }
-
     Transform RenderCommand::GetTransform()
     {
         return Startup::GetRenderer().GetTransform();

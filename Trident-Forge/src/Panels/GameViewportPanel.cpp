@@ -26,9 +26,9 @@ void GameViewportPanel::Render()
 {
     if (!m_IsWindowOpen)
     {
-        // When the window is closed we ensure the editor camera regains control of the renderer.
-        Trident::RenderCommand::SetViewportRuntimeCameraDriven(m_ViewportID, true);
-        m_HasRuntimeCamera = false;
+        // When the window is closed we simply skip drawing. Future runtime playback will reintroduce camera ownership rules.
+        m_IsFocused = false;
+        m_IsHovered = false;
 
         return;
     }
@@ -39,9 +39,7 @@ void GameViewportPanel::Render()
 
     if (!m_IsWindowOpen)
     {
-        // Closing the window immediately hands control back to the editor viewport.
-        Trident::RenderCommand::SetViewportRuntimeCameraDriven(m_ViewportID, true);
-        m_HasRuntimeCamera = false;
+        // Closing the window clears transient state. Rendering will resume next frame if the user reopens the tab.
         m_IsFocused = false;
         m_IsHovered = false;
         ImGui::End();
@@ -51,24 +49,9 @@ void GameViewportPanel::Render()
 
     if (!l_ShouldRender)
     {
-        // Collapsed windows still need to relinquish runtime camera control for predictable behaviour.
-        Trident::RenderCommand::SetViewportRuntimeCameraDriven(m_ViewportID, true);
-        m_HasRuntimeCamera = false;
+        // Collapsed windows do not need to draw an image but we still clear state to keep interactions deterministic.
         m_IsFocused = false;
         m_IsHovered = false;
-        ImGui::End();
-
-        return;
-    }
-
-    if (!m_HasRuntimeCamera)
-    {
-        // Without a runtime camera bound we keep the renderer in editor mode and surface guidance to the user.
-        Trident::RenderCommand::SetViewportRuntimeCameraDriven(m_ViewportID, false);
-        m_IsFocused = ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows);
-        m_IsHovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows);
-        ImGui::TextWrapped("No active runtime camera in the scene.");
-        // TODO: Display contextual actions here once play/pause state management is available.
         ImGui::End();
 
         return;
@@ -77,12 +60,6 @@ void GameViewportPanel::Render()
     // Record hover/focus state so gameplay shortcuts can respect editor UI conventions.
     m_IsFocused = ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows);
     m_IsHovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows);
-
-    // Only drive the renderer with the runtime camera while the window is actively interacted with.
-    // This avoids stealing control from the editor viewport once the new runtime panel is open.
-    // TODO: Evaluate a dual-render path so editor and runtime previews can draw concurrently without flipping state.
-    // Manual QA: scene and game viewports were opened together to confirm both render paths stay stable.
-    Trident::RenderCommand::SetViewportRuntimeCameraDriven(m_ViewportID, true);
 
     const ImVec2 l_ContentRegion = ImGui::GetContentRegionAvail();
     const glm::vec2 l_NewViewportSize{ l_ContentRegion.x, l_ContentRegion.y };
@@ -107,7 +84,7 @@ void GameViewportPanel::Render()
         const VkDescriptorSet l_Descriptor = Trident::RenderCommand::GetViewportTexture(m_ViewportID);
         if (l_Descriptor != VK_NULL_HANDLE)
         {
-            // Draw the runtime scene output. Future HUD overlays can layer ImGui draw calls after this image.
+            // Draw the scene output. The editor camera currently feeds both viewports until runtime playback returns.
             ImGui::Image(reinterpret_cast<ImTextureID>(l_Descriptor), l_ContentRegion, ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f));
             // TODO: Add HUD overlays (stats, gizmos) when a runtime camera is active.
 
@@ -138,13 +115,8 @@ void GameViewportPanel::Render()
         }
         else
         {
-            // TODO: Provide a placeholder overlay that communicates when the runtime renderer is offline.
+            // TODO: Provide a placeholder overlay that communicates when the renderer is offline.
         }
-    }
-    else
-    {
-        // When the viewport shrinks to zero we fall back to the editor camera to avoid wasted rendering work.
-        Trident::RenderCommand::SetViewportRuntimeCameraDriven(m_ViewportID, false);
     }
 
     // Additional runtime metrics and overlays can be drawn here before closing the window.
@@ -161,16 +133,4 @@ void GameViewportPanel::SetContextMenuHandler(std::function<void(const ImVec2&, 
 {
     // Cache the handler so external systems can attach context menus to the runtime viewport image.
     //m_OnViewportContextMenu = std::move(contextMenuHandler);
-}
-
-void GameViewportPanel::SetRuntimeCameraPresence(bool hasRuntimeCamera)
-{
-    // Cache the runtime camera availability so Render() can avoid toggling renderer state unnecessarily.
-    m_HasRuntimeCamera = hasRuntimeCamera;
-    if (!m_HasRuntimeCamera)
-    {
-        // When no runtime camera is bound we immediately fall back to editor rendering.
-        Trident::RenderCommand::SetViewportRuntimeCameraDriven(m_ViewportID, false);
-    }
-    // TODO: Integrate with play/pause state to keep this flag aligned with future runtime control workflows.
 }
