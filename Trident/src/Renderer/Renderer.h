@@ -80,6 +80,7 @@ namespace Trident
         void SetImGuiLayer(UI::ImGuiLayer* layer);
         void SetEditorCamera(Camera* camera);
         void SetRuntimeCamera(Camera* camera);
+        bool HasRuntimeCamera() const { return m_RuntimeCamera != nullptr; }
 
         // Lightweight wrapper describing an ImGui-ready texture along with the Vulkan
         // resources required to keep it alive for the duration of the renderer.

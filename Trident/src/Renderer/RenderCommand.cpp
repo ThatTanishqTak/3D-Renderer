@@ -63,6 +63,12 @@ namespace Trident
         Startup::GetRenderer().SetRuntimeCamera(camera);
     }
 
+    bool RenderCommand::HasRuntimeCamera()
+    {
+        // Expose the renderer's runtime camera status so panels can surface helpful overlays.
+        return Startup::GetRenderer().HasRuntimeCamera();
+    }
+
     Transform RenderCommand::GetTransform()
     {
         return Startup::GetRenderer().GetTransform();

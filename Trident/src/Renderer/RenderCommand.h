@@ -23,6 +23,7 @@ namespace Trident
         static void AppendMeshes(std::vector<Geometry::Mesh> meshes, std::vector<Geometry::Material> materials);
         static void SetEditorCamera(Camera* camera);
         static void SetRuntimeCamera(Camera* camera);
+        static bool HasRuntimeCamera();
 
         static Transform GetTransform();
         static ViewportInfo GetViewport();

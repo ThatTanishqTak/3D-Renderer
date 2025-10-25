@@ -82,7 +82,8 @@ void GameViewportPanel::Render()
         }
 
         const VkDescriptorSet l_Descriptor = Trident::RenderCommand::GetViewportTexture(m_ViewportID);
-        if (l_Descriptor != VK_NULL_HANDLE)
+        const bool l_HasRuntimeCamera = Trident::RenderCommand::HasRuntimeCamera();
+        if (l_Descriptor != VK_NULL_HANDLE && l_HasRuntimeCamera)
         {
             // Draw the runtime scene output. The renderer now routes gameplay through the dedicated runtime camera.
             ImGui::Image(reinterpret_cast<ImTextureID>(l_Descriptor), l_ContentRegion, ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f));
@@ -115,7 +116,16 @@ void GameViewportPanel::Render()
         }
         else
         {
-            // TODO: Provide a placeholder overlay that communicates when the renderer is offline.
+            // Draw an overlay so users understand why the viewport is empty. Future revisions can surface status icons here.
+            ImDrawList* l_DrawList = ImGui::GetWindowDrawList();
+            const char* l_Message = "No Active Runtime Camera is Present";
+            const ImVec2 l_TextSize = ImGui::CalcTextSize(l_Message);
+            const ImVec2 l_ViewportCenter{ (m_ViewportBoundsMin.x + m_ViewportBoundsMax.x) * 0.5f, (m_ViewportBoundsMin.y + m_ViewportBoundsMax.y) * 0.5f };
+            const ImVec2 l_TextPosition{ l_ViewportCenter.x - (l_TextSize.x * 0.5f), l_ViewportCenter.y - (l_TextSize.y * 0.5f) };
+            const ImU32 l_TextColor = ImGui::GetColorU32(ImGuiCol_TextDisabled);
+
+            // Anchor the notice in the middle of the viewport so it remains readable regardless of panel size.
+            l_DrawList->AddText(l_TextPosition, l_TextColor, l_Message);
         }
     }
 
