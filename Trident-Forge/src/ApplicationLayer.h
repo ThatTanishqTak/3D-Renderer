@@ -3,6 +3,7 @@
 #include "Layer/Layer.h"
 #include "Events/ApplicationEvents.h"
 #include "Renderer/Camera/EditorCamera.h"
+#include "Renderer/Camera/RuntimeCamera.h"
 
 #include "Panels/ViewportPanel.h"
 #include "Panels/GameViewportPanel.h"
@@ -72,6 +73,7 @@ private:
     InspectorPanel m_InspectorPanel;
 
     Trident::EditorCamera m_EditorCamera;           ///< Viewport camera providing authoring controls.
+    Trident::RuntimeCamera m_RuntimeCamera;         ///< Gameplay camera routed into the dedicated runtime viewport.
 
     // Orientation state (degrees)
     float m_EditorYawDegrees = -90.0f;              ///< Horizontal orbit angle stored in degrees for clarity.

@@ -81,7 +81,13 @@ void ApplicationLayer::Initialize()
 
     // Hand the configured camera to the renderer once the panels are bound so subsequent renders use it immediately.
     Trident::RenderCommand::SetEditorCamera(&m_EditorCamera);
-    // Future runtime previews may reintroduce an additional camera path; for now the editor camera drives every viewport.
+    // Mirror the configuration for the runtime camera so play mode can maintain its own independent transform state.
+    m_RuntimeCamera.SetPosition(m_EditorCamera.GetPosition());
+    m_RuntimeCamera.SetRotation(m_EditorCamera.GetRotation());
+    m_RuntimeCamera.SetClipPlanes(0.1f, 1000.0f);
+    m_RuntimeCamera.SetProjectionType(Trident::Camera::ProjectionType::Perspective);
+    Trident::RenderCommand::SetRuntimeCamera(&m_RuntimeCamera);
+    // Future improvements may drive the runtime camera from gameplay systems, leaving this initialisation as a safe default.
 
     // Initialize Unity-like target state and pivot/distance
     m_TargetYawDegrees = m_EditorYawDegrees;
@@ -98,8 +104,9 @@ void ApplicationLayer::Initialize()
 
 void ApplicationLayer::Shutdown()
 {
-    // Detach the editor camera before destruction to avoid dangling references inside the renderer singleton.
+    // Detach both cameras before destruction to avoid dangling references inside the renderer singleton.
     Trident::RenderCommand::SetEditorCamera(nullptr);
+    Trident::RenderCommand::SetRuntimeCamera(nullptr);
 }
 
 void ApplicationLayer::Update()
@@ -125,11 +132,10 @@ void ApplicationLayer::Update()
 
 void ApplicationLayer::Render()
 {
-    // The editor viewport always renders with the editor camera; runtime previews will reuse this camera until
-    // gameplay simulation introduces its own output again.
+    // The editor viewport always renders with the editor camera so gizmos and transform tools remain deterministic.
     m_ViewportPanel.Render();
     // Surface the runtime viewport directly after the scene so future play/pause widgets can live alongside it.
-    // Only the editor camera drives rendering right now, so the runtime panel simply mirrors the scene output.
+    // The game viewport now presents the runtime camera feed, keeping simulation visuals separate from authoring tools.
     m_GameViewportPanel.Render();
     m_ContentBrowserPanel.Render();
     m_SceneHierarchyPanel.Render();

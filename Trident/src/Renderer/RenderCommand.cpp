@@ -57,6 +57,12 @@ namespace Trident
         Startup::GetRenderer().SetEditorCamera(camera);
     }
 
+    void RenderCommand::SetRuntimeCamera(Camera* camera)
+    {
+        // Forward runtime camera ownership so gameplay and editor views can coexist without fighting over transforms.
+        Startup::GetRenderer().SetRuntimeCamera(camera);
+    }
+
     Transform RenderCommand::GetTransform()
     {
         return Startup::GetRenderer().GetTransform();
@@ -74,11 +80,13 @@ namespace Trident
 
     glm::mat4 RenderCommand::GetViewportViewMatrix(uint32_t viewportId)
     {
+        // Renderer chooses the appropriate camera based on viewport ID; editor (1U) and runtime (2U) remain isolated.
         return Startup::GetRenderer().GetViewportViewMatrix(viewportId);
     }
 
     glm::mat4 RenderCommand::GetViewportProjectionMatrix(uint32_t viewportId)
     {
+        // Gameplay tooling can query either viewport knowing the renderer will select the matching camera feed.
         return Startup::GetRenderer().GetViewportProjectionMatrix(viewportId);
     }
 

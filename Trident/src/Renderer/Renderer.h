@@ -79,6 +79,7 @@ namespace Trident
         void UploadTexture(const Loader::TextureData& texture);
         void SetImGuiLayer(UI::ImGuiLayer* layer);
         void SetEditorCamera(Camera* camera);
+        void SetRuntimeCamera(Camera* camera);
 
         // Lightweight wrapper describing an ImGui-ready texture along with the Vulkan
         // resources required to keep it alive for the duration of the renderer.
@@ -266,6 +267,7 @@ namespace Trident
 
         UI::ImGuiLayer* m_ImGuiLayer = nullptr;
         Camera* m_EditorCamera = nullptr;          ///< Camera used while authoring scenes in the viewport.
+        Camera* m_RuntimeCamera = nullptr;         ///< Camera representing runtime/gameplay output routed to the game viewport.
         size_t m_FrameAllocationCount = 0;
 
         size_t m_ModelCount = 0;

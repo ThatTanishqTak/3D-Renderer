@@ -84,7 +84,7 @@ void GameViewportPanel::Render()
         const VkDescriptorSet l_Descriptor = Trident::RenderCommand::GetViewportTexture(m_ViewportID);
         if (l_Descriptor != VK_NULL_HANDLE)
         {
-            // Draw the scene output. The editor camera currently feeds both viewports until runtime playback returns.
+            // Draw the runtime scene output. The renderer now routes gameplay through the dedicated runtime camera.
             ImGui::Image(reinterpret_cast<ImTextureID>(l_Descriptor), l_ContentRegion, ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f));
             // TODO: Add HUD overlays (stats, gizmos) when a runtime camera is active.
 

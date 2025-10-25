@@ -838,7 +838,15 @@ namespace Trident
         {
             glm::vec2 l_ViewportSize{ static_cast<float>(m_Swapchain.GetExtent().width), static_cast<float>(m_Swapchain.GetExtent().height) };
 
-            if (const ViewportContext* l_Context = FindViewportContext(m_ActiveViewportId))
+            // Prefer the dedicated editor viewport (ID 1U) when sizing the camera so the game view never steals its feed.
+            if (const ViewportContext* l_EditorContext = FindViewportContext(1U))
+            {
+                if (IsValidViewport(l_EditorContext->m_Info))
+                {
+                    l_ViewportSize = l_EditorContext->m_Info.Size;
+                }
+            }
+            else if (const ViewportContext* l_Context = FindViewportContext(m_ActiveViewportId))
             {
                 if (IsValidViewport(l_Context->m_Info))
                 {
@@ -857,9 +865,47 @@ namespace Trident
                 }
             }
 
-            // Keep the editor camera aligned with whichever viewport last interacted with the renderer.
-            // Future runtime previews may branch this logic to honour distinct camera feeds per panel again.
+            // Keep the editor camera aligned with the authoring viewport so manipulator math remains predictable.
             m_EditorCamera->SetViewportSize(l_ViewportSize);
+        }
+    }
+
+    void Renderer::SetRuntimeCamera(Camera* camera)
+    {
+        m_RuntimeCamera = camera;
+        if (m_RuntimeCamera)
+        {
+            glm::vec2 l_ViewportSize{ static_cast<float>(m_Swapchain.GetExtent().width), static_cast<float>(m_Swapchain.GetExtent().height) };
+
+            // Runtime output targets the game viewport (ID 2U); fall back to any active viewport if it has not initialised yet.
+            if (const ViewportContext* l_GameContext = FindViewportContext(2U))
+            {
+                if (IsValidViewport(l_GameContext->m_Info))
+                {
+                    l_ViewportSize = l_GameContext->m_Info.Size;
+                }
+            }
+            else if (const ViewportContext* l_Context = FindViewportContext(m_ActiveViewportId))
+            {
+                if (IsValidViewport(l_Context->m_Info))
+                {
+                    l_ViewportSize = l_Context->m_Info.Size;
+                }
+            }
+            else
+            {
+                for (const std::pair<const uint32_t, ViewportContext>& it_ContextPair : m_ViewportContexts)
+                {
+                    if (IsValidViewport(it_ContextPair.second.m_Info))
+                    {
+                        l_ViewportSize = it_ContextPair.second.m_Info.Size;
+                        break;
+                    }
+                }
+            }
+
+            // Keep the runtime camera sized to its viewport so gameplay simulations respect their intended aspect ratio.
+            m_RuntimeCamera->SetViewportSize(l_ViewportSize);
         }
     }
 
@@ -872,7 +918,7 @@ namespace Trident
     VkDescriptorSet Renderer::GetViewportTexture(uint32_t viewportId) const
     {
         // Provide the descriptor set that ImGui::Image expects when the viewport is active.
-        // At present every viewport is rendered with the editor camera; future runtime previews can expand this routing again.
+        // The active camera routing happens elsewhere; this helper only surfaces the render target texture to ImGui.
         const ViewportContext* l_Context = FindViewportContext(viewportId);
         if (!l_Context || !IsValidViewport(l_Context->m_Info))
         {
@@ -893,7 +939,8 @@ namespace Trident
         const ViewportContext* l_Context = FindViewportContext(m_ActiveViewportId);
         if (!l_Context)
         {
-            return m_EditorCamera;
+            // When no context is active prefer the editor camera to keep tools responsive, otherwise fall back to runtime.
+            return m_EditorCamera ? m_EditorCamera : m_RuntimeCamera;
         }
 
         return GetActiveCamera(*l_Context);
@@ -932,10 +979,43 @@ namespace Trident
         l_Context.m_Info = info;
         l_Context.m_Info.ViewportID = viewportId;
 
-        if (m_EditorCamera)
+        auto a_UpdateCameraSize = [info](Camera* targetCamera)
+            {
+                if (targetCamera)
+                {
+                    // Ensure the camera's projection matches the viewport so culling and mouse picking behave correctly.
+                    targetCamera->SetViewportSize(info.Size);
+                }
+            };
+
+        if (viewportId == 1U)
         {
-            // Every viewport currently mirrors the editor camera; once runtime playback returns this branch can split again.
-            m_EditorCamera->SetViewportSize(info.Size);
+            // Explicitly size the editor camera against the editor viewport. If it is missing fall back so rendering continues.
+            if (m_EditorCamera)
+            {
+                a_UpdateCameraSize(m_EditorCamera);
+            }
+            else
+            {
+                a_UpdateCameraSize(m_RuntimeCamera);
+            }
+        }
+        else if (viewportId == 2U)
+        {
+            // Runtime viewport pulls from the gameplay camera, falling back to editor output for inactive simulations.
+            if (m_RuntimeCamera)
+            {
+                a_UpdateCameraSize(m_RuntimeCamera);
+            }
+            else
+            {
+                a_UpdateCameraSize(m_EditorCamera);
+            }
+        }
+        else
+        {
+            // Additional viewports inherit editor sizing today; future multi-camera routing can specialise this branch.
+            a_UpdateCameraSize(m_EditorCamera ? m_EditorCamera : m_RuntimeCamera);
         }
 
         if (!IsValidViewport(info))
@@ -2078,10 +2158,24 @@ namespace Trident
         return const_cast<ViewportContext*>(static_cast<const Renderer*>(this)->FindViewportContext(viewportId));
     }
 
-    const Camera* Renderer::GetActiveCamera(const ViewportContext& /*context*/) const
+    const Camera* Renderer::GetActiveCamera(const ViewportContext& context) const
     {
-        // All viewports fall back to the editor camera until runtime feeds are reinstated.
-        return m_EditorCamera;
+        const uint32_t l_ViewportId = context.m_Info.ViewportID;
+
+        if (l_ViewportId == 1U)
+        {
+            // The editor viewport always favours the editor camera to avoid runtime state leaking into tooling.
+            return m_EditorCamera ? m_EditorCamera : m_RuntimeCamera;
+        }
+
+        if (l_ViewportId == 2U)
+        {
+            // Runtime viewport requests draw from the gameplay camera, falling back to editor when no simulation is active.
+            return m_RuntimeCamera ? m_RuntimeCamera : m_EditorCamera;
+        }
+
+        // Additional viewports can choose whichever camera makes sense; prioritise editor output for determinism today.
+        return m_EditorCamera ? m_EditorCamera : m_RuntimeCamera;
     }
 
     void Renderer::CreateOrResizeOffscreenResources(OffscreenTarget& target, VkExtent2D extent)
