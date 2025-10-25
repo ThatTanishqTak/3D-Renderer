@@ -54,7 +54,8 @@ private:
     bool HandleFileDrop(Trident::FileDropEvent& event);
     bool ImportDroppedAssets(const std::vector<std::string>& droppedPaths);
 
-    void UpdateEditorCamera(float a_DeltaTime);
+    void UpdateEditorCamera(float deltaTime);
+    void RefreshRuntimeCameraBinding();
 
     // Unity-like helpers
     void FrameSelection();
@@ -110,4 +111,6 @@ private:
     // Fly speed limits
     float m_MinMoveSpeed = 10.1f;
     float m_MaxMoveSpeed = 50.0f;
+
+    Trident::ECS::Entity m_BoundRuntimeCameraEntity = std::numeric_limits<Trident::ECS::Entity>::max(); ///< Tracks the last entity routed into the runtime viewport.
 };

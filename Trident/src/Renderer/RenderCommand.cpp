@@ -63,9 +63,15 @@ namespace Trident
         Startup::GetRenderer().SetRuntimeCamera(camera);
     }
 
+    void RenderCommand::SetRuntimeCameraReady(bool cameraReady)
+    {
+        // Allow callers to flag when the runtime camera contains valid scene data so viewports can display helpful guidance.
+        Startup::GetRenderer().SetRuntimeCameraReady(cameraReady);
+    }
+
     bool RenderCommand::HasRuntimeCamera()
     {
-        // Expose the renderer's runtime camera status so panels can surface helpful overlays.
+        // Expose whether a valid, ready runtime camera is bound so panels can surface helpful overlays or fallbacks.
         return Startup::GetRenderer().HasRuntimeCamera();
     }
 

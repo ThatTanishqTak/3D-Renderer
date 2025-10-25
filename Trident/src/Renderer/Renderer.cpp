@@ -873,40 +873,50 @@ namespace Trident
     void Renderer::SetRuntimeCamera(Camera* camera)
     {
         m_RuntimeCamera = camera;
-        if (m_RuntimeCamera)
+        m_RuntimeCameraReady = false;
+        if (!m_RuntimeCamera)
         {
-            glm::vec2 l_ViewportSize{ static_cast<float>(m_Swapchain.GetExtent().width), static_cast<float>(m_Swapchain.GetExtent().height) };
-
-            // Runtime output targets the game viewport (ID 2U); fall back to any active viewport if it has not initialised yet.
-            if (const ViewportContext* l_GameContext = FindViewportContext(2U))
-            {
-                if (IsValidViewport(l_GameContext->m_Info))
-                {
-                    l_ViewportSize = l_GameContext->m_Info.Size;
-                }
-            }
-            else if (const ViewportContext* l_Context = FindViewportContext(m_ActiveViewportId))
-            {
-                if (IsValidViewport(l_Context->m_Info))
-                {
-                    l_ViewportSize = l_Context->m_Info.Size;
-                }
-            }
-            else
-            {
-                for (const std::pair<const uint32_t, ViewportContext>& it_ContextPair : m_ViewportContexts)
-                {
-                    if (IsValidViewport(it_ContextPair.second.m_Info))
-                    {
-                        l_ViewportSize = it_ContextPair.second.m_Info.Size;
-                        break;
-                    }
-                }
-            }
-
-            // Keep the runtime camera sized to its viewport so gameplay simulations respect their intended aspect ratio.
-            m_RuntimeCamera->SetViewportSize(l_ViewportSize);
+            // Clearing the runtime camera prevents stale frames from showing while the scene searches for a replacement.
+            return;
         }
+
+        glm::vec2 l_ViewportSize{ static_cast<float>(m_Swapchain.GetExtent().width), static_cast<float>(m_Swapchain.GetExtent().height) };
+
+        // Runtime output targets the game viewport (ID 2U); fall back to any active viewport if it has not initialised yet.
+        if (const ViewportContext* l_GameContext = FindViewportContext(2U))
+        {
+            if (IsValidViewport(l_GameContext->m_Info))
+            {
+                l_ViewportSize = l_GameContext->m_Info.Size;
+            }
+        }
+        else if (const ViewportContext* l_Context = FindViewportContext(m_ActiveViewportId))
+        {
+            if (IsValidViewport(l_Context->m_Info))
+            {
+                l_ViewportSize = l_Context->m_Info.Size;
+            }
+        }
+        else
+        {
+            for (const std::pair<const uint32_t, ViewportContext>& it_ContextPair : m_ViewportContexts)
+            {
+                if (IsValidViewport(it_ContextPair.second.m_Info))
+                {
+                    l_ViewportSize = it_ContextPair.second.m_Info.Size;
+                    break;
+                }
+            }
+        }
+
+        // Keep the runtime camera sized to its viewport so gameplay simulations respect their intended aspect ratio.
+        m_RuntimeCamera->SetViewportSize(l_ViewportSize);
+    }
+
+    void Renderer::SetRuntimeCameraReady(bool ready)
+    {
+        // Guard the flag with the pointer so callers cannot accidentally mark a cleared camera as ready.
+        m_RuntimeCameraReady = ready && (m_RuntimeCamera != nullptr);
     }
 
     void Renderer::SetClearColor(const glm::vec4& color)

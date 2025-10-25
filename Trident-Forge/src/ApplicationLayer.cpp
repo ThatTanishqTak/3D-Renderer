@@ -86,7 +86,9 @@ void ApplicationLayer::Initialize()
     m_RuntimeCamera.SetRotation(m_EditorCamera.GetRotation());
     m_RuntimeCamera.SetClipPlanes(0.1f, 1000.0f);
     m_RuntimeCamera.SetProjectionType(Trident::Camera::ProjectionType::Perspective);
-    Trident::RenderCommand::SetRuntimeCamera(&m_RuntimeCamera);
+    Trident::RenderCommand::SetRuntimeCamera(nullptr);
+    Trident::RenderCommand::SetRuntimeCameraReady(false);
+    RefreshRuntimeCameraBinding();
     // Future improvements may drive the runtime camera from gameplay systems, leaving this initialisation as a safe default.
 
     // Initialize Unity-like target state and pivot/distance
@@ -107,6 +109,7 @@ void ApplicationLayer::Shutdown()
     // Detach both cameras before destruction to avoid dangling references inside the renderer singleton.
     Trident::RenderCommand::SetEditorCamera(nullptr);
     Trident::RenderCommand::SetRuntimeCamera(nullptr);
+    Trident::RenderCommand::SetRuntimeCameraReady(false);
 }
 
 void ApplicationLayer::Update()
@@ -118,6 +121,7 @@ void ApplicationLayer::Update()
 
     m_ViewportPanel.Update();
     // Keep the runtime viewport state aligned with the editor viewport so shared handlers see up-to-date focus/hover data.
+    RefreshRuntimeCameraBinding();
     m_GameViewportPanel.Update();
     m_ContentBrowserPanel.Update();
     m_SceneHierarchyPanel.Update();
@@ -421,6 +425,87 @@ bool ApplicationLayer::ImportDroppedAssets(const std::vector<std::string>& dropp
     Trident::RenderCommand::AppendMeshes(std::move(l_ImportedMeshes), std::move(l_ImportedMaterials));
 
     return true;
+}
+
+void ApplicationLayer::RefreshRuntimeCameraBinding()
+{
+    // Locate the first available gameplay camera. Prefer entities explicitly flagged as primary, but fall back to
+    // the first camera encountered so empty scenes still show content once a camera is authored.
+    Trident::ECS::Registry& l_Registry = Trident::Startup::GetRegistry();
+    const std::vector<Trident::ECS::Entity>& l_Entities = l_Registry.GetEntities();
+
+    const Trident::ECS::Entity l_InvalidEntity = std::numeric_limits<Trident::ECS::Entity>::max();
+    Trident::ECS::Entity l_SelectedEntity = l_InvalidEntity;
+
+    for (Trident::ECS::Entity it_Entity : l_Entities)
+    {
+        if (!l_Registry.HasComponent<Trident::CameraComponent>(it_Entity))
+        {
+            continue;
+        }
+
+        if (!l_Registry.HasComponent<Trident::Transform>(it_Entity))
+        {
+            // Cameras without transforms cannot drive the runtime view yet. Future systems may infer transforms automatically.
+            continue;
+        }
+
+        Trident::CameraComponent& l_CameraComponent = l_Registry.GetComponent<Trident::CameraComponent>(it_Entity);
+        if (l_CameraComponent.m_Primary)
+        {
+            l_SelectedEntity = it_Entity;
+            break;
+        }
+
+        if (l_SelectedEntity == l_InvalidEntity)
+        {
+            l_SelectedEntity = it_Entity;
+        }
+    }
+
+    if (l_SelectedEntity != l_InvalidEntity)
+    {
+        Trident::CameraComponent& l_CameraComponent = l_Registry.GetComponent<Trident::CameraComponent>(l_SelectedEntity);
+        Trident::Transform& l_TransformComponent = l_Registry.GetComponent<Trident::Transform>(l_SelectedEntity);
+
+        // Cache the selection so repeated scans can detect changes. This also keeps room for future multi-camera routing.
+        m_BoundRuntimeCameraEntity = l_SelectedEntity;
+
+        // Push transform state into the runtime camera so gameplay visuals mirror the authored entity.
+        m_RuntimeCamera.SetPosition(l_TransformComponent.Position);
+        m_RuntimeCamera.SetRotation(l_TransformComponent.Rotation);
+
+        // Apply projection settings stored on the ECS component.
+        m_RuntimeCamera.SetProjectionType(l_CameraComponent.m_ProjectionType);
+        m_RuntimeCamera.SetFieldOfView(l_CameraComponent.m_FieldOfView);
+        m_RuntimeCamera.SetOrthographicSize(l_CameraComponent.m_OrthographicSize);
+        m_RuntimeCamera.SetClipPlanes(l_CameraComponent.m_NearClip, l_CameraComponent.m_FarClip);
+
+        if (l_CameraComponent.m_FixedAspectRatio && l_CameraComponent.m_AspectRatio > std::numeric_limits<float>::epsilon())
+        {
+            // Respect fixed aspect ratios by adjusting the runtime viewport width while retaining the current height.
+            glm::vec2 l_ViewportSize = m_RuntimeCamera.GetViewportSize();
+            if (l_ViewportSize.y <= std::numeric_limits<float>::epsilon())
+            {
+                l_ViewportSize.y = 1.0f;
+            }
+            l_ViewportSize.x = l_ViewportSize.y * l_CameraComponent.m_AspectRatio;
+            m_RuntimeCamera.SetViewportSize(l_ViewportSize);
+        }
+
+        m_RuntimeCamera.Invalidate();
+
+        // Hand the configured runtime camera to the renderer and flag it as ready for consumption by the viewport panel.
+        Trident::RenderCommand::SetRuntimeCamera(&m_RuntimeCamera);
+        Trident::RenderCommand::SetRuntimeCameraReady(true);
+    }
+    else
+    {
+        // Without a gameplay camera we clear the binding so the renderer can fall back to editor visuals gracefully.
+        m_BoundRuntimeCameraEntity = l_InvalidEntity;
+        Trident::RenderCommand::SetRuntimeCamera(nullptr);
+        Trident::RenderCommand::SetRuntimeCameraReady(false);
+    }
 }
 
 void ApplicationLayer::UpdateEditorCamera(float deltaTime)
