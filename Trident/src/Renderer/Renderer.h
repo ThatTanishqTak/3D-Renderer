@@ -33,6 +33,7 @@
 #include <chrono>
 #include <unordered_map>
 #include <limits>
+#include <string>
 
 namespace Trident
 {
@@ -74,9 +75,9 @@ namespace Trident
         void DrawFrame();
 
         void RecreateSwapchain();
-        void UploadMesh(const std::vector<Geometry::Mesh>& meshes, const std::vector<Geometry::Material>& materials);
-        void AppendMeshes(std::vector<Geometry::Mesh> meshes, std::vector<Geometry::Material> materials);
-        void UploadTexture(const Loader::TextureData& texture);
+        void UploadMesh(const std::vector<Geometry::Mesh>& meshes, const std::vector<Geometry::Material>& materials, const std::vector<std::string>& textures);
+        void AppendMeshes(std::vector<Geometry::Mesh> meshes, std::vector<Geometry::Material> materials, std::vector<std::string> textures);
+        void UploadTexture(const std::string& texturePath, const Loader::TextureData& texture);
         void SetImGuiLayer(UI::ImGuiLayer* layer);
         void SetEditorCamera(Camera* camera);
         void SetRuntimeCamera(Camera* camera);
@@ -204,10 +205,19 @@ namespace Trident
         std::vector<VkDeviceMemory> m_MaterialBuffersMemory;    ///< Backing memory for the material storage buffers.
         std::vector<bool> m_MaterialBufferDirty;                ///< Tracks which per-frame material uploads still need refreshing.
         size_t m_MaterialBufferElementCount = 0;                ///< Number of MaterialUniformBuffer records resident on the GPU.
-        VkImage m_TextureImage = VK_NULL_HANDLE;
-        VkDeviceMemory m_TextureImageMemory = VK_NULL_HANDLE;
-        VkImageView m_TextureImageView = VK_NULL_HANDLE;
-        VkSampler m_TextureSampler = VK_NULL_HANDLE;
+        struct TextureSlot
+        {
+            VkImage m_Image = VK_NULL_HANDLE;                    ///< Backing image containing the texture pixels.
+            VkDeviceMemory m_Memory = VK_NULL_HANDLE;            ///< Device memory bound to the image.
+            VkImageView m_View = VK_NULL_HANDLE;                 ///< View used for sampling.
+            VkSampler m_Sampler = VK_NULL_HANDLE;                ///< Sampler describing filtering/wrapping.
+            VkDescriptorImageInfo m_Descriptor{};                ///< Cached descriptor info for descriptor writes.
+            std::string m_SourcePath{};                          ///< Normalized path of the source asset.
+        };
+
+        std::vector<TextureSlot> m_TextureSlots;                 ///< GPU texture slots shared across materials.
+        std::unordered_map<std::string, uint32_t> m_TextureSlotLookup; ///< Maps normalized texture paths to slot indices.
+        std::vector<VkDescriptorImageInfo> m_TextureDescriptorCache;   ///< Scratch buffer used when updating descriptor arrays.
         VkBuffer m_SpriteVertexBuffer = VK_NULL_HANDLE;      ///< Shared quad geometry for batched sprites.
         VkDeviceMemory m_SpriteVertexMemory = VK_NULL_HANDLE;///< Memory backing the sprite vertex buffer.
         VkBuffer m_SpriteIndexBuffer = VK_NULL_HANDLE;       ///< Index buffer referencing the shared quad.
@@ -308,6 +318,14 @@ namespace Trident
         void CreateSkyboxCubemap();
         void DestroySkyboxCubemap();
         void UpdateSkyboxBindingOnMainSets();
+
+        void DestroyTextureSlot(TextureSlot& slot);
+        bool PopulateTextureSlot(TextureSlot& slot, const Loader::TextureData& textureData);
+        void EnsureTextureDescriptorCapacity();
+        void RefreshTextureDescriptorBindings();
+        uint32_t AcquireTextureSlot(const std::string& normalizedPath, const Loader::TextureData& textureData);
+        void ResolveMaterialTextureSlots(const std::vector<std::string>& textures, size_t materialOffset, size_t materialCount);
+        std::string NormalizeTexturePath(const std::string& texturePath) const;
 
         void EnsureMaterialBufferCapacity(size_t materialCount);
         void UpdateMaterialDescriptorBindings();

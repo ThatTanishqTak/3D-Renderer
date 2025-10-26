@@ -34,6 +34,8 @@
 
 namespace
 {
+    constexpr const char* kDefaultTextureKey = "renderer://default-white";
+
     glm::mat4 ComposeTransform(const Trident::Transform& transform)
     {
         glm::mat4 l_Mat{ 1.0f };
@@ -153,33 +155,13 @@ namespace Trident
         m_MaterialBufferDirty.clear();
         m_MaterialBufferElementCount = 0;
 
-        if (m_TextureSampler != VK_NULL_HANDLE)
+        for (TextureSlot& it_Slot : m_TextureSlots)
         {
-            vkDestroySampler(Startup::GetDevice(), m_TextureSampler, nullptr);
-
-            m_TextureSampler = VK_NULL_HANDLE;
+            DestroyTextureSlot(it_Slot);
         }
-
-        if (m_TextureImageView != VK_NULL_HANDLE)
-        {
-            vkDestroyImageView(Startup::GetDevice(), m_TextureImageView, nullptr);
-
-            m_TextureImageView = VK_NULL_HANDLE;
-        }
-
-        if (m_TextureImage != VK_NULL_HANDLE)
-        {
-            vkDestroyImage(Startup::GetDevice(), m_TextureImage, nullptr);
-
-            m_TextureImage = VK_NULL_HANDLE;
-        }
-
-        if (m_TextureImageMemory != VK_NULL_HANDLE)
-        {
-            vkFreeMemory(Startup::GetDevice(), m_TextureImageMemory, nullptr);
-
-            m_TextureImageMemory = VK_NULL_HANDLE;
-        }
+        m_TextureSlots.clear();
+        m_TextureSlotLookup.clear();
+        m_TextureDescriptorCache.clear();
 
         DestroySkyboxCubemap();
 
@@ -264,16 +246,19 @@ namespace Trident
         AccumulateFrameTiming(l_FrameMilliseconds, l_FrameFPS, l_FrameExtent, l_FrameWallClock);
     }
 
-    void Renderer::UploadMesh(const std::vector<Geometry::Mesh>& meshes, const std::vector<Geometry::Material>& materials)
+    void Renderer::UploadMesh(const std::vector<Geometry::Mesh>& meshes, const std::vector<Geometry::Material>& materials, const std::vector<std::string>& textures)
     {
         // Persist the latest geometry so subsequent drag-and-drop operations can rebuild GPU buffers without reloading from disk.
         m_GeometryCache = meshes;
         m_Materials = materials;
 
+        // Resolve texture slots for every material so the fragment shader can index the descriptor array safely.
+        ResolveMaterialTextureSlots(textures, 0, m_Materials.size());
+
         UploadMeshFromCache();
     }
 
-    void Renderer::AppendMeshes(std::vector<Geometry::Mesh> meshes, std::vector<Geometry::Material> materials)
+    void Renderer::AppendMeshes(std::vector<Geometry::Mesh> meshes, std::vector<Geometry::Material> materials, std::vector<std::string> textures)
     {
         if (meshes.empty())
         {
@@ -292,11 +277,16 @@ namespace Trident
             m_GeometryCache.emplace_back(std::move(it_Mesh));
         }
 
+        const size_t l_NewMaterialOffset = m_Materials.size();
         m_Materials.reserve(m_Materials.size() + materials.size());
         for (Geometry::Material& it_Material : materials)
         {
             m_Materials.emplace_back(std::move(it_Material));
         }
+
+        // Texture indices stored on the incoming materials refer to the provided texture array. Resolve the
+        // GPU slot mapping now so draws issued after the upload can reference the correct descriptor.
+        ResolveMaterialTextureSlots(textures, l_NewMaterialOffset, materials.size());
 
         UploadMeshFromCache();
     }
@@ -436,194 +426,76 @@ namespace Trident
         TR_CORE_INFO("Scene info - Models: {} Triangles: {} Materials: {}", m_ModelCount, m_TriangleCount, m_Materials.size());
     }
 
-    void Renderer::UploadTexture(const Loader::TextureData& texture)
+    void Renderer::UploadTexture(const std::string& texturePath, const Loader::TextureData& texture)
     {
-        TR_CORE_TRACE("Uploading texture ({}x{})", texture.Width, texture.Height);
+        std::string l_NormalizedPath = NormalizeTexturePath(texturePath);
+        TR_CORE_TRACE("Uploading texture refresh for '{}' ({}x{})", l_NormalizedPath.c_str(), texture.Width, texture.Height);
 
-        if (texture.Pixels.empty())
+        if (l_NormalizedPath.empty())
         {
-            TR_CORE_WARN("Texture has no data");
-
+            TR_CORE_WARN("Texture refresh skipped because the provided path was empty.");
             return;
         }
 
-        VkDevice l_Device = Startup::GetDevice();
-
-        vkWaitForFences(l_Device, 1, &m_ResourceFence, VK_TRUE, UINT64_MAX);
-
-        if (m_TextureSampler != VK_NULL_HANDLE)
+        if (texture.Pixels.empty())
         {
-            vkDestroySampler(l_Device, m_TextureSampler, nullptr);
-            m_TextureSampler = VK_NULL_HANDLE;
-        }
-        
-        if (m_TextureImageView != VK_NULL_HANDLE)
-        {
-            vkDestroyImageView(l_Device, m_TextureImageView, nullptr);
-            m_TextureImageView = VK_NULL_HANDLE;
-        }
-        
-        if (m_TextureImage != VK_NULL_HANDLE)
-        {
-            vkDestroyImage(l_Device, m_TextureImage, nullptr);
-            m_TextureImage = VK_NULL_HANDLE;
+            TR_CORE_WARN("Texture '{}' has no pixel data. Keeping the existing descriptor binding.", l_NormalizedPath.c_str());
+            return;
         }
 
-        if (m_TextureImageMemory != VK_NULL_HANDLE)
+        if (m_ResourceFence != VK_NULL_HANDLE)
         {
-            vkFreeMemory(l_Device, m_TextureImageMemory, nullptr);
-            m_TextureImageMemory = VK_NULL_HANDLE;
+            vkWaitForFences(Startup::GetDevice(), 1, &m_ResourceFence, VK_TRUE, UINT64_MAX);
         }
 
-        VkDeviceSize l_ImageSize = static_cast<VkDeviceSize>(texture.Pixels.size());
-
-        VkBuffer l_StagingBuffer = VK_NULL_HANDLE;
-        VkDeviceMemory l_StagingMemory = VK_NULL_HANDLE;
-        m_Buffers.CreateBuffer(l_ImageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, l_StagingBuffer, l_StagingMemory);
-
-        void* l_Data = nullptr;
-        vkMapMemory(l_Device, l_StagingMemory, 0, l_ImageSize, 0, &l_Data);
-        memcpy(l_Data, texture.Pixels.data(), static_cast<size_t>(l_ImageSize));
-        vkUnmapMemory(l_Device, l_StagingMemory);
-
-        VkImageCreateInfo l_ImageInfo{ VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO };
-        l_ImageInfo.imageType = VK_IMAGE_TYPE_2D;
-        l_ImageInfo.extent.width = static_cast<uint32_t>(texture.Width);
-        l_ImageInfo.extent.height = static_cast<uint32_t>(texture.Height);
-        l_ImageInfo.extent.depth = 1;
-        l_ImageInfo.mipLevels = 1;
-        l_ImageInfo.arrayLayers = 1;
-        l_ImageInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
-        l_ImageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-        l_ImageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        l_ImageInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-        l_ImageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        l_ImageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-
-        if (vkCreateImage(l_Device, &l_ImageInfo, nullptr, &m_TextureImage) != VK_SUCCESS)
+        auto a_Existing = m_TextureSlotLookup.find(l_NormalizedPath);
+        if (a_Existing == m_TextureSlotLookup.end())
         {
-            TR_CORE_CRITICAL("Failed to create texture image");
+            if (m_TextureSlots.size() >= Pipeline::s_MaxMaterialTextures)
+            {
+                TR_CORE_WARN("Texture budget exhausted. Unable to hot-reload '{}'.", l_NormalizedPath.c_str());
+                return;
+            }
+
+            TextureSlot l_NewSlot{};
+            if (!PopulateTextureSlot(l_NewSlot, texture))
+            {
+                TR_CORE_WARN("Failed to upload new texture data for '{}'. Keeping previous bindings.", l_NormalizedPath.c_str());
+                return;
+            }
+
+            l_NewSlot.m_SourcePath = l_NormalizedPath;
+            m_TextureSlots.push_back(std::move(l_NewSlot));
+            const uint32_t l_NewIndex = static_cast<uint32_t>(m_TextureSlots.size() - 1);
+            m_TextureSlotLookup.emplace(l_NormalizedPath, l_NewIndex);
+        }
+        else
+        {
+            const uint32_t l_SlotIndex = a_Existing->second;
+            if (l_SlotIndex >= m_TextureSlots.size())
+            {
+                TR_CORE_WARN("Texture cache entry for '{}' referenced an invalid slot. Reverting to default.", l_NormalizedPath.c_str());
+                m_TextureSlotLookup[l_NormalizedPath] = 0u;
+            }
+            else
+            {
+                DestroyTextureSlot(m_TextureSlots[l_SlotIndex]);
+
+                TextureSlot l_Replacement{};
+                if (!PopulateTextureSlot(l_Replacement, texture))
+                {
+                    TR_CORE_WARN("Failed to refresh texture '{}'. Using the default slot instead.", l_NormalizedPath.c_str());
+                    m_TextureSlotLookup[l_NormalizedPath] = 0u;
+                }
+                else
+                {
+                    l_Replacement.m_SourcePath = l_NormalizedPath;
+                    m_TextureSlots[l_SlotIndex] = std::move(l_Replacement);
+                }
+            }
         }
 
-        VkMemoryRequirements l_MemReq{};
-        vkGetImageMemoryRequirements(l_Device, m_TextureImage, &l_MemReq);
-
-        VkMemoryAllocateInfo l_AllocInfo{ VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO };
-        l_AllocInfo.allocationSize = l_MemReq.size;
-        l_AllocInfo.memoryTypeIndex = m_Buffers.FindMemoryType(l_MemReq.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-
-        if (vkAllocateMemory(l_Device, &l_AllocInfo, nullptr, &m_TextureImageMemory) != VK_SUCCESS)
-        {
-            TR_CORE_CRITICAL("Failed to allocate texture memory");
-        }
-
-        vkBindImageMemory(l_Device, m_TextureImage, m_TextureImageMemory, 0);
-
-        VkCommandBuffer l_CommandBuffer = m_Commands.BeginSingleTimeCommands();
-
-        VkImageMemoryBarrier l_BarrierToTransfer{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
-        l_BarrierToTransfer.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        l_BarrierToTransfer.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-        l_BarrierToTransfer.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        l_BarrierToTransfer.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        l_BarrierToTransfer.image = m_TextureImage;
-        l_BarrierToTransfer.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        l_BarrierToTransfer.subresourceRange.baseMipLevel = 0;
-        l_BarrierToTransfer.subresourceRange.levelCount = 1;
-        l_BarrierToTransfer.subresourceRange.baseArrayLayer = 0;
-        l_BarrierToTransfer.subresourceRange.layerCount = 1;
-        l_BarrierToTransfer.srcAccessMask = 0;
-        l_BarrierToTransfer.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-
-        vkCmdPipelineBarrier(l_CommandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &l_BarrierToTransfer);
-
-        VkBufferImageCopy l_Region{};
-        l_Region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        l_Region.imageSubresource.mipLevel = 0;
-        l_Region.imageSubresource.baseArrayLayer = 0;
-        l_Region.imageSubresource.layerCount = 1;
-        l_Region.imageOffset = { 0, 0, 0 };
-        l_Region.imageExtent = { static_cast<uint32_t>(texture.Width), static_cast<uint32_t>(texture.Height), 1 };
-
-        vkCmdCopyBufferToImage(l_CommandBuffer, l_StagingBuffer, m_TextureImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &l_Region);
-
-        VkImageMemoryBarrier l_BarrierToShader{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
-        l_BarrierToShader.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-        l_BarrierToShader.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        l_BarrierToShader.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        l_BarrierToShader.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        l_BarrierToShader.image = m_TextureImage;
-        l_BarrierToShader.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        l_BarrierToShader.subresourceRange.baseMipLevel = 0;
-        l_BarrierToShader.subresourceRange.levelCount = 1;
-        l_BarrierToShader.subresourceRange.baseArrayLayer = 0;
-        l_BarrierToShader.subresourceRange.layerCount = 1;
-        l_BarrierToShader.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        l_BarrierToShader.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-
-        vkCmdPipelineBarrier(l_CommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &l_BarrierToShader);
-
-        m_Commands.EndSingleTimeCommands(l_CommandBuffer);
-
-        m_Buffers.DestroyBuffer(l_StagingBuffer, l_StagingMemory);
-
-        VkImageViewCreateInfo l_ViewInfo{ VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
-        l_ViewInfo.image = m_TextureImage;
-        l_ViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        l_ViewInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
-        l_ViewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        l_ViewInfo.subresourceRange.baseMipLevel = 0;
-        l_ViewInfo.subresourceRange.levelCount = 1;
-        l_ViewInfo.subresourceRange.baseArrayLayer = 0;
-        l_ViewInfo.subresourceRange.layerCount = 1;
-
-        if (vkCreateImageView(l_Device, &l_ViewInfo, nullptr, &m_TextureImageView) != VK_SUCCESS)
-        {
-            TR_CORE_CRITICAL("Failed to create texture image view");
-        }
-
-        VkSamplerCreateInfo l_SamplerInfo{ VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO };
-        l_SamplerInfo.magFilter = VK_FILTER_LINEAR;
-        l_SamplerInfo.minFilter = VK_FILTER_LINEAR;
-        l_SamplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-        l_SamplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-        l_SamplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-        l_SamplerInfo.anisotropyEnable = VK_FALSE;
-        l_SamplerInfo.maxAnisotropy = 1.0f;
-        l_SamplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_WHITE;
-        l_SamplerInfo.unnormalizedCoordinates = VK_FALSE;
-        l_SamplerInfo.compareEnable = VK_FALSE;
-        l_SamplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
-        l_SamplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-        l_SamplerInfo.mipLodBias = 0.0f;
-        l_SamplerInfo.minLod = 0.0f;
-        l_SamplerInfo.maxLod = 0.0f;
-
-        if (vkCreateSampler(l_Device, &l_SamplerInfo, nullptr, &m_TextureSampler) != VK_SUCCESS)
-        {
-            TR_CORE_CRITICAL("Failed to create texture sampler");
-        }
-
-        for (size_t i = 0; i < m_DescriptorSets.size(); ++i)
-        {
-            VkDescriptorImageInfo l_ImageInfo{};
-            l_ImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-            l_ImageInfo.imageView = m_TextureImageView;
-            l_ImageInfo.sampler = m_TextureSampler;
-
-            VkWriteDescriptorSet l_ImageWrite{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
-            l_ImageWrite.dstSet = m_DescriptorSets[i];
-            l_ImageWrite.dstBinding = 2;
-            l_ImageWrite.dstArrayElement = 0;
-            l_ImageWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-            l_ImageWrite.descriptorCount = 1;
-            l_ImageWrite.pImageInfo = &l_ImageInfo;
-
-            vkUpdateDescriptorSets(l_Device, 1, &l_ImageWrite, 0, nullptr);
-        }
-
-        TR_CORE_TRACE("Texture uploaded");
+        RefreshTextureDescriptorBindings();
     }
 
     Renderer::ImGuiTexture* Renderer::CreateImGuiTexture(const Loader::TextureData& texture)
@@ -1256,6 +1128,7 @@ namespace Trident
             l_PushConstant.m_TilingFactor = it_Command.m_Component->m_TilingFactor;
             l_PushConstant.m_UseMaterialOverride = it_Command.m_Component->m_UseMaterialOverride ? 1 : 0;
             l_PushConstant.m_SortBias = it_Command.m_Component->m_SortOffset;
+            l_PushConstant.m_TextureSlot = 0; // Sprites currently sample the default texture until atlas streaming is wired up.
 
             l_PushConstant.m_MaterialIndex = -1; // Sprites rely on texture tinting only for now.
 
@@ -1386,7 +1259,9 @@ namespace Trident
         l_PoolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
         l_PoolSizes[1].descriptorCount = l_ImageCount; // Material storage buffer bound once per swapchain image.
         l_PoolSizes[2].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        l_PoolSizes[2].descriptorCount = l_ImageCount * 3; // Material textures, skybox in the main set, and the dedicated skybox set.
+        // Each swapchain image consumes an array of material textures plus a cubemap sampler in the main set and a cubemap
+        // sampler in the dedicated skybox set.
+        l_PoolSizes[2].descriptorCount = l_ImageCount * (Pipeline::s_MaxMaterialTextures + 2);
 
         VkDescriptorPoolCreateInfo l_PoolInfo{};
         l_PoolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -1408,8 +1283,78 @@ namespace Trident
     {
         TR_CORE_TRACE("Creating Default Texture");
 
-        const uint32_t l_Pixel = 0xffffffff;
-        VkDeviceSize l_ImageSize = sizeof(l_Pixel);
+        for (TextureSlot& it_Slot : m_TextureSlots)
+        {
+            DestroyTextureSlot(it_Slot);
+        }
+        m_TextureSlots.clear();
+        m_TextureSlotLookup.clear();
+
+        Loader::TextureData l_DefaultData{};
+        l_DefaultData.Width = 1;
+        l_DefaultData.Height = 1;
+        l_DefaultData.Channels = 4;
+        l_DefaultData.Pixels = { 0xFF, 0xFF, 0xFF, 0xFF };
+
+        TextureSlot l_DefaultSlot{};
+        if (!PopulateTextureSlot(l_DefaultSlot, l_DefaultData))
+        {
+            TR_CORE_CRITICAL("Failed to create default texture slot");
+            return;
+        }
+
+        l_DefaultSlot.m_SourcePath = kDefaultTextureKey;
+        m_TextureSlots.push_back(std::move(l_DefaultSlot));
+        m_TextureSlotLookup.emplace(kDefaultTextureKey, 0u);
+
+        EnsureTextureDescriptorCapacity();
+        RefreshTextureDescriptorBindings();
+
+        TR_CORE_TRACE("Default Texture Created");
+    }
+
+    void Renderer::DestroyTextureSlot(TextureSlot& slot)
+    {
+        VkDevice l_Device = Startup::GetDevice();
+
+        if (slot.m_Sampler != VK_NULL_HANDLE)
+        {
+            vkDestroySampler(l_Device, slot.m_Sampler, nullptr);
+            slot.m_Sampler = VK_NULL_HANDLE;
+        }
+
+        if (slot.m_View != VK_NULL_HANDLE)
+        {
+            vkDestroyImageView(l_Device, slot.m_View, nullptr);
+            slot.m_View = VK_NULL_HANDLE;
+        }
+
+        if (slot.m_Image != VK_NULL_HANDLE)
+        {
+            vkDestroyImage(l_Device, slot.m_Image, nullptr);
+            slot.m_Image = VK_NULL_HANDLE;
+        }
+
+        if (slot.m_Memory != VK_NULL_HANDLE)
+        {
+            vkFreeMemory(l_Device, slot.m_Memory, nullptr);
+            slot.m_Memory = VK_NULL_HANDLE;
+        }
+
+        slot.m_Descriptor = {};
+    }
+
+    bool Renderer::PopulateTextureSlot(TextureSlot& slot, const Loader::TextureData& textureData)
+    {
+        DestroyTextureSlot(slot);
+
+        if (textureData.Pixels.empty() || textureData.Width <= 0 || textureData.Height <= 0)
+        {
+            return false;
+        }
+
+        VkDevice l_Device = Startup::GetDevice();
+        const VkDeviceSize l_ImageSize = static_cast<VkDeviceSize>(textureData.Pixels.size());
 
         VkBuffer l_StagingBuffer = VK_NULL_HANDLE;
         VkDeviceMemory l_StagingMemory = VK_NULL_HANDLE;
@@ -1417,14 +1362,14 @@ namespace Trident
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, l_StagingBuffer, l_StagingMemory);
 
         void* l_Data = nullptr;
-        vkMapMemory(Startup::GetDevice(), l_StagingMemory, 0, l_ImageSize, 0, &l_Data);
-        memcpy(l_Data, &l_Pixel, static_cast<size_t>(l_ImageSize));
-        vkUnmapMemory(Startup::GetDevice(), l_StagingMemory);
+        vkMapMemory(l_Device, l_StagingMemory, 0, l_ImageSize, 0, &l_Data);
+        std::memcpy(l_Data, textureData.Pixels.data(), static_cast<size_t>(l_ImageSize));
+        vkUnmapMemory(l_Device, l_StagingMemory);
 
         VkImageCreateInfo l_ImageInfo{ VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO };
         l_ImageInfo.imageType = VK_IMAGE_TYPE_2D;
-        l_ImageInfo.extent.width = 1;
-        l_ImageInfo.extent.height = 1;
+        l_ImageInfo.extent.width = static_cast<uint32_t>(std::max(textureData.Width, 1));
+        l_ImageInfo.extent.height = static_cast<uint32_t>(std::max(textureData.Height, 1));
         l_ImageInfo.extent.depth = 1;
         l_ImageInfo.mipLevels = 1;
         l_ImageInfo.arrayLayers = 1;
@@ -1435,24 +1380,28 @@ namespace Trident
         l_ImageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         l_ImageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
 
-        if (vkCreateImage(Startup::GetDevice(), &l_ImageInfo, nullptr, &m_TextureImage) != VK_SUCCESS)
+        if (vkCreateImage(l_Device, &l_ImageInfo, nullptr, &slot.m_Image) != VK_SUCCESS)
         {
-            TR_CORE_CRITICAL("Failed to create default texture image");
+            m_Buffers.DestroyBuffer(l_StagingBuffer, l_StagingMemory);
+            DestroyTextureSlot(slot);
+            return false;
         }
 
-        VkMemoryRequirements l_MemRequirements{};
-        vkGetImageMemoryRequirements(Startup::GetDevice(), m_TextureImage, &l_MemRequirements);
+        VkMemoryRequirements l_MemoryRequirements{};
+        vkGetImageMemoryRequirements(l_Device, slot.m_Image, &l_MemoryRequirements);
 
         VkMemoryAllocateInfo l_AllocInfo{ VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO };
-        l_AllocInfo.allocationSize = l_MemRequirements.size;
-        l_AllocInfo.memoryTypeIndex = m_Buffers.FindMemoryType(l_MemRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+        l_AllocInfo.allocationSize = l_MemoryRequirements.size;
+        l_AllocInfo.memoryTypeIndex = m_Buffers.FindMemoryType(l_MemoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
-        if (vkAllocateMemory(Startup::GetDevice(), &l_AllocInfo, nullptr, &m_TextureImageMemory) != VK_SUCCESS)
+        if (vkAllocateMemory(l_Device, &l_AllocInfo, nullptr, &slot.m_Memory) != VK_SUCCESS)
         {
-            TR_CORE_CRITICAL("Failed to allocate default texture memory");
+            m_Buffers.DestroyBuffer(l_StagingBuffer, l_StagingMemory);
+            DestroyTextureSlot(slot);
+            return false;
         }
 
-        vkBindImageMemory(Startup::GetDevice(), m_TextureImage, m_TextureImageMemory, 0);
+        vkBindImageMemory(l_Device, slot.m_Image, slot.m_Memory, 0);
 
         VkCommandBuffer l_CommandBuffer = m_Commands.BeginSingleTimeCommands();
 
@@ -1461,7 +1410,7 @@ namespace Trident
         l_BarrierToTransfer.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
         l_BarrierToTransfer.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         l_BarrierToTransfer.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        l_BarrierToTransfer.image = m_TextureImage;
+        l_BarrierToTransfer.image = slot.m_Image;
         l_BarrierToTransfer.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         l_BarrierToTransfer.subresourceRange.baseMipLevel = 0;
         l_BarrierToTransfer.subresourceRange.levelCount = 1;
@@ -1470,24 +1419,25 @@ namespace Trident
         l_BarrierToTransfer.srcAccessMask = 0;
         l_BarrierToTransfer.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
 
-        vkCmdPipelineBarrier(l_CommandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &l_BarrierToTransfer);
+        vkCmdPipelineBarrier(l_CommandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+            0, 0, nullptr, 0, nullptr, 1, &l_BarrierToTransfer);
 
-        VkBufferImageCopy l_Region{};
-        l_Region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        l_Region.imageSubresource.mipLevel = 0;
-        l_Region.imageSubresource.baseArrayLayer = 0;
-        l_Region.imageSubresource.layerCount = 1;
-        l_Region.imageOffset = { 0, 0, 0 };
-        l_Region.imageExtent = { 1, 1, 1 };
+        VkBufferImageCopy l_CopyRegion{};
+        l_CopyRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        l_CopyRegion.imageSubresource.mipLevel = 0;
+        l_CopyRegion.imageSubresource.baseArrayLayer = 0;
+        l_CopyRegion.imageSubresource.layerCount = 1;
+        l_CopyRegion.imageOffset = { 0, 0, 0 };
+        l_CopyRegion.imageExtent = { l_ImageInfo.extent.width, l_ImageInfo.extent.height, 1 };
 
-        vkCmdCopyBufferToImage(l_CommandBuffer, l_StagingBuffer, m_TextureImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &l_Region);
+        vkCmdCopyBufferToImage(l_CommandBuffer, l_StagingBuffer, slot.m_Image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &l_CopyRegion);
 
         VkImageMemoryBarrier l_BarrierToShader{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
         l_BarrierToShader.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
         l_BarrierToShader.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         l_BarrierToShader.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         l_BarrierToShader.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        l_BarrierToShader.image = m_TextureImage;
+        l_BarrierToShader.image = slot.m_Image;
         l_BarrierToShader.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         l_BarrierToShader.subresourceRange.baseMipLevel = 0;
         l_BarrierToShader.subresourceRange.levelCount = 1;
@@ -1496,14 +1446,15 @@ namespace Trident
         l_BarrierToShader.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
         l_BarrierToShader.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 
-        vkCmdPipelineBarrier(l_CommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &l_BarrierToShader);
+        vkCmdPipelineBarrier(l_CommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+            0, 0, nullptr, 0, nullptr, 1, &l_BarrierToShader);
 
         m_Commands.EndSingleTimeCommands(l_CommandBuffer);
 
         m_Buffers.DestroyBuffer(l_StagingBuffer, l_StagingMemory);
 
         VkImageViewCreateInfo l_ViewInfo{ VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
-        l_ViewInfo.image = m_TextureImage;
+        l_ViewInfo.image = slot.m_Image;
         l_ViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
         l_ViewInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
         l_ViewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -1512,9 +1463,10 @@ namespace Trident
         l_ViewInfo.subresourceRange.baseArrayLayer = 0;
         l_ViewInfo.subresourceRange.layerCount = 1;
 
-        if (vkCreateImageView(Startup::GetDevice(), &l_ViewInfo, nullptr, &m_TextureImageView) != VK_SUCCESS)
+        if (vkCreateImageView(l_Device, &l_ViewInfo, nullptr, &slot.m_View) != VK_SUCCESS)
         {
-            TR_CORE_CRITICAL("Failed to create texture image view");
+            DestroyTextureSlot(slot);
+            return false;
         }
 
         VkSamplerCreateInfo l_SamplerInfo{ VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO };
@@ -1534,12 +1486,177 @@ namespace Trident
         l_SamplerInfo.minLod = 0.0f;
         l_SamplerInfo.maxLod = 0.0f;
 
-        if (vkCreateSampler(Startup::GetDevice(), &l_SamplerInfo, nullptr, &m_TextureSampler) != VK_SUCCESS)
+        if (vkCreateSampler(l_Device, &l_SamplerInfo, nullptr, &slot.m_Sampler) != VK_SUCCESS)
         {
-            TR_CORE_CRITICAL("Failed to create texture sampler");
+            DestroyTextureSlot(slot);
+            return false;
         }
 
-        TR_CORE_TRACE("Default Texture Created");
+        slot.m_Descriptor.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        slot.m_Descriptor.imageView = slot.m_View;
+        slot.m_Descriptor.sampler = slot.m_Sampler;
+
+        return true;
+    }
+
+    void Renderer::EnsureTextureDescriptorCapacity()
+    {
+        if (m_TextureDescriptorCache.size() != Pipeline::s_MaxMaterialTextures)
+        {
+            m_TextureDescriptorCache.resize(Pipeline::s_MaxMaterialTextures);
+        }
+    }
+
+    void Renderer::RefreshTextureDescriptorBindings()
+    {
+        if (m_DescriptorSets.empty())
+        {
+            return;
+        }
+
+        if (m_TextureSlots.empty())
+        {
+            TR_CORE_WARN("Texture descriptor refresh skipped because no slots were initialised");
+            return;
+        }
+
+        EnsureTextureDescriptorCapacity();
+
+        const VkDescriptorImageInfo l_DefaultDescriptor = m_TextureSlots.front().m_Descriptor;
+        for (uint32_t it_Index = 0; it_Index < Pipeline::s_MaxMaterialTextures; ++it_Index)
+        {
+            if (it_Index < m_TextureSlots.size())
+            {
+                m_TextureDescriptorCache[it_Index] = m_TextureSlots[it_Index].m_Descriptor;
+            }
+            else
+            {
+                m_TextureDescriptorCache[it_Index] = l_DefaultDescriptor;
+            }
+        }
+
+        for (VkDescriptorSet l_Set : m_DescriptorSets)
+        {
+            VkWriteDescriptorSet l_TextureWrite{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
+            l_TextureWrite.dstSet = l_Set;
+            l_TextureWrite.dstBinding = 2;
+            l_TextureWrite.dstArrayElement = 0;
+            l_TextureWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            l_TextureWrite.descriptorCount = Pipeline::s_MaxMaterialTextures;
+            l_TextureWrite.pImageInfo = m_TextureDescriptorCache.data();
+
+            vkUpdateDescriptorSets(Startup::GetDevice(), 1, &l_TextureWrite, 0, nullptr);
+        }
+    }
+
+    std::string Renderer::NormalizeTexturePath(const std::string& texturePath) const
+    {
+        if (texturePath.empty())
+        {
+            return {};
+        }
+
+        return Utilities::FileManagement::NormalizePath(texturePath);
+    }
+
+    uint32_t Renderer::AcquireTextureSlot(const std::string& normalizedPath, const Loader::TextureData& textureData)
+    {
+        if (normalizedPath.empty())
+        {
+            return 0;
+        }
+
+        auto a_Existing = m_TextureSlotLookup.find(normalizedPath);
+        if (a_Existing != m_TextureSlotLookup.end())
+        {
+            return a_Existing->second;
+        }
+
+        if (m_TextureSlots.size() >= Pipeline::s_MaxMaterialTextures)
+        {
+            TR_CORE_WARN("Material texture budget ({}) exhausted. {} will fall back to the default slot.",
+                Pipeline::s_MaxMaterialTextures, normalizedPath.c_str());
+        }
+        else if (!textureData.Pixels.empty())
+        {
+            TextureSlot l_NewSlot{};
+            if (PopulateTextureSlot(l_NewSlot, textureData))
+            {
+                l_NewSlot.m_SourcePath = normalizedPath;
+                m_TextureSlots.push_back(std::move(l_NewSlot));
+                const uint32_t l_NewIndex = static_cast<uint32_t>(m_TextureSlots.size() - 1);
+                m_TextureSlotLookup.emplace(normalizedPath, l_NewIndex);
+                return l_NewIndex;
+            }
+
+            TR_CORE_WARN("Failed to upload texture '{}'. Using the default slot instead.", normalizedPath.c_str());
+        }
+        else
+        {
+            TR_CORE_WARN("Texture '{}' provided no pixel data. Using the default slot instead.", normalizedPath.c_str());
+        }
+
+        m_TextureSlotLookup.emplace(normalizedPath, 0u);
+        return 0;
+    }
+
+    void Renderer::ResolveMaterialTextureSlots(const std::vector<std::string>& textures, size_t materialOffset, size_t materialCount)
+    {
+        if (m_Materials.empty())
+        {
+            return;
+        }
+
+        const size_t l_SafeOffset = std::min(materialOffset, m_Materials.size());
+        const size_t l_ResolvedCount = std::min(materialCount, m_Materials.size() - l_SafeOffset);
+
+        std::vector<std::string> l_NormalizedPaths{};
+        l_NormalizedPaths.reserve(textures.size());
+
+        for (const std::string& it_Path : textures)
+        {
+            std::string l_Normalized = NormalizeTexturePath(it_Path);
+            l_NormalizedPaths.push_back(l_Normalized);
+
+            if (l_Normalized.empty() || m_TextureSlotLookup.find(l_Normalized) != m_TextureSlotLookup.end())
+            {
+                continue;
+            }
+
+            Loader::TextureData l_TextureData = Loader::TextureLoader::Load(l_Normalized);
+            AcquireTextureSlot(l_Normalized, l_TextureData);
+        }
+
+        for (size_t it_Index = 0; it_Index < l_ResolvedCount; ++it_Index)
+        {
+            Geometry::Material& l_Material = m_Materials[l_SafeOffset + it_Index];
+            l_Material.BaseColorTextureSlot = 0; // Fallback to the default white texture when the source is missing.
+
+            if (l_Material.BaseColorTextureIndex < 0)
+            {
+                continue;
+            }
+
+            const size_t l_TextureIndex = static_cast<size_t>(l_Material.BaseColorTextureIndex);
+            if (l_TextureIndex >= l_NormalizedPaths.size())
+            {
+                continue;
+            }
+
+            const std::string& l_Path = l_NormalizedPaths[l_TextureIndex];
+            if (l_Path.empty())
+            {
+                continue;
+            }
+
+            auto a_Mapping = m_TextureSlotLookup.find(l_Path);
+            if (a_Mapping != m_TextureSlotLookup.end())
+            {
+                l_Material.BaseColorTextureSlot = static_cast<int32_t>(a_Mapping->second);
+            }
+        }
+
+        RefreshTextureDescriptorBindings();
     }
 
     void Renderer::CreateDefaultSkybox()
@@ -1910,11 +2027,6 @@ namespace Trident
             l_MaterialBufferInfo.offset = 0;
             l_MaterialBufferInfo.range = l_MaterialRange;
 
-            VkDescriptorImageInfo l_ImageInfo{};
-            l_ImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-            l_ImageInfo.imageView = m_TextureImageView;
-            l_ImageInfo.sampler = m_TextureSampler;
-
             VkWriteDescriptorSet l_GlobalWrite{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
             l_GlobalWrite.dstSet = m_DescriptorSets[i];
             l_GlobalWrite.dstBinding = 0;
@@ -1931,18 +2043,11 @@ namespace Trident
             l_MaterialWrite.descriptorCount = 1;
             l_MaterialWrite.pBufferInfo = &l_MaterialBufferInfo;
 
-            VkWriteDescriptorSet l_ImageWrite{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
-            l_ImageWrite.dstSet = m_DescriptorSets[i];
-            l_ImageWrite.dstBinding = 2;
-            l_ImageWrite.dstArrayElement = 0;
-            l_ImageWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-            l_ImageWrite.descriptorCount = 1;
-            l_ImageWrite.pImageInfo = &l_ImageInfo;
-
-            VkWriteDescriptorSet l_Writes[] = { l_GlobalWrite, l_MaterialWrite, l_ImageWrite };
-            vkUpdateDescriptorSets(Startup::GetDevice(), 3, l_Writes, 0, nullptr);
+            VkWriteDescriptorSet l_Writes[] = { l_GlobalWrite, l_MaterialWrite };
+            vkUpdateDescriptorSets(Startup::GetDevice(), 2, l_Writes, 0, nullptr);
         }
 
+        RefreshTextureDescriptorBindings();
         UpdateSkyboxBindingOnMainSets();
         CreateSkyboxDescriptorSets();
 
@@ -2813,9 +2918,16 @@ namespace Trident
 
                         RenderablePushConstant l_PushConstant{};
                         l_PushConstant.m_ModelMatrix = l_Command.m_ModelMatrix;
-                        l_PushConstant.m_TextureIndex = l_Component.m_MaterialIndex;
-                        l_PushConstant.m_MaterialIndex = l_DrawInfo.m_MaterialIndex;
-                        vkCmdPushConstants(l_CommandBuffer, m_Pipeline.GetPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, 
+                        int32_t l_MaterialIndex = l_DrawInfo.m_MaterialIndex;
+                        int32_t l_TextureSlot = 0;
+                        if (l_MaterialIndex >= 0 && static_cast<size_t>(l_MaterialIndex) < m_Materials.size())
+                        {
+                            l_TextureSlot = m_Materials[l_MaterialIndex].BaseColorTextureSlot;
+                        }
+
+                        l_PushConstant.m_TextureSlot = l_TextureSlot;
+                        l_PushConstant.m_MaterialIndex = l_MaterialIndex;
+                        vkCmdPushConstants(l_CommandBuffer, m_Pipeline.GetPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0,
                             sizeof(RenderablePushConstant), &l_PushConstant);
 
                         vkCmdDrawIndexed(l_CommandBuffer, l_DrawInfo.m_IndexCount, 1, l_DrawInfo.m_FirstIndex, l_DrawInfo.m_BaseVertex, 0);
@@ -3158,9 +3270,16 @@ namespace Trident
 
                     RenderablePushConstant l_PushConstant{};
                     l_PushConstant.m_ModelMatrix = l_Command.m_ModelMatrix;
-                    l_PushConstant.m_TextureIndex = l_Component.m_MaterialIndex;
-                    l_PushConstant.m_MaterialIndex = l_DrawInfo.m_MaterialIndex;
-                    vkCmdPushConstants(l_CommandBuffer, m_Pipeline.GetPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, 
+                    int32_t l_MaterialIndex = l_DrawInfo.m_MaterialIndex;
+                    int32_t l_TextureSlot = 0;
+                    if (l_MaterialIndex >= 0 && static_cast<size_t>(l_MaterialIndex) < m_Materials.size())
+                    {
+                        l_TextureSlot = m_Materials[l_MaterialIndex].BaseColorTextureSlot;
+                    }
+
+                    l_PushConstant.m_TextureSlot = l_TextureSlot;
+                    l_PushConstant.m_MaterialIndex = l_MaterialIndex;
+                    vkCmdPushConstants(l_CommandBuffer, m_Pipeline.GetPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0,
                         sizeof(RenderablePushConstant), &l_PushConstant);
 
                     vkCmdDrawIndexed(l_CommandBuffer, l_DrawInfo.m_IndexCount, 1, l_DrawInfo.m_FirstIndex, l_DrawInfo.m_BaseVertex, 0);
@@ -3341,7 +3460,7 @@ namespace Trident
                 auto a_ModelData = Loader::ModelLoader::Load(a_Event->Path);
                 if (!a_ModelData.Meshes.empty())
                 {
-                    UploadMesh(a_ModelData.Meshes, a_ModelData.Materials);
+                    UploadMesh(a_ModelData.Meshes, a_ModelData.Materials, a_ModelData.Textures);
                     l_Success = true;
                     l_Message = "Model assets reuploaded";
                 }
@@ -3356,7 +3475,8 @@ namespace Trident
                 auto texture = Loader::TextureLoader::Load(a_Event->Path);
                 if (!texture.Pixels.empty())
                 {
-                    UploadTexture(texture);
+                    // TODO: Investigate streaming or impostor generation so large material libraries can refresh incrementally.
+                    UploadTexture(a_Event->Path, texture);
                     l_Success = true;
                     l_Message = "Texture refreshed";
                 }

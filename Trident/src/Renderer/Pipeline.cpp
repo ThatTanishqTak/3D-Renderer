@@ -459,7 +459,7 @@ namespace Trident
         VkDescriptorSetLayoutBinding l_SamplerLayoutBinding{};
         l_SamplerLayoutBinding.binding = 2;
         l_SamplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        l_SamplerLayoutBinding.descriptorCount = 1;
+        l_SamplerLayoutBinding.descriptorCount = s_MaxMaterialTextures;
         l_SamplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
         l_SamplerLayoutBinding.pImmutableSamplers = nullptr;
 

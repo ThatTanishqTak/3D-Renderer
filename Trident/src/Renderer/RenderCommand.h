@@ -20,7 +20,7 @@ namespace Trident
         static void SetSelectedEntity(ECS::Entity entity);
         // Mirror Renderer::SetClearColor so editor widgets can adjust the background tone live.
         static void SetClearColor(const glm::vec4& color);
-        static void AppendMeshes(std::vector<Geometry::Mesh> meshes, std::vector<Geometry::Material> materials);
+        static void AppendMeshes(std::vector<Geometry::Mesh> meshes, std::vector<Geometry::Material> materials, std::vector<std::string> textures);
         static void SetEditorCamera(Camera* camera);
         static void SetRuntimeCamera(Camera* camera);
         static void SetRuntimeCameraReady(bool cameraReady);

@@ -46,10 +46,10 @@ namespace Trident
         Startup::GetRenderer().SetClearColor(color);
     }
 
-    void RenderCommand::AppendMeshes(std::vector<Geometry::Mesh> meshes, std::vector<Geometry::Material> materials)
+    void RenderCommand::AppendMeshes(std::vector<Geometry::Mesh> meshes, std::vector<Geometry::Material> materials, std::vector<std::string> textures)
     {
         // Hand the mesh data off to the renderer so it can merge GPU buffers with existing geometry.
-        Startup::GetRenderer().AppendMeshes(std::move(meshes), std::move(materials));
+        Startup::GetRenderer().AppendMeshes(std::move(meshes), std::move(materials), std::move(textures));
     }
 
     void RenderCommand::SetEditorCamera(Camera* camera)

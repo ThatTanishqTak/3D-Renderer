@@ -370,6 +370,7 @@ bool ApplicationLayer::ImportDroppedAssets(const std::vector<std::string>& dropp
     std::vector<Trident::Geometry::Mesh> l_ImportedMeshes{};
     std::vector<Trident::Geometry::Material> l_ImportedMaterials{};
     bool l_ImportedAny = false;
+    std::vector<std::string> l_ImportedTextures{};
 
     for (const std::string& it_Path : droppedPaths)
     {
@@ -390,6 +391,29 @@ bool ApplicationLayer::ImportDroppedAssets(const std::vector<std::string>& dropp
         if (l_ModelData.Meshes.empty())
         {
             continue;
+        }
+
+        const int l_TextureOffset = static_cast<int>(l_ImportedTextures.size());
+        l_ImportedTextures.reserve(l_ImportedTextures.size() + l_ModelData.Textures.size());
+        for (std::string& it_TexturePath : l_ModelData.Textures)
+        {
+            l_ImportedTextures.emplace_back(std::move(it_TexturePath));
+        }
+
+        for (Trident::Geometry::Material& l_Material : l_ModelData.Materials)
+        {
+            if (l_Material.BaseColorTextureIndex >= 0)
+            {
+                l_Material.BaseColorTextureIndex += l_TextureOffset;
+            }
+            if (l_Material.MetallicRoughnessTextureIndex >= 0)
+            {
+                l_Material.MetallicRoughnessTextureIndex += l_TextureOffset;
+            }
+            if (l_Material.NormalTextureIndex >= 0)
+            {
+                l_Material.NormalTextureIndex += l_TextureOffset;
+            }
         }
 
         const std::string l_BaseName = l_PathView.stem().string();
@@ -432,7 +456,7 @@ bool ApplicationLayer::ImportDroppedAssets(const std::vector<std::string>& dropp
     }
 
     // Ask the renderer to append the new meshes so existing GPU resources stay valid and the ECS draw metadata stays synced.
-    Trident::RenderCommand::AppendMeshes(std::move(l_ImportedMeshes), std::move(l_ImportedMaterials));
+    Trident::RenderCommand::AppendMeshes(std::move(l_ImportedMeshes), std::move(l_ImportedMaterials), std::move(l_ImportedTextures));
 
     return true;
 }

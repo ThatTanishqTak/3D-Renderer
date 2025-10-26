@@ -12,6 +12,11 @@ namespace Trident
     class Pipeline
     {
     public:
+        // Hard limit for the number of material textures bound at once. The renderer keeps slot 0 reserved
+        // for the default white texture so real assets start at index 1. This value mirrors the size of the
+        // combined image sampler array exposed to shaders and descriptor sets.
+        static constexpr uint32_t s_MaxMaterialTextures = 256;
+
         void Init(Swapchain& swapchain);
         void Cleanup();
         void RecreateFramebuffers(Swapchain& swapchain);

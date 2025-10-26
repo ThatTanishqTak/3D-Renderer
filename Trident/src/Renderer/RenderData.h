@@ -18,7 +18,7 @@ namespace Trident
         glm::vec2 m_TextureScale{ 1.0f };  ///< UV scale applied in the shader.
         glm::vec2 m_TextureOffset{ 0.0f }; ///< UV offset supporting atlas layouts.
         float m_TilingFactor{ 1.0f };      ///< Additional tiling factor exposed to materials.
-        int32_t m_TextureIndex{ 0 };       ///< Index into a future bindless texture table.
+        int32_t m_TextureSlot{ 0 };        ///< Slot inside the renderer's texture array (0 == default white texture).
         int32_t m_UseMaterialOverride{ 0 };///< Non-zero when material overrides should be used.
         float m_SortBias{ 0.0f };          ///< Depth bias reserved for transparent layering.
         int32_t m_MaterialIndex{ -1 };     ///< Material lookup written per draw so the fragment shader can fetch shading data.
