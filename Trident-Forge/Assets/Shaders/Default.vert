@@ -16,9 +16,20 @@ layout(location = 3) out vec3 outBitangent;
 layout(location = 4) out vec2 outTexCoord;
 layout(location = 5) out vec3 outVertexColor;
 
-layout(push_constant) uniform PushConstant
+layout(push_constant) uniform RenderablePushConstant
 {
-    mat4 Model;
+    mat4 ModelMatrix;          // Object to world transform shared with the CPU side struct.
+    vec4 TintColor;            // Per-draw tint multiplier applied in the fragment shader.
+    vec2 TextureScale;         // UV scale applied before sampling the texture atlas.
+    vec2 TextureOffset;        // UV offset supporting atlas layouts and sprite sheets.
+    float TilingFactor;        // Additional scalar to modulate tiling beyond TextureScale.
+    int TextureSlot;           // Index into the bindless base-color sampler array.
+    int UseMaterialOverride;   // Non-zero when material overrides should be honored (reserved).
+    float SortBias;            // Depth bias reserved for transparent layering (unused here).
+    int MaterialIndex;         // Material lookup index for extended shading data.
+    int Padding0;              // Padding to mirror RenderablePushConstant's std140 layout.
+    int Padding1;              // Padding to keep 16-byte alignment intact.
+    int Padding2;              // Padding reserved for future expansion.
 } pc;
 
 struct PointLightUniform
@@ -41,15 +52,17 @@ layout(set = 0, binding = 0) uniform GlobalUniformBuffer
 
 void main()
 {
-    vec4 worldPosition = pc.Model * vec4(inPosition, 1.0);
-    outWorldPosition = worldPosition.xyz;
+    vec4 l_WorldPosition = pc.ModelMatrix * vec4(inPosition, 1.0);
+    outWorldPosition = l_WorldPosition.xyz;
 
-    mat3 normalMatrix = transpose(inverse(mat3(pc.Model)));
-    outNormal = normalize(normalMatrix * inNormal);
-    outTangent = normalize(normalMatrix * inTangent);
-    outBitangent = normalize(normalMatrix * inBitangent);
-    outTexCoord = inTexCoord;
+    mat3 l_NormalMatrix = transpose(inverse(mat3(pc.ModelMatrix)));
+    outNormal = normalize(l_NormalMatrix * inNormal);
+    outTangent = normalize(l_NormalMatrix * inTangent);
+    outBitangent = normalize(l_NormalMatrix * inBitangent);
+
+    vec2 l_TiledTexCoord = (inTexCoord * pc.TextureScale * pc.TilingFactor) + pc.TextureOffset; // Apply atlas transforms up front.
+    outTexCoord = l_TiledTexCoord;
     outVertexColor = inColor;
 
-    gl_Position = g_Global.Projection * g_Global.View * worldPosition;
+    gl_Position = g_Global.Projection * g_Global.View * l_WorldPosition;
 }
