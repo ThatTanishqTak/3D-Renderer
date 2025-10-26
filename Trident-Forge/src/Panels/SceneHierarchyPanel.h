@@ -24,6 +24,8 @@ namespace Trident
 class SceneHierarchyPanel
 {
 public:
+    // Supply the registry observed by the hierarchy so editor UI stays focused on the desired data set.
+    void SetRegistry(Trident::ECS::Registry* registry);
     // Validate cached selection so the panel never references destroyed entities.
     void Update();
     // Draw the entity list inside an ImGui window and respond to user selection.
@@ -43,6 +45,8 @@ private:
 private:
     // Sentinel value indicating that no entity is currently selected.
     Trident::ECS::Entity m_SelectedEntity = std::numeric_limits<Trident::ECS::Entity>::max();
+    // Registry observed by the hierarchy; defaults to nullptr until the layer provides one.
+    Trident::ECS::Registry* m_Registry = nullptr;
 
     // Editor-provided actions that allow the hierarchy to spawn new entities from its context menu.
     std::function<void()> m_CreateEmptyEntityAction;

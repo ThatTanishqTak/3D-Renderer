@@ -83,6 +83,7 @@ namespace Trident
         void SetEditorCamera(Camera* camera);
         void SetRuntimeCamera(Camera* camera);
         void SetRuntimeCameraReady(bool ready);
+        void SetActiveRegistry(ECS::Registry* registry);
         bool HasRuntimeCamera() const { return m_RuntimeCamera != nullptr && m_RuntimeCameraReady; }
 
         // Resolve a texture path to a renderer-managed slot, loading GPU resources and updating descriptor bindings

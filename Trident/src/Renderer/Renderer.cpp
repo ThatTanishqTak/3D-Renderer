@@ -74,7 +74,7 @@ namespace Trident
     {
         TR_CORE_INFO("-------INITIALIZING RENDERER-------");
 
-        m_Registry = &Startup::GetRegistry();
+        SetActiveRegistry(&Startup::GetRegistry());
 
         m_Swapchain.Init();
         // Reset the cached swapchain image layouts so new back buffers start from a known undefined state.
@@ -794,6 +794,12 @@ namespace Trident
     {
         // Guard the flag with the pointer so callers cannot accidentally mark a cleared camera as ready.
         m_RuntimeCameraReady = ready && (m_RuntimeCamera != nullptr);
+    }
+
+    void Renderer::SetActiveRegistry(ECS::Registry* registry)
+    {
+        // Persist the registry pointer so draw gathering always references the intended data source (editor vs runtime).
+        m_Registry = registry;
     }
 
     void Renderer::SetClearColor(const glm::vec4& color)

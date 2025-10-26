@@ -24,6 +24,7 @@ namespace Trident
         static void SetEditorCamera(Camera* camera);
         static void SetRuntimeCamera(Camera* camera);
         static void SetRuntimeCameraReady(bool cameraReady);
+        static void SetActiveRegistry(ECS::Registry* registry);
         static bool HasRuntimeCamera();
 
         static Transform GetTransform();

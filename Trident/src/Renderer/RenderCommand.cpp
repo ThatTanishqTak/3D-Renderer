@@ -69,6 +69,12 @@ namespace Trident
         Startup::GetRenderer().SetRuntimeCameraReady(cameraReady);
     }
 
+    void RenderCommand::SetActiveRegistry(ECS::Registry* registry)
+    {
+        // Forward registry swaps so the renderer queries the correct dataset when gathering draw calls.
+        Startup::GetRenderer().SetActiveRegistry(registry);
+    }
+
     bool RenderCommand::HasRuntimeCamera()
     {
         // Expose whether a valid, ready runtime camera is bound so panels can surface helpful overlays or fallbacks.

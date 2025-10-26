@@ -33,6 +33,8 @@ public:
     void SetGizmoState(GizmoState* gizmoState);
     // Allow the viewport to react when the hierarchy/inspector selection changes.
     void SetSelectedEntity(Trident::ECS::Entity selectedEntity);
+    // Inject the registry observed by the viewport for gizmo target resolution and framing helpers.
+    void SetRegistry(Trident::ECS::Registry* registry);
     // Allows editor systems to react when assets are dropped onto the viewport image.
     void SetAssetDropHandler(std::function<void(const std::vector<std::string>&)> assetDropHandler);
     // Exposes whether the viewport is hovered so external systems can gate drag-and-drop behaviour.
@@ -72,4 +74,6 @@ private:
     GizmoState* m_GizmoState = nullptr;
     // Callback invoked whenever a drag-and-drop payload is released over the viewport image.
     std::function<void(const std::vector<std::string>&)> m_OnAssetDrop{};
+    // Registry pointer that remains fixed on the editor dataset while runtime simulation uses a clone.
+    Trident::ECS::Registry* m_Registry = nullptr;
 };

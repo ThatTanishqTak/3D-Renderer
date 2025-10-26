@@ -1,6 +1,5 @@
 #include "InspectorPanel.h"
 
-#include "Application/Startup.h"
 #include "Renderer/RenderCommand.h"
 #include "ECS/Registry.h"
 #include "ECS/Components/TagComponent.h"
@@ -40,6 +39,12 @@ void InspectorPanel::SetSelectedEntity(Trident::ECS::Entity entity)
     }
 }
 
+void InspectorPanel::SetRegistry(Trident::ECS::Registry* registry)
+{
+    // Cache the pointer so the inspector continues observing the editor registry while runtime simulation uses a clone.
+    m_Registry = registry;
+}
+
 void InspectorPanel::SetGizmoState(GizmoState* gizmoState)
 {
     // Hold onto the shared gizmo state so radio buttons can drive the viewport overlay.
@@ -60,7 +65,13 @@ void InspectorPanel::Update()
         return;
     }
 
-    Trident::ECS::Registry& l_Registry = Trident::Startup::GetRegistry();
+    if (m_Registry == nullptr)
+    {
+        // Without a registry there is nothing to validate; the application layer wires this up during initialization.
+        return;
+    }
+
+    Trident::ECS::Registry& l_Registry = *m_Registry;
     const std::vector<Trident::ECS::Entity>& l_Entities = l_Registry.GetEntities();
     const bool l_SelectionStillExists = std::find(l_Entities.begin(), l_Entities.end(), m_SelectedEntity) != l_Entities.end();
     if (!l_SelectionStillExists)
@@ -97,7 +108,15 @@ void InspectorPanel::Render()
         return;
     }
 
-    Trident::ECS::Registry& l_Registry = Trident::Startup::GetRegistry();
+    if (m_Registry == nullptr)
+    {
+        ImGui::TextWrapped("Inspector awaiting registry assignment. This hooks up during ApplicationLayer::Initialize().");
+        ImGui::End();
+
+        return;
+    }
+
+    Trident::ECS::Registry& l_Registry = *m_Registry;
 
     DrawAddComponentMenu(l_Registry);
     DrawTagComponent(l_Registry);

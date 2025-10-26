@@ -26,6 +26,8 @@ public:
     // Accept the entity from the hierarchy before Update() runs so the
     // inspector can validate it against the registry.
     void SetSelectedEntity(Trident::ECS::Entity entity);
+    // Allow the application layer to inject the registry this panel should observe (editor vs runtime).
+    void SetRegistry(Trident::ECS::Registry* registry);
     // Provide access to the shared gizmo state so the inspector can drive configuration widgets.
     void SetGizmoState(GizmoState* gizmoState);
     // Verify the selection is still valid and avoid dereferencing stale data.
@@ -54,6 +56,8 @@ private:
     Trident::ECS::Entity m_SelectedEntity = std::numeric_limits<Trident::ECS::Entity>::max();
     // Shared gizmo configuration that mirrors the viewport overlay behaviour.
     GizmoState* m_GizmoState = nullptr;
+    // Registry surfaced by the application layer; remains nullptr until initialised.
+    Trident::ECS::Registry* m_Registry = nullptr;
     // Size of the persistent add component search buffer.
     static constexpr std::size_t s_AddComponentSearchBufferSize = 128;
     // Backing buffer that stores the current search query typed inside the popup.

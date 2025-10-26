@@ -12,12 +12,14 @@
 #include "Panels/InspectorPanel.h"
 #include "Panels/GizmoState.h"
 #include "Panels/ConsolePanel.h"
+#include "ECS/Scene.h"
 
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
 
 #include <string>
 #include <vector>
+#include <memory>
 
 class ApplicationLayer : public Trident::Layer
 {
@@ -57,6 +59,7 @@ private:
 
     void UpdateEditorCamera(float deltaTime);
     void RefreshRuntimeCameraBinding();
+    void RenderSceneToolbar();
 
     // Unity-like helpers
     void FrameSelection();
@@ -74,6 +77,8 @@ private:
     SceneHierarchyPanel m_SceneHierarchyPanel;
     InspectorPanel m_InspectorPanel;
     ConsolePanel m_ConsolePanel;
+
+    std::unique_ptr<Trident::Scene> m_ActiveScene;   ///< Owns the scene bridge responsible for play/edit registry swaps.
 
     Trident::EditorCamera m_EditorCamera;           ///< Viewport camera providing authoring controls.
     Trident::RuntimeCamera m_RuntimeCamera;         ///< Gameplay camera routed into the dedicated runtime viewport.

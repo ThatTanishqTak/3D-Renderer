@@ -98,6 +98,16 @@ void ApplicationLayer::Initialize()
     Trident::RenderCommand::SetRuntimeCameraReady(false);
     RefreshRuntimeCameraBinding();
     // Future improvements may drive the runtime camera from gameplay systems, leaving this initialisation as a safe default.
+    // Instantiate the active scene after the renderer is configured so registry hand-offs immediately reach the GPU.
+    Trident::ECS::Registry& l_EditorRegistry = Trident::Startup::GetRegistry();
+    m_ActiveScene = std::make_unique<Trident::Scene>(l_EditorRegistry);
+    Trident::RenderCommand::SetActiveRegistry(&m_ActiveScene->GetEditorRegistry());
+
+    // Provide editor panels with the authoring registry. When play mode clones into a runtime registry these pointers stay put.
+    Trident::ECS::Registry* l_RegistryForPanels = &m_ActiveScene->GetEditorRegistry();
+    m_SceneHierarchyPanel.SetRegistry(l_RegistryForPanels);
+    m_InspectorPanel.SetRegistry(l_RegistryForPanels);
+    m_ViewportPanel.SetRegistry(l_RegistryForPanels);
 
     // Initialize Unity-like target state and pivot/distance
     m_TargetYawDegrees = m_EditorYawDegrees;
@@ -118,6 +128,9 @@ void ApplicationLayer::Shutdown()
     Trident::RenderCommand::SetEditorCamera(nullptr);
     Trident::RenderCommand::SetRuntimeCamera(nullptr);
     Trident::RenderCommand::SetRuntimeCameraReady(false);
+    Trident::RenderCommand::SetActiveRegistry(nullptr);
+
+    m_ActiveScene.reset();
 }
 
 void ApplicationLayer::Update()
@@ -130,6 +143,13 @@ void ApplicationLayer::Update()
     m_ViewportPanel.Update();
     // Keep the runtime viewport state aligned with the editor viewport so shared handlers see up-to-date focus/hover data.
     RefreshRuntimeCameraBinding();
+
+    if (m_ActiveScene != nullptr && m_ActiveScene->IsPlaying())
+    {
+        // Drive runtime scripts and other simulation features while the sandbox registry is active.
+        m_ActiveScene->Update(Trident::Utilities::Time::GetDeltaTime());
+    }
+
     m_GameViewportPanel.Update();
     m_ContentBrowserPanel.Update();
     m_SceneHierarchyPanel.Update();
@@ -145,6 +165,8 @@ void ApplicationLayer::Update()
 
 void ApplicationLayer::Render()
 {
+    RenderSceneToolbar();
+
     // The editor viewport always renders with the editor camera so gizmos and transform tools remain deterministic.
     m_ViewportPanel.Render();
     // Surface the runtime viewport directly after the scene so future play/pause widgets can live alongside it.
@@ -154,6 +176,81 @@ void ApplicationLayer::Render()
     m_SceneHierarchyPanel.Render();
     m_InspectorPanel.Render();
     m_ConsolePanel.Render();
+}
+
+void ApplicationLayer::RenderSceneToolbar()
+{
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f, 4.0f));
+    const ImGuiWindowFlags l_WindowFlags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoNavFocus;
+    if (ImGui::Begin("Scene Controls", nullptr, l_WindowFlags))
+    {
+        const bool l_HasScene = m_ActiveScene != nullptr;
+        const bool l_IsPlaying = l_HasScene && m_ActiveScene->IsPlaying();
+
+        ImGui::BeginDisabled(!l_HasScene);
+        if (l_HasScene)
+        {
+            if (l_IsPlaying)
+            {
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.13f, 0.59f, 0.30f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.16f, 0.66f, 0.34f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.11f, 0.52f, 0.27f, 1.0f));
+            }
+
+            if (ImGui::Button("Play"))
+            {
+                if (!l_IsPlaying)
+                {
+                    // Promote the editor registry into a runtime clone so gameplay code can run against isolated data.
+                    m_ActiveScene->Play();
+                    Trident::RenderCommand::SetActiveRegistry(&m_ActiveScene->GetActiveRegistry());
+                    RefreshRuntimeCameraBinding();
+                }
+            }
+
+            if (l_IsPlaying)
+            {
+                ImGui::PopStyleColor(3);
+            }
+        }
+        else
+        {
+            ImGui::Button("Play");
+        }
+        ImGui::EndDisabled();
+
+        ImGui::SameLine();
+
+        ImGui::BeginDisabled(true);
+        if (ImGui::Button("Pause"))
+        {
+        }
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        {
+            ImGui::SetTooltip("Pause will activate once the runtime exposes time scaling. This toolbar is the hand-off point.");
+        }
+        ImGui::EndDisabled();
+
+        ImGui::SameLine();
+
+        ImGui::BeginDisabled(!l_HasScene || !l_IsPlaying);
+        if (ImGui::Button("Stop"))
+        {
+            // Restore the editor registry and notify the renderer so authored data is visible again.
+            m_ActiveScene->Stop();
+            Trident::RenderCommand::SetActiveRegistry(&m_ActiveScene->GetEditorRegistry());
+            RefreshRuntimeCameraBinding();
+        }
+        ImGui::EndDisabled();
+
+        ImGui::SameLine();
+        const char* l_StatusLabel = l_IsPlaying ? "Playing" : "Editing";
+        ImGui::Text("Scene State: %s", l_StatusLabel);
+
+        // Future improvements can add icons, hotkeys, or advanced transport controls here without touching other panels.
+    }
+    ImGui::End();
+    ImGui::PopStyleVar();
 }
 
 void ApplicationLayer::HandleSceneHierarchyContextMenu(const ImVec2& min, const ImVec2& max)
@@ -208,8 +305,14 @@ void ApplicationLayer::HandleSceneHierarchyContextMenu(const ImVec2& min, const 
 
 void ApplicationLayer::CreateEmptyEntity()
 {
-    // Resolve the registry so the new entity integrates with the hierarchy and inspector immediately.
-    Trident::ECS::Registry& l_Registry = Trident::Startup::GetRegistry();
+    if (m_ActiveScene == nullptr)
+    {
+        // Scene construction happens during Initialize(); bail out defensively if a future refactor reorders calls.
+        return;
+    }
+
+    // Resolve the editor registry so the new entity integrates with the hierarchy and inspector immediately.
+    Trident::ECS::Registry& l_Registry = m_ActiveScene->GetEditorRegistry();
 
     Trident::ECS::Entity l_NewEntity = l_Registry.CreateEntity();
 
@@ -229,8 +332,13 @@ void ApplicationLayer::CreateEmptyEntity()
 
 void ApplicationLayer::CreatePrimitiveEntity(PrimitiveType type)
 {
+    if (m_ActiveScene == nullptr)
+    {
+        return;
+    }
+
     // Resolve the ECS registry so newly created entities immediately integrate with the renderer and inspector panels.
-    Trident::ECS::Registry& l_Registry = Trident::Startup::GetRegistry();
+    Trident::ECS::Registry& l_Registry = m_ActiveScene->GetEditorRegistry();
 
     // Spawn primitives a short distance in front of the camera so they appear within the artist's view frustum.
     const glm::vec3 l_SpawnPosition = m_EditorCamera.GetPosition() + (m_EditorCamera.GetForwardDirection() * 10.0f);
@@ -281,8 +389,13 @@ void ApplicationLayer::CreatePrimitiveEntity(PrimitiveType type)
 
 std::string ApplicationLayer::MakeUniqueName(const std::string& baseName) const
 {
+    if (m_ActiveScene == nullptr)
+    {
+        return baseName.empty() ? std::string("Primitive") : baseName;
+    }
+
     // Collect all existing tags so the uniqueness check runs in constant time when evaluating potential names.
-    Trident::ECS::Registry& l_Registry = Trident::Startup::GetRegistry();
+    Trident::ECS::Registry& l_Registry = m_ActiveScene->GetEditorRegistry();
     std::unordered_set<std::string> l_ExistingTags{};
     const std::vector<Trident::ECS::Entity>& l_Entities = l_Registry.GetEntities();
     l_ExistingTags.reserve(l_Entities.size());
@@ -362,7 +475,12 @@ bool ApplicationLayer::ImportDroppedAssets(const std::vector<std::string>& dropp
     }
 
     const std::vector<std::string>& l_SupportedExtensions = Trident::Loader::AssimpExtensions::GetNormalizedExtensions();
-    Trident::ECS::Registry& l_Registry = Trident::Startup::GetRegistry();
+    if (m_ActiveScene == nullptr)
+    {
+        return false;
+    }
+
+    Trident::ECS::Registry& l_Registry = m_ActiveScene->GetEditorRegistry();
 
     // Cache the current mesh count so new entities can reference the appended geometry correctly.
     const size_t l_InitialMeshCount = Trident::RenderCommand::GetModelCount();
@@ -465,7 +583,25 @@ void ApplicationLayer::RefreshRuntimeCameraBinding()
 {
     // Locate the first available gameplay camera. Prefer entities explicitly flagged as primary, but fall back to
     // the first camera encountered so empty scenes still show content once a camera is authored.
-    Trident::ECS::Registry& l_Registry = Trident::Startup::GetRegistry();
+    Trident::ECS::Registry* l_RegistryPtr = nullptr;
+    if (m_ActiveScene != nullptr)
+    {
+        l_RegistryPtr = &m_ActiveScene->GetActiveRegistry();
+    }
+    else if (Trident::Startup::HasInstance())
+    {
+        l_RegistryPtr = &Trident::Startup::GetRegistry();
+    }
+
+    if (l_RegistryPtr == nullptr)
+    {
+        Trident::RenderCommand::SetRuntimeCamera(nullptr);
+        Trident::RenderCommand::SetRuntimeCameraReady(false);
+
+        return;
+    }
+
+    Trident::ECS::Registry& l_Registry = *l_RegistryPtr;
     const std::vector<Trident::ECS::Entity>& l_Entities = l_Registry.GetEntities();
 
     const Trident::ECS::Entity l_InvalidEntity = std::numeric_limits<Trident::ECS::Entity>::max();
@@ -726,9 +862,19 @@ void ApplicationLayer::FrameSelection()
     glm::vec3 l_Focus{ 0.0f };
     float l_Radius = 1.0f;
 
-    if (l_Selected && Trident::Startup::GetRegistry().HasComponent<Trident::Transform>(l_Selected))
+    Trident::ECS::Registry* l_RegistryPtr = nullptr;
+    if (m_ActiveScene != nullptr)
     {
-        const auto& l_Transform = Trident::Startup::GetRegistry().GetComponent<Trident::Transform>(l_Selected);
+        l_RegistryPtr = &m_ActiveScene->GetEditorRegistry();
+    }
+    else if (Trident::Startup::HasInstance())
+    {
+        l_RegistryPtr = &Trident::Startup::GetRegistry();
+    }
+
+    if (l_Selected && l_RegistryPtr != nullptr && l_RegistryPtr->HasComponent<Trident::Transform>(l_Selected))
+    {
+        const auto& l_Transform = l_RegistryPtr->GetComponent<Trident::Transform>(l_Selected);
         l_Focus = l_Transform.Position;
         // If you have bounds, set l_Radius from them for smarter framing.
     }

@@ -1,6 +1,5 @@
 #include "SceneHierarchyPanel.h"
 
-#include "Application/Startup.h"
 #include "Events/MouseCodes.h"
 #include "ECS/Components/TagComponent.h"
 #include "ECS/Registry.h"
@@ -11,10 +10,21 @@
 #include <vector>
 #include <utility>
 
+void SceneHierarchyPanel::SetRegistry(Trident::ECS::Registry* registry)
+{
+    // Store the pointer so the hierarchy can consistently query the same registry regardless of play mode swaps.
+    m_Registry = registry;
+}
+
 void SceneHierarchyPanel::Update()
 {
-    Trident::ECS::Registry& l_Registry = Trident::Startup::GetRegistry();
-    const std::vector<Trident::ECS::Entity>& l_Entities = l_Registry.GetEntities();
+    if (m_Registry == nullptr)
+    {
+        // Without a registry the panel has nothing meaningful to validate yet; the layer wires this up during initialise.
+        return;
+    }
+
+    const std::vector<Trident::ECS::Entity>& l_Entities = m_Registry->GetEntities();
 
     if (m_SelectedEntity == std::numeric_limits<Trident::ECS::Entity>::max())
     {
@@ -37,8 +47,16 @@ void SceneHierarchyPanel::Render()
         return;
     }
 
-    Trident::ECS::Registry& l_Registry = Trident::Startup::GetRegistry();
-    const std::vector<Trident::ECS::Entity>& l_Entities = l_Registry.GetEntities();
+    if (m_Registry == nullptr)
+    {
+        // Guard against early renders before the application layer has assigned a registry pointer.
+        ImGui::TextUnformatted("No registry assigned");
+        ImGui::End();
+
+        return;
+    }
+
+    const std::vector<Trident::ECS::Entity>& l_Entities = m_Registry->GetEntities();
 
     // Track focus/hover state so the hierarchy can offer a contextual creation menu when right-clicked.
     const bool l_WindowFocused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
@@ -80,7 +98,7 @@ void SceneHierarchyPanel::Render()
 
     for (Trident::ECS::Entity it_Entity : l_Entities)
     {
-        DrawEntityNode(it_Entity, l_Registry);
+        DrawEntityNode(it_Entity, *m_Registry);
     }
 
     // Allow deselection by clicking an empty portion of the window.

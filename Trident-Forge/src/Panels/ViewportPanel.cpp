@@ -7,7 +7,6 @@
 #include <glm/common.hpp>
 #include <glm/vec4.hpp>
 
-#include "Application/Startup.h"
 #include "ECS/Registry.h"
 #include "ECS/Components/TransformComponent.h"
 
@@ -270,6 +269,12 @@ void ViewportPanel::SetSelectedEntity(Trident::ECS::Entity selectedEntity)
     m_SelectedEntity = selectedEntity;
 }
 
+void ViewportPanel::SetRegistry(Trident::ECS::Registry* registry)
+{
+    // Keep a pointer to the registry used for editor interactions so gizmos continue to operate on authored data.
+    m_Registry = registry;
+}
+
 void ViewportPanel::SetAssetDropHandler(std::function<void(const std::vector<std::string>&)> assetDropHandler)
 {
     // Store the callback so the application layer can process accepted payloads.
@@ -298,16 +303,19 @@ void ViewportPanel::FrameSelection()
 
     if (m_SelectedEntity != std::numeric_limits<Trident::ECS::Entity>::max())
     {
-        Trident::ECS::Registry& l_Registry = Trident::Startup::GetRegistry();
-        const bool l_HasTransform = l_Registry.HasComponent<Trident::Transform>(m_SelectedEntity);
-        if (l_HasTransform)
+        if (m_Registry != nullptr)
         {
-            const Trident::Transform& l_Transform = l_Registry.GetComponent<Trident::Transform>(m_SelectedEntity);
-            l_Target = l_Transform.Position;
+            Trident::ECS::Registry& l_Registry = *m_Registry;
+            const bool l_HasTransform = l_Registry.HasComponent<Trident::Transform>(m_SelectedEntity);
+            if (l_HasTransform)
+            {
+                const Trident::Transform& l_Transform = l_Registry.GetComponent<Trident::Transform>(m_SelectedEntity);
+                l_Target = l_Transform.Position;
 
-            const float l_MaxScale = std::max(std::max(std::abs(l_Transform.Scale.x), std::abs(l_Transform.Scale.y)), std::abs(l_Transform.Scale.z));
-            const float l_NormalizedScale = std::max(l_MaxScale, 1.0f);
-            l_Distance = std::max(l_NormalizedScale * 2.5f, 0.5f);
+                const float l_MaxScale = std::max(std::max(std::abs(l_Transform.Scale.x), std::abs(l_Transform.Scale.y)), std::abs(l_Transform.Scale.z));
+                const float l_NormalizedScale = std::max(l_MaxScale, 1.0f);
+                l_Distance = std::max(l_NormalizedScale * 2.5f, 0.5f);
+            }
         }
     }
 }
