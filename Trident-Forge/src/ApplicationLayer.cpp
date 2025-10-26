@@ -583,14 +583,35 @@ void ApplicationLayer::RefreshRuntimeCameraBinding()
 {
     // Locate the first available gameplay camera. Prefer entities explicitly flagged as primary, but fall back to
     // the first camera encountered so empty scenes still show content once a camera is authored.
+    const Trident::ECS::Entity l_InvalidEntity = std::numeric_limits<Trident::ECS::Entity>::max();
+
     Trident::ECS::Registry* l_RegistryPtr = nullptr;
     if (m_ActiveScene != nullptr)
     {
-        l_RegistryPtr = &m_ActiveScene->GetActiveRegistry();
+        if (m_ActiveScene->IsPlaying())
+        {
+            // While playing we must inspect the runtime registry so gameplay state drives the viewport.
+            l_RegistryPtr = &m_ActiveScene->GetActiveRegistry();
+        }
+        else
+        {
+            // When idle we always consult the editor registry to avoid stale runtime pointers after Stop().
+            l_RegistryPtr = &m_ActiveScene->GetEditorRegistry();
+        }
     }
     else if (Trident::Startup::HasInstance())
     {
+        // Fallback used during bootstrapping before a scene is created.
         l_RegistryPtr = &Trident::Startup::GetRegistry();
+    }
+
+    static Trident::ECS::Registry* s_PreviousRegistry = nullptr;
+    if (l_RegistryPtr != s_PreviousRegistry)
+    {
+        // A registry swap occurs whenever play mode toggles or the active scene is destroyed.
+        // Reset the cached entity so the next scan cannot dereference a destroyed registry pointer.
+        m_BoundRuntimeCameraEntity = l_InvalidEntity;
+        s_PreviousRegistry = l_RegistryPtr;
     }
 
     if (l_RegistryPtr == nullptr)
@@ -604,7 +625,6 @@ void ApplicationLayer::RefreshRuntimeCameraBinding()
     Trident::ECS::Registry& l_Registry = *l_RegistryPtr;
     const std::vector<Trident::ECS::Entity>& l_Entities = l_Registry.GetEntities();
 
-    const Trident::ECS::Entity l_InvalidEntity = std::numeric_limits<Trident::ECS::Entity>::max();
     Trident::ECS::Entity l_SelectedEntity = l_InvalidEntity;
 
     for (Trident::ECS::Entity it_Entity : l_Entities)
@@ -666,6 +686,7 @@ void ApplicationLayer::RefreshRuntimeCameraBinding()
         m_RuntimeCamera.Invalidate();
 
         // Hand the configured runtime camera to the renderer and flag it as ready for consumption by the viewport panel.
+        // Future upgrades may promote this to support multiple simultaneous runtime cameras streamed to different views.
         Trident::RenderCommand::SetRuntimeCamera(&m_RuntimeCamera);
         Trident::RenderCommand::SetRuntimeCameraReady(true);
     }
