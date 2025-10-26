@@ -278,12 +278,34 @@ namespace Trident
         }
 
         VkPhysicalDeviceFeatures l_Features{};
+        // Query the device for Vulkan 1.2 descriptor indexing support so we can safely enable it.
+        VkPhysicalDeviceVulkan12Features l_AvailableVulkan12Features{};
+        l_AvailableVulkan12Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+
+        VkPhysicalDeviceFeatures2 l_Features2{};
+        l_Features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+        l_Features2.pNext = &l_AvailableVulkan12Features;
+        vkGetPhysicalDeviceFeatures2(m_PhysicalDevice, &l_Features2);
+
+        if (l_AvailableVulkan12Features.runtimeDescriptorArray != VK_TRUE ||
+            l_AvailableVulkan12Features.shaderSampledImageArrayNonUniformIndexing != VK_TRUE)
+        {
+            TR_CORE_CRITICAL("Selected GPU does not support required descriptor indexing features");
+            return;
+        }
+
+        VkPhysicalDeviceVulkan12Features l_EnabledVulkan12Features{};
+        l_EnabledVulkan12Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+        l_EnabledVulkan12Features.runtimeDescriptorArray = VK_TRUE;
+        l_EnabledVulkan12Features.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
+
         VkDeviceCreateInfo l_DeviceCreateInfo{};
 
         l_DeviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
         l_DeviceCreateInfo.queueCreateInfoCount = static_cast<uint32_t>(l_QueueCreateInfo.size());
         l_DeviceCreateInfo.pQueueCreateInfos = l_QueueCreateInfo.data();
         l_DeviceCreateInfo.pEnabledFeatures = &l_Features;
+        l_DeviceCreateInfo.pNext = &l_EnabledVulkan12Features;
         const char* l_Extensions[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
         l_DeviceCreateInfo.enabledExtensionCount = 1;
         l_DeviceCreateInfo.ppEnabledExtensionNames = l_Extensions;
