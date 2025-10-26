@@ -110,6 +110,7 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
   imguizmo
   stb
   tinyexr
+  libktx
   assimp::assimp
 )
 
