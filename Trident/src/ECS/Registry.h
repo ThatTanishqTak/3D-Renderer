@@ -20,6 +20,7 @@ namespace Trident
             virtual ~IComponentStorage() = default;
             virtual void Remove(Entity entity) = 0;
             virtual void Clear() = 0;
+            virtual std::unique_ptr<IComponentStorage> Clone() const = 0;
         };
 
         template<typename T>
@@ -50,6 +51,14 @@ namespace Trident
             void Clear() override
             {
                 m_Components.clear();
+            }
+
+            std::unique_ptr<IComponentStorage> Clone() const override
+            {
+                auto l_Copy = std::make_unique<ComponentStorage<T>>();
+                l_Copy->m_Components = m_Components;
+
+                return l_Copy;
             }
 
         private:
@@ -90,6 +99,30 @@ namespace Trident
 
                 m_ActiveEntities.clear();
                 m_NextEntity = 0;
+            }
+
+            void CopyFrom(const Registry& source)
+            {
+                if (this == &source)
+                {
+                    return;
+                }
+
+                // Rebuild the destination from scratch so stale components never leak between play sessions.
+                m_Storages.clear();
+
+                for (const auto& it_Pair : source.m_Storages)
+                {
+                    if (it_Pair.second)
+                    {
+                        m_Storages.emplace(it_Pair.first, it_Pair.second->Clone());
+                    }
+                }
+
+                m_ActiveEntities = source.m_ActiveEntities;
+                m_NextEntity = source.m_NextEntity;
+
+                // Future work: allow callers to request only specific component types to reduce copy costs for huge scenes.
             }
 
             template<typename T, typename... Args>

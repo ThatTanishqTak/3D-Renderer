@@ -14,12 +14,13 @@
 #include <sstream>
 #include <iomanip>
 #include <vector>
+#include <memory>
 
 namespace Trident
 {
-    Scene::Scene(ECS::Registry& registry) : m_Registry(&registry)
+    Scene::Scene(ECS::Registry& registry) : m_Registry(&registry), m_EditorRegistry(&registry)
     {
-
+        // Mirror the editor registry pointer up-front so play mode can swap without expensive lookups.
     }
 
     void Scene::SetName(const std::string& name)
@@ -47,7 +48,8 @@ namespace Trident
         l_Stream << "Scene \"" << EscapeString(m_SceneName) << "\"\n";
         l_Stream << std::boolalpha;
 
-        const std::vector<ECS::Entity>& l_Entities = m_Registry->GetEntities();
+        ECS::Registry& l_Registry = GetActiveRegistry();
+        const std::vector<ECS::Entity>& l_Entities = l_Registry.GetEntities();
         for (ECS::Entity it_Entity : l_Entities)
         {
             SerializeEntity(l_Stream, it_Entity);
@@ -65,7 +67,10 @@ namespace Trident
             return false;
         }
 
-        m_Registry->Clear();
+        ECS::Registry& l_EditorRegistry = GetEditorRegistry();
+        l_EditorRegistry.Clear();
+        m_Registry = m_EditorRegistry;
+        m_RuntimeRegistry.reset();
         m_IsPlaying = false;
         m_LoadedEntityCount = 0;
 
@@ -105,14 +110,20 @@ namespace Trident
             return;
         }
 
+        // Clone the editor registry so gameplay can mutate components without touching authoring data.
+        m_RuntimeRegistry = std::make_unique<ECS::Registry>();
+        m_RuntimeRegistry->CopyFrom(GetEditorRegistry());
+        m_Registry = m_RuntimeRegistry.get();
+
         m_IsPlaying = true;
 
-        const std::vector<ECS::Entity>& l_Entities = m_Registry->GetEntities();
+        ECS::Registry& l_RuntimeRegistry = GetActiveRegistry();
+        const std::vector<ECS::Entity>& l_Entities = l_RuntimeRegistry.GetEntities();
         for (ECS::Entity it_Entity : l_Entities)
         {
-            if (m_Registry->HasComponent<ScriptComponent>(it_Entity))
+            if (l_RuntimeRegistry.HasComponent<ScriptComponent>(it_Entity))
             {
-                ScriptComponent& l_Script = m_Registry->GetComponent<ScriptComponent>(it_Entity);
+                ScriptComponent& l_Script = l_RuntimeRegistry.GetComponent<ScriptComponent>(it_Entity);
                 l_Script.m_IsRunning = l_Script.m_AutoStart;
                 if (l_Script.m_IsRunning)
                 {
@@ -121,6 +132,8 @@ namespace Trident
                 }
             }
         }
+
+        // Future optimisation: support component-type filters so enormous scenes avoid cloning unused authoring data.
     }
 
     void Scene::Stop()
@@ -130,12 +143,13 @@ namespace Trident
             return;
         }
 
-        const std::vector<ECS::Entity>& l_Entities = m_Registry->GetEntities();
+        ECS::Registry& l_RuntimeRegistry = GetActiveRegistry();
+        const std::vector<ECS::Entity>& l_Entities = l_RuntimeRegistry.GetEntities();
         for (ECS::Entity it_Entity : l_Entities)
         {
-            if (m_Registry->HasComponent<ScriptComponent>(it_Entity))
+            if (l_RuntimeRegistry.HasComponent<ScriptComponent>(it_Entity))
             {
-                ScriptComponent& l_Script = m_Registry->GetComponent<ScriptComponent>(it_Entity);
+                ScriptComponent& l_Script = l_RuntimeRegistry.GetComponent<ScriptComponent>(it_Entity);
                 if (l_Script.m_IsRunning)
                 {
                     TR_CORE_INFO("Stopping script '{}' for entity {}", l_Script.m_ScriptPath, it_Entity);
@@ -144,7 +158,21 @@ namespace Trident
             }
         }
 
+        m_Registry = m_EditorRegistry;
+        m_RuntimeRegistry.reset();
         m_IsPlaying = false;
+
+        // Ensure editor-side components never inherit transient runtime state like running scripts.
+        ECS::Registry& l_EditorRegistry = GetEditorRegistry();
+        const std::vector<ECS::Entity>& l_EditorEntities = l_EditorRegistry.GetEntities();
+        for (ECS::Entity it_Entity : l_EditorEntities)
+        {
+            if (l_EditorRegistry.HasComponent<ScriptComponent>(it_Entity))
+            {
+                ScriptComponent& l_Script = l_EditorRegistry.GetComponent<ScriptComponent>(it_Entity);
+                l_Script.m_IsRunning = false;
+            }
+        }
     }
 
     void Scene::Update(float deltaTime)
@@ -154,12 +182,13 @@ namespace Trident
             return;
         }
 
-        const std::vector<ECS::Entity>& l_Entities = m_Registry->GetEntities();
+        ECS::Registry& l_RuntimeRegistry = GetActiveRegistry();
+        const std::vector<ECS::Entity>& l_Entities = l_RuntimeRegistry.GetEntities();
         for (ECS::Entity it_Entity : l_Entities)
         {
-            if (m_Registry->HasComponent<ScriptComponent>(it_Entity))
+            if (l_RuntimeRegistry.HasComponent<ScriptComponent>(it_Entity))
             {
-                ScriptComponent& l_Script = m_Registry->GetComponent<ScriptComponent>(it_Entity);
+                ScriptComponent& l_Script = l_RuntimeRegistry.GetComponent<ScriptComponent>(it_Entity);
                 if (l_Script.m_IsRunning)
                 {
                     // Placeholder behaviour until an actual scripting backend is integrated.
@@ -175,19 +204,31 @@ namespace Trident
         return m_IsPlaying;
     }
 
+    ECS::Registry& Scene::GetActiveRegistry() const
+    {
+        // m_Registry is guaranteed to be valid after construction; this helper keeps the callsites tidy.
+        return *m_Registry;
+    }
+
+    ECS::Registry& Scene::GetEditorRegistry() const
+    {
+        return *m_EditorRegistry;
+    }
+
     void Scene::SerializeEntity(std::ostream& stream, ECS::Entity entity) const
     {
+        ECS::Registry& l_ActiveRegistry = GetActiveRegistry();
         stream << "Entity " << entity << "\n";
 
-        if (m_Registry->HasComponent<TagComponent>(entity))
+        if (l_ActiveRegistry.HasComponent<TagComponent>(entity))
         {
-            const TagComponent& l_Tag = m_Registry->GetComponent<TagComponent>(entity);
+            const TagComponent& l_Tag = l_ActiveRegistry.GetComponent<TagComponent>(entity);
             stream << "Tag \"" << EscapeString(l_Tag.m_Tag) << "\"\n";
         }
 
-        if (m_Registry->HasComponent<Transform>(entity))
+        if (l_ActiveRegistry.HasComponent<Transform>(entity))
         {
-            const Transform& l_Transform = m_Registry->GetComponent<Transform>(entity);
+            const Transform& l_Transform = l_ActiveRegistry.GetComponent<Transform>(entity);
             stream << std::setprecision(6);
             stream << "Transform "
                 << l_Transform.Position.x << ' ' << l_Transform.Position.y << ' ' << l_Transform.Position.z << ' '
@@ -195,18 +236,18 @@ namespace Trident
                 << l_Transform.Scale.x << ' ' << l_Transform.Scale.y << ' ' << l_Transform.Scale.z << "\n";
         }
 
-        if (m_Registry->HasComponent<CameraComponent>(entity))
+        if (l_ActiveRegistry.HasComponent<CameraComponent>(entity))
         {
-            const CameraComponent& l_Camera = m_Registry->GetComponent<CameraComponent>(entity);
+            const CameraComponent& l_Camera = l_ActiveRegistry.GetComponent<CameraComponent>(entity);
             stream << "Camera "
                 << static_cast<uint32_t>(l_Camera.m_ProjectionType) << ' ' << l_Camera.m_FieldOfView << ' ' << l_Camera.m_OrthographicSize << ' '
                 << l_Camera.m_NearClip << ' ' << l_Camera.m_FarClip << ' ' << l_Camera.m_Primary << ' ' << l_Camera.m_FixedAspectRatio << ' '
                 << l_Camera.m_AspectRatio << "\n";
         }
 
-        if (m_Registry->HasComponent<MeshComponent>(entity))
+        if (l_ActiveRegistry.HasComponent<MeshComponent>(entity))
         {
-            const MeshComponent& l_Mesh = m_Registry->GetComponent<MeshComponent>(entity);
+            const MeshComponent& l_Mesh = l_ActiveRegistry.GetComponent<MeshComponent>(entity);
             // Persist the renderer-facing indices; future iterations can enrich this with asset references.
             // The primitive flag trails the legacy fields so pre-update files continue to deserialize cleanly.
             stream << "Mesh "
@@ -214,17 +255,17 @@ namespace Trident
                 << l_Mesh.m_IndexCount << ' ' << l_Mesh.m_BaseVertex << ' ' << l_Mesh.m_Visible << ' ' << static_cast<int>(l_Mesh.m_Primitive) << "\n";
         }
 
-        if (m_Registry->HasComponent<TextureComponent>(entity))
+        if (l_ActiveRegistry.HasComponent<TextureComponent>(entity))
         {
-            const TextureComponent& l_Texture = m_Registry->GetComponent<TextureComponent>(entity);
+            const TextureComponent& l_Texture = l_ActiveRegistry.GetComponent<TextureComponent>(entity);
             // Store slot and dirty state so texture reloads can be deferred across sessions. Future work: persist sampler state.
             stream << "Texture \"" << EscapeString(l_Texture.m_TexturePath) << "\" Slot=" << l_Texture.m_TextureSlot
                 << " Dirty=" << l_Texture.m_IsDirty << "\n";
         }
 
-        if (m_Registry->HasComponent<LightComponent>(entity))
+        if (l_ActiveRegistry.HasComponent<LightComponent>(entity))
         {
-            const LightComponent& l_Light = m_Registry->GetComponent<LightComponent>(entity);
+            const LightComponent& l_Light = l_ActiveRegistry.GetComponent<LightComponent>(entity);
             stream << "Light "
                 << static_cast<uint32_t>(l_Light.m_Type) << ' '
                 << l_Light.m_Color.r << ' ' << l_Light.m_Color.g << ' ' << l_Light.m_Color.b << ' '
@@ -234,9 +275,9 @@ namespace Trident
                 << l_Light.m_Enabled << ' ' << l_Light.m_ShadowCaster << ' ' << l_Light.m_Reserved0 << ' ' << l_Light.m_Reserved1 << "\n";
         }
 
-        if (m_Registry->HasComponent<ScriptComponent>(entity))
+        if (l_ActiveRegistry.HasComponent<ScriptComponent>(entity))
         {
-            const ScriptComponent& l_Script = m_Registry->GetComponent<ScriptComponent>(entity);
+            const ScriptComponent& l_Script = l_ActiveRegistry.GetComponent<ScriptComponent>(entity);
             stream << "Script \"" << EscapeString(l_Script.m_ScriptPath) << "\" AutoStart=" << l_Script.m_AutoStart << "\n";
         }
 
@@ -246,7 +287,8 @@ namespace Trident
     void Scene::DeserializeEntity(std::istream& stream, const std::string& headerLine)
     {
         (void)headerLine; // The persisted entity identifier is currently ignored.
-        const ECS::Entity l_Entity = m_Registry->CreateEntity();
+        ECS::Registry& l_TargetRegistry = GetActiveRegistry();
+        const ECS::Entity l_Entity = l_TargetRegistry.CreateEntity();
         ++m_LoadedEntityCount;
 
         std::string l_Line;
@@ -264,7 +306,7 @@ namespace Trident
 
             if (l_Line.rfind("Tag ", 0) == 0)
             {
-                TagComponent& l_Tag = m_Registry->AddComponent<TagComponent>(l_Entity);
+                TagComponent& l_Tag = l_TargetRegistry.AddComponent<TagComponent>(l_Entity);
                 l_Tag.m_Tag = ExtractQuotedToken(l_Line);
 
                 continue;
@@ -274,11 +316,11 @@ namespace Trident
             {
                 Transform l_Transform{};
                 std::istringstream l_TokenStream(l_Line.substr(10));
-                l_TokenStream 
+                l_TokenStream
                     >> l_Transform.Position.x >> l_Transform.Position.y >> l_Transform.Position.z
                     >> l_Transform.Rotation.x >> l_Transform.Rotation.y >> l_Transform.Rotation.z
                     >> l_Transform.Scale.x >> l_Transform.Scale.y >> l_Transform.Scale.z;
-                m_Registry->AddComponent<Transform>(l_Entity, l_Transform);
+                l_TargetRegistry.AddComponent<Transform>(l_Entity, l_Transform);
 
                 continue;
             }
@@ -294,7 +336,7 @@ namespace Trident
                 l_TokenStream >> l_Camera.m_NearClip >> l_Camera.m_FarClip;
                 l_TokenStream >> std::boolalpha >> l_Camera.m_Primary >> l_Camera.m_FixedAspectRatio;
                 l_TokenStream >> l_Camera.m_AspectRatio;
-                m_Registry->AddComponent<CameraComponent>(l_Entity, l_Camera);
+                l_TargetRegistry.AddComponent<CameraComponent>(l_Entity, l_Camera);
 
                 continue;
             }
@@ -320,7 +362,7 @@ namespace Trident
                         l_Mesh.m_Primitive = MeshComponent::PrimitiveType::None;
                     }
                 }
-                m_Registry->AddComponent<MeshComponent>(l_Entity, l_Mesh);
+                l_TargetRegistry.AddComponent<MeshComponent>(l_Entity, l_Mesh);
 
                 continue;
             }
@@ -344,7 +386,7 @@ namespace Trident
                     l_TokenStream >> std::boolalpha >> l_Texture.m_IsDirty;
                 }
 
-                m_Registry->AddComponent<TextureComponent>(l_Entity, l_Texture);
+                l_TargetRegistry.AddComponent<TextureComponent>(l_Entity, l_Texture);
 
                 continue;
             }
@@ -361,7 +403,7 @@ namespace Trident
                 l_TokenStream >> l_Light.m_Direction.x >> l_Light.m_Direction.y >> l_Light.m_Direction.z;
                 l_TokenStream >> l_Light.m_Range;
                 l_TokenStream >> std::boolalpha >> l_Light.m_Enabled >> l_Light.m_ShadowCaster >> l_Light.m_Reserved0 >> l_Light.m_Reserved1;
-                m_Registry->AddComponent<LightComponent>(l_Entity, l_Light);
+                l_TargetRegistry.AddComponent<LightComponent>(l_Entity, l_Light);
 
                 continue;
             }
@@ -376,7 +418,7 @@ namespace Trident
                     std::istringstream l_TokenStream(l_Line.substr(l_AutoStartPos + 10));
                     l_TokenStream >> std::boolalpha >> l_Script.m_AutoStart;
                 }
-                m_Registry->AddComponent<ScriptComponent>(l_Entity, l_Script);
+                l_TargetRegistry.AddComponent<ScriptComponent>(l_Entity, l_Script);
 
                 continue;
             }
