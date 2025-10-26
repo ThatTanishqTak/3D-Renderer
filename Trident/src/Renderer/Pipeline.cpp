@@ -450,8 +450,9 @@ namespace Trident
 
         VkDescriptorSetLayoutBinding l_MaterialLayoutBinding{};
         l_MaterialLayoutBinding.binding = 1;
-        // Expose the entire material table as a storage buffer so every draw can index its record directly.
-        l_MaterialLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        // The fragment shader currently reads a single material record via a uniform buffer binding.
+        // Switching to a storage buffer would enable bindless style indexing in the future once the shader is ready.
+        l_MaterialLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         l_MaterialLayoutBinding.descriptorCount = 1;
         l_MaterialLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
         l_MaterialLayoutBinding.pImmutableSamplers = nullptr;

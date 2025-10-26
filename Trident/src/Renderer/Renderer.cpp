@@ -91,7 +91,7 @@ namespace Trident
         m_PerformanceStats = {};
 
         VkDeviceSize l_GlobalSize = sizeof(GlobalUniformBuffer);
-        // Allocate per-frame uniform buffers for camera/light state and storage buffers for the material table.
+        // Allocate per-frame uniform buffers for camera/light state and the material table.
         m_Buffers.CreateUniformBuffers(m_Swapchain.GetImageCount(), l_GlobalSize, m_GlobalUniformBuffers, m_GlobalUniformBuffersMemory);
         EnsureMaterialBufferCapacity(m_Materials.size());
 
@@ -1256,8 +1256,8 @@ namespace Trident
         VkDescriptorPoolSize l_PoolSizes[3]{};
         l_PoolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         l_PoolSizes[0].descriptorCount = l_ImageCount * 2; // Global UBO for the main pipeline plus the skybox uniform.
-        l_PoolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-        l_PoolSizes[1].descriptorCount = l_ImageCount; // Material storage buffer bound once per swapchain image.
+        l_PoolSizes[1].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        l_PoolSizes[1].descriptorCount = l_ImageCount; // Material uniform buffer bound once per swapchain image.
         l_PoolSizes[2].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         // Each swapchain image consumes an array of material textures plus a cubemap sampler in the main set and a cubemap
         // sampler in the dedicated skybox set.
@@ -2039,7 +2039,8 @@ namespace Trident
             l_MaterialWrite.dstSet = m_DescriptorSets[i];
             l_MaterialWrite.dstBinding = 1;
             l_MaterialWrite.dstArrayElement = 0;
-            l_MaterialWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            // Bind the material data as a uniform buffer so the shader receives the expected descriptor type.
+            l_MaterialWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
             l_MaterialWrite.descriptorCount = 1;
             l_MaterialWrite.pBufferInfo = &l_MaterialBufferInfo;
 
@@ -2125,7 +2126,8 @@ namespace Trident
         }
 
         const VkDeviceSize l_BufferSize = static_cast<VkDeviceSize>(l_RequiredCount * sizeof(MaterialUniformBuffer));
-        m_Buffers.CreateStorageBuffers(static_cast<uint32_t>(l_ImageCount), l_BufferSize, m_MaterialBuffers, m_MaterialBuffersMemory);
+        // Material data is consumed through a uniform buffer binding, so allocate matching buffers per swapchain image.
+        m_Buffers.CreateUniformBuffers(static_cast<uint32_t>(l_ImageCount), l_BufferSize, m_MaterialBuffers, m_MaterialBuffersMemory);
 
         m_MaterialBufferElementCount = l_RequiredCount;
         MarkMaterialBuffersDirty();
@@ -2151,7 +2153,8 @@ namespace Trident
             l_MaterialWrite.dstSet = m_DescriptorSets[it_Image];
             l_MaterialWrite.dstBinding = 1;
             l_MaterialWrite.dstArrayElement = 0;
-            l_MaterialWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            // Maintain uniform buffer bindings whenever the material payload changes.
+            l_MaterialWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
             l_MaterialWrite.descriptorCount = 1;
             l_MaterialWrite.pBufferInfo = &l_MaterialInfo;
 
@@ -3664,7 +3667,8 @@ namespace Trident
 
                     VkBufferMemoryBarrier l_MaterialBarrier{ VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER };
                     l_MaterialBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-                    l_MaterialBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+                    // Ensure uniform buffer reads see the freshly uploaded material parameters.
+                    l_MaterialBarrier.dstAccessMask = VK_ACCESS_UNIFORM_READ_BIT;
                     l_MaterialBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
                     l_MaterialBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
                     l_MaterialBarrier.buffer = m_MaterialBuffers[currentImage];
