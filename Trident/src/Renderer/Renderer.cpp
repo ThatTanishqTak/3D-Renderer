@@ -1057,9 +1057,24 @@ namespace Trident
                 l_ModelMatrix = ComposeTransform(m_Registry->GetComponent<Transform>(it_Entity));
             }
 
+            TextureComponent* l_TextureComponent = nullptr;
+            if (m_Registry->HasComponent<TextureComponent>(it_Entity))
+            {
+                TextureComponent& l_ComponentTexture = m_Registry->GetComponent<TextureComponent>(it_Entity);
+                l_TextureComponent = &l_ComponentTexture;
+                if (l_ComponentTexture.m_IsDirty || l_ComponentTexture.m_TextureSlot < 0)
+                {
+                    const int32_t l_ResolvedSlot = ResolveTextureSlot(l_ComponentTexture.m_TexturePath);
+                    l_ComponentTexture.m_TextureSlot = l_ResolvedSlot;
+                    // Clear the dirty flag so subsequent frames reuse the cached slot. Future follow-up: retry failures on demand.
+                    l_ComponentTexture.m_IsDirty = false;
+                }
+            }
+
             MeshDrawCommand l_Command{};
             l_Command.m_ModelMatrix = l_ModelMatrix;
             l_Command.m_Component = &l_MeshComponent;
+            l_Command.m_TextureComponent = l_TextureComponent;
             l_Command.m_Entity = it_Entity;
             m_MeshDrawCommands.push_back(l_Command);
         }
@@ -1090,9 +1105,23 @@ namespace Trident
                 continue;
             }
 
+            TextureComponent* l_TextureComponent = nullptr;
+            if (m_Registry->HasComponent<TextureComponent>(it_Entity))
+            {
+                TextureComponent& l_ComponentTexture = m_Registry->GetComponent<TextureComponent>(it_Entity);
+                l_TextureComponent = &l_ComponentTexture;
+                if (l_ComponentTexture.m_IsDirty || l_ComponentTexture.m_TextureSlot < 0)
+                {
+                    const int32_t l_ResolvedSlot = ResolveTextureSlot(l_ComponentTexture.m_TexturePath);
+                    l_ComponentTexture.m_TextureSlot = l_ResolvedSlot;
+                    l_ComponentTexture.m_IsDirty = false;
+                }
+            }
+
             SpriteDrawCommand l_Command{};
             l_Command.m_ModelMatrix = ComposeTransform(m_Registry->GetComponent<Transform>(it_Entity));
             l_Command.m_Component = &l_Sprite;
+            l_Command.m_TextureComponent = l_TextureComponent;
             l_Command.m_Entity = it_Entity;
 
             m_SpriteDrawList.push_back(l_Command);
@@ -1130,7 +1159,15 @@ namespace Trident
             l_PushConstant.m_SortBias = it_Command.m_Component->m_SortOffset;
             l_PushConstant.m_TextureSlot = 0; // Sprites currently sample the default texture until atlas streaming is wired up.
 
-            l_PushConstant.m_MaterialIndex = -1; // Sprites rely on texture tinting only for now.
+            if (it_Command.m_TextureComponent != nullptr && it_Command.m_TextureComponent->m_TextureSlot >= 0)
+            {
+                l_PushConstant.m_TextureSlot = it_Command.m_TextureComponent->m_TextureSlot;
+            }
+            else
+            {
+                // Sprites currently sample the default texture until atlas streaming is wired up.
+                l_PushConstant.m_TextureSlot = 0;
+            }
 
             vkCmdPushConstants(commandBuffer, m_Pipeline.GetPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, 
                 sizeof(RenderablePushConstant), &l_PushConstant);
@@ -1547,6 +1584,31 @@ namespace Trident
 
             vkUpdateDescriptorSets(Startup::GetDevice(), 1, &l_TextureWrite, 0, nullptr);
         }
+    }
+
+    int32_t Renderer::ResolveTextureSlot(const std::string& texturePath)
+    {
+        // Normalise first so hot-reloads treat equivalent paths consistently across platforms.
+        const std::string l_NormalizedPath = NormalizeTexturePath(texturePath);
+        if (l_NormalizedPath.empty())
+        {
+            return 0;
+        }
+
+        const auto a_Existing = m_TextureSlotLookup.find(l_NormalizedPath);
+        if (a_Existing != m_TextureSlotLookup.end())
+        {
+            return static_cast<int32_t>(a_Existing->second);
+        }
+
+        // Load the texture data on demand; the renderer caches GPU uploads so subsequent resolves are inexpensive.
+        Loader::TextureData l_TextureData = Loader::TextureLoader::Load(l_NormalizedPath);
+        const uint32_t l_SlotIndex = AcquireTextureSlot(l_NormalizedPath, l_TextureData);
+        // Refresh descriptor arrays so any new slot becomes available to materials and push constants immediately.
+        RefreshTextureDescriptorBindings();
+
+        // Future follow-up: detect when no new slot was created and skip the descriptor refresh to save CPU work.
+        return static_cast<int32_t>(l_SlotIndex);
     }
 
     std::string Renderer::NormalizeTexturePath(const std::string& texturePath) const
@@ -2923,7 +2985,12 @@ namespace Trident
                         l_PushConstant.m_ModelMatrix = l_Command.m_ModelMatrix;
                         int32_t l_MaterialIndex = l_DrawInfo.m_MaterialIndex;
                         int32_t l_TextureSlot = 0;
-                        if (l_MaterialIndex >= 0 && static_cast<size_t>(l_MaterialIndex) < m_Materials.size())
+                        if (l_Command.m_TextureComponent != nullptr && l_Command.m_TextureComponent->m_TextureSlot >= 0)
+                        {
+                            // Prefer the entity supplied texture slot so material overrides remain reactive in-editor.
+                            l_TextureSlot = l_Command.m_TextureComponent->m_TextureSlot;
+                        }
+                        else if (l_MaterialIndex >= 0 && static_cast<size_t>(l_MaterialIndex) < m_Materials.size())
                         {
                             l_TextureSlot = m_Materials[l_MaterialIndex].BaseColorTextureSlot;
                         }

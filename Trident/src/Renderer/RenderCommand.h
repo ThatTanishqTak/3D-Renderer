@@ -35,5 +35,7 @@ namespace Trident
         // Expose the active clear colour so UI panels can stay in sync with renderer preferences.
         static glm::vec4 GetClearColor();
         static size_t GetModelCount();
+        // Allow editor tooling to resolve texture slots on demand when authors request explicit reloads.
+        static int32_t ResolveTextureSlot(const std::string& texturePath);
     };
 }

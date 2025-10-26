@@ -21,6 +21,7 @@
 #include "ECS/Components/SpriteComponent.h"
 #include "ECS/Components/TransformComponent.h"
 #include "ECS/Components/LightComponent.h"
+#include "ECS/Components/TextureComponent.h"
 
 #include <vulkan/vulkan.h>
 #include <glm/glm.hpp>
@@ -83,6 +84,10 @@ namespace Trident
         void SetRuntimeCamera(Camera* camera);
         void SetRuntimeCameraReady(bool ready);
         bool HasRuntimeCamera() const { return m_RuntimeCamera != nullptr && m_RuntimeCameraReady; }
+
+        // Resolve a texture path to a renderer-managed slot, loading GPU resources and updating descriptor bindings
+        // when necessary. This keeps editor tooling responsive when authors tweak materials.
+        int32_t ResolveTextureSlot(const std::string& texturePath);
 
         // Lightweight wrapper describing an ImGui-ready texture along with the Vulkan
         // resources required to keep it alive for the duration of the renderer.
@@ -160,6 +165,7 @@ namespace Trident
         {
             glm::mat4 m_ModelMatrix{ 1.0f };      ///< Cached transform ready for the GPU.
             const MeshComponent* m_Component = nullptr; ///< Source component describing the draw parameters.
+            const TextureComponent* m_TextureComponent = nullptr; ///< Optional texture binding supplied by the entity.
             ECS::Entity m_Entity = 0;             ///< Owning entity for debugging and picking hooks.
         };
 
@@ -167,6 +173,7 @@ namespace Trident
         {
             glm::mat4 m_ModelMatrix{ 1.0f };        ///< Cached transform ready for GPU submission.
             const SpriteComponent* m_Component = nullptr; ///< Pointer into ECS storage for sprite properties.
+            const TextureComponent* m_TextureComponent = nullptr; ///< Optional texture binding supplied by the entity.
             ECS::Entity m_Entity = 0;               ///< Owning entity for debugging and future sorting.
         };
 

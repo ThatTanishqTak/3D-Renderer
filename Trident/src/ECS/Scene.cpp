@@ -8,6 +8,7 @@
 #include "ECS/Components/LightComponent.h"
 #include "ECS/Components/TagComponent.h"
 #include "ECS/Components/ScriptComponent.h"
+#include "ECS/Components/TextureComponent.h"
 
 #include <fstream>
 #include <sstream>
@@ -213,6 +214,14 @@ namespace Trident
                 << l_Mesh.m_IndexCount << ' ' << l_Mesh.m_BaseVertex << ' ' << l_Mesh.m_Visible << ' ' << static_cast<int>(l_Mesh.m_Primitive) << "\n";
         }
 
+        if (m_Registry->HasComponent<TextureComponent>(entity))
+        {
+            const TextureComponent& l_Texture = m_Registry->GetComponent<TextureComponent>(entity);
+            // Store slot and dirty state so texture reloads can be deferred across sessions. Future work: persist sampler state.
+            stream << "Texture \"" << EscapeString(l_Texture.m_TexturePath) << "\" Slot=" << l_Texture.m_TextureSlot
+                << " Dirty=" << l_Texture.m_IsDirty << "\n";
+        }
+
         if (m_Registry->HasComponent<LightComponent>(entity))
         {
             const LightComponent& l_Light = m_Registry->GetComponent<LightComponent>(entity);
@@ -312,6 +321,30 @@ namespace Trident
                     }
                 }
                 m_Registry->AddComponent<MeshComponent>(l_Entity, l_Mesh);
+
+                continue;
+            }
+
+            if (l_Line.rfind("Texture ", 0) == 0)
+            {
+                TextureComponent l_Texture{};
+                l_Texture.m_TexturePath = ExtractQuotedToken(l_Line);
+
+                const size_t l_SlotToken = l_Line.find("Slot=");
+                if (l_SlotToken != std::string::npos)
+                {
+                    std::istringstream l_TokenStream(l_Line.substr(l_SlotToken + 5));
+                    l_TokenStream >> l_Texture.m_TextureSlot;
+                }
+
+                const size_t l_DirtyToken = l_Line.find("Dirty=");
+                if (l_DirtyToken != std::string::npos)
+                {
+                    std::istringstream l_TokenStream(l_Line.substr(l_DirtyToken + 6));
+                    l_TokenStream >> std::boolalpha >> l_Texture.m_IsDirty;
+                }
+
+                m_Registry->AddComponent<TextureComponent>(l_Entity, l_Texture);
 
                 continue;
             }

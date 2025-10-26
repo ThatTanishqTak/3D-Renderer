@@ -41,6 +41,7 @@ private:
     void DrawCameraComponent(Trident::ECS::Registry& registry);
     void DrawLightComponent(Trident::ECS::Registry& registry);
     void DrawMeshComponent(Trident::ECS::Registry& registry);
+    void DrawTextureComponent(Trident::ECS::Registry& registry);
     void DrawSpriteComponent(Trident::ECS::Registry& registry);
     void DrawScriptComponent(Trident::ECS::Registry& registry);
     // Helper that renders the add component popup and handles the search workflow.

@@ -8,6 +8,7 @@
 #include "ECS/Components/CameraComponent.h"
 #include "ECS/Components/LightComponent.h"
 #include "ECS/Components/MeshComponent.h"
+#include "ECS/Components/TextureComponent.h"
 #include "ECS/Components/SpriteComponent.h"
 #include "ECS/Components/ScriptComponent.h"
 
@@ -102,6 +103,7 @@ void InspectorPanel::Render()
     DrawCameraComponent(l_Registry);
     DrawLightComponent(l_Registry);
     DrawMeshComponent(l_Registry);
+    DrawTextureComponent(l_Registry);
     DrawSpriteComponent(l_Registry);
     DrawScriptComponent(l_Registry);
 
@@ -175,6 +177,17 @@ void InspectorPanel::DrawAddComponentMenu(Trident::ECS::Registry& registry)
             if (ImGui::Selectable("Mesh"))
             {
                 registry.AddComponent<Trident::MeshComponent>(m_SelectedEntity, Trident::MeshComponent{});
+                l_ComponentAdded = true;
+                ImGui::CloseCurrentPopup();
+            }
+        }
+
+        if (!l_ComponentAdded && !registry.HasComponent<Trident::TextureComponent>(m_SelectedEntity) && PassesAddComponentFilter("Texture"))
+        {
+            l_DisplayedAnyComponent = true;
+            if (ImGui::Selectable("Texture"))
+            {
+                registry.AddComponent<Trident::TextureComponent>(m_SelectedEntity, Trident::TextureComponent{});
                 l_ComponentAdded = true;
                 ImGui::CloseCurrentPopup();
             }
@@ -508,6 +521,71 @@ void InspectorPanel::DrawMeshComponent(Trident::ECS::Registry& registry)
     if (l_ShouldRemove)
     {
         registry.RemoveComponent<Trident::MeshComponent>(m_SelectedEntity);
+    }
+}
+
+void InspectorPanel::DrawTextureComponent(Trident::ECS::Registry& registry)
+{
+    if (!registry.HasComponent<Trident::TextureComponent>(m_SelectedEntity))
+    {
+        return;
+    }
+
+    ImGui::PushID("TextureComponent");
+    bool l_ShouldRemove = false;
+    const bool l_IsOpen = ImGui::CollapsingHeader("Texture", ImGuiTreeNodeFlags_DefaultOpen);
+
+    if (ImGui::BeginPopupContextItem("TextureComponentContext"))
+    {
+        if (ImGui::MenuItem("Remove Component"))
+        {
+            l_ShouldRemove = true;
+        }
+        ImGui::EndPopup();
+    }
+
+    if (l_IsOpen)
+    {
+        Trident::TextureComponent& l_TextureComponent = registry.GetComponent<Trident::TextureComponent>(m_SelectedEntity);
+
+        std::array<char, 260> l_PathBuffer{};
+        std::strncpy(l_PathBuffer.data(), l_TextureComponent.m_TexturePath.c_str(), l_PathBuffer.size() - 1);
+        if (ImGui::InputText("Texture Path", l_PathBuffer.data(), l_PathBuffer.size()))
+        {
+            l_TextureComponent.m_TexturePath = l_PathBuffer.data();
+            l_TextureComponent.m_IsDirty = true;
+        }
+
+        ImGui::TextDisabled("Resolved Slot");
+        ImGui::Text("%d", l_TextureComponent.m_TextureSlot);
+
+        // Expose the dirty toggle so artists can request manual reloads while iterating on assets.
+        ImGui::Checkbox("Pending Reload", &l_TextureComponent.m_IsDirty);
+
+        if (ImGui::Button("Reload Now"))
+        {
+            if (!l_TextureComponent.m_TexturePath.empty())
+            {
+                const int32_t l_NewSlot = Trident::RenderCommand::ResolveTextureSlot(l_TextureComponent.m_TexturePath);
+                l_TextureComponent.m_TextureSlot = l_NewSlot;
+            }
+            else
+            {
+                l_TextureComponent.m_TextureSlot = 0;
+            }
+
+            l_TextureComponent.m_IsDirty = false;
+        }
+
+        ImGui::SameLine();
+        ImGui::TextDisabled("Future: reclaim unused slots");
+    }
+
+    ImGui::PopID();
+
+    if (l_ShouldRemove)
+    {
+        registry.RemoveComponent<Trident::TextureComponent>(m_SelectedEntity);
     }
 }
 

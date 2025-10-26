@@ -117,4 +117,11 @@ namespace Trident
     {
         return Startup::GetRenderer().GetModelCount();
     }
+
+
+    int32_t RenderCommand::ResolveTextureSlot(const std::string& texturePath)
+    {
+        // Forward the request to the renderer so tooling can trigger reloads after editing component properties.
+        return Startup::GetRenderer().ResolveTextureSlot(texturePath);
+    }
 }
