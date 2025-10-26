@@ -11,6 +11,7 @@
 #include "ECS/Components/TextureComponent.h"
 #include "ECS/Components/SpriteComponent.h"
 #include "ECS/Components/ScriptComponent.h"
+#include "Core/Utilities.h"
 
 #include <imgui.h>
 #include <ImGuizmo.h>
@@ -19,6 +20,7 @@
 #include <array>
 #include <cctype>
 #include <cstring>
+#include <filesystem>
 #include <limits>
 #include <string>
 #include <vector>
@@ -555,6 +557,58 @@ void InspectorPanel::DrawTextureComponent(Trident::ECS::Registry& registry)
             l_TextureComponent.m_TexturePath = l_PathBuffer.data();
             l_TextureComponent.m_IsDirty = true;
         }
+
+        ImGui::SameLine();
+        if (ImGui::Button("Clear"))
+        {
+            // Clearing the path allows designers to quickly remove an assignment without hunting for the asset.
+            l_TextureComponent.m_TexturePath.clear();
+            l_TextureComponent.m_TextureSlot = -1;
+            l_TextureComponent.m_IsDirty = true;
+        }
+
+        // The content browser publishes drag payloads using the CONTENT_BROWSER_ITEM identifier.
+        // Future improvement: surface a thumbnail preview once the asset system exposes metadata.
+        const ImVec2 l_DropTargetSize = ImVec2(ImGui::GetContentRegionAvail().x, 0.0f);
+        ImGui::Button("Drop Texture Asset Here", l_DropTargetSize);
+
+        if (ImGui::BeginDragDropTarget())
+        {
+            if (const ImGuiPayload* l_Payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM"))
+            {
+                const char* l_RawData = static_cast<const char*>(l_Payload->Data);
+                std::string l_RawPath(l_RawData, l_Payload->DataSize);
+                l_RawPath = l_RawPath.c_str();
+
+                std::string l_NormalizedPath = Trident::Utilities::FileManagement::NormalizePath(l_RawPath);
+                const std::string l_AssetsPrefix = "Assets/";
+                if (l_NormalizedPath.rfind(l_AssetsPrefix, 0) == 0)
+                {
+                    l_NormalizedPath = l_NormalizedPath.substr(l_AssetsPrefix.length());
+                }
+
+                // Store the relative path so the renderer can resolve the asset regardless of working directory.
+                l_TextureComponent.m_TexturePath = l_NormalizedPath;
+                l_TextureComponent.m_TextureSlot = -1;
+                l_TextureComponent.m_IsDirty = true;
+            }
+            ImGui::EndDragDropTarget();
+        }
+
+        if (!l_TextureComponent.m_TexturePath.empty())
+        {
+            const std::filesystem::path l_PathPreview = l_TextureComponent.m_TexturePath;
+            ImGui::TextDisabled("Assigned Relative Path");
+            ImGui::TextUnformatted(l_TextureComponent.m_TexturePath.c_str());
+            ImGui::TextDisabled("Filename Preview");
+            ImGui::TextUnformatted(l_PathPreview.filename().generic_string().c_str());
+        }
+        else
+        {
+            ImGui::TextDisabled("No texture selected. Drop an asset or type a path.");
+        }
+
+        ImGui::Separator();
 
         ImGui::TextDisabled("Resolved Slot");
         ImGui::Text("%d", l_TextureComponent.m_TextureSlot);
