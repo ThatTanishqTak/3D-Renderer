@@ -200,8 +200,10 @@ namespace Trident
         std::vector<VkDescriptorSet> m_DescriptorSets;
         std::vector<VkBuffer> m_GlobalUniformBuffers;
         std::vector<VkDeviceMemory> m_GlobalUniformBuffersMemory;
-        std::vector<VkBuffer> m_MaterialUniformBuffers;
-        std::vector<VkDeviceMemory> m_MaterialUniformBuffersMemory;
+        std::vector<VkBuffer> m_MaterialBuffers;               ///< Per-frame GPU-visible cache of material records.
+        std::vector<VkDeviceMemory> m_MaterialBuffersMemory;    ///< Backing memory for the material storage buffers.
+        std::vector<bool> m_MaterialBufferDirty;                ///< Tracks which per-frame material uploads still need refreshing.
+        size_t m_MaterialBufferElementCount = 0;                ///< Number of MaterialUniformBuffer records resident on the GPU.
         VkImage m_TextureImage = VK_NULL_HANDLE;
         VkDeviceMemory m_TextureImageMemory = VK_NULL_HANDLE;
         VkImageView m_TextureImageView = VK_NULL_HANDLE;
@@ -306,6 +308,10 @@ namespace Trident
         void CreateSkyboxCubemap();
         void DestroySkyboxCubemap();
         void UpdateSkyboxBindingOnMainSets();
+
+        void EnsureMaterialBufferCapacity(size_t materialCount);
+        void UpdateMaterialDescriptorBindings();
+        void MarkMaterialBuffersDirty();
 
         void UpdateUniformBuffer(uint32_t currentImage, const Camera* cameraOverride = nullptr, VkCommandBuffer commandBuffer = VK_NULL_HANDLE);
         void UploadMeshFromCache();

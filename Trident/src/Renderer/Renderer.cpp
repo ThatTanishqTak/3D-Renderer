@@ -89,11 +89,9 @@ namespace Trident
         m_PerformanceStats = {};
 
         VkDeviceSize l_GlobalSize = sizeof(GlobalUniformBuffer);
-        VkDeviceSize l_MaterialSize = sizeof(MaterialUniformBuffer);
-
-        // Allocate per-frame uniform buffers for camera/light and material state.
+        // Allocate per-frame uniform buffers for camera/light state and storage buffers for the material table.
         m_Buffers.CreateUniformBuffers(m_Swapchain.GetImageCount(), l_GlobalSize, m_GlobalUniformBuffers, m_GlobalUniformBuffersMemory);
-        m_Buffers.CreateUniformBuffers(m_Swapchain.GetImageCount(), l_MaterialSize, m_MaterialUniformBuffers, m_MaterialUniformBuffersMemory);
+        EnsureMaterialBufferCapacity(m_Materials.size());
 
         CreateDescriptorPool();
         CreateDefaultTexture();
@@ -150,8 +148,10 @@ namespace Trident
         m_Buffers.Cleanup();
         m_GlobalUniformBuffers.clear();
         m_GlobalUniformBuffersMemory.clear();
-        m_MaterialUniformBuffers.clear();
-        m_MaterialUniformBuffersMemory.clear();
+        m_MaterialBuffers.clear();
+        m_MaterialBuffersMemory.clear();
+        m_MaterialBufferDirty.clear();
+        m_MaterialBufferElementCount = 0;
 
         if (m_TextureSampler != VK_NULL_HANDLE)
         {
@@ -305,6 +305,10 @@ namespace Trident
     {
         // Ensure no GPU operations are using the old buffers before reallocating resources.
         vkWaitForFences(Startup::GetDevice(), 1, &m_ResourceFence, VK_TRUE, UINT64_MAX);
+
+        // Ensure the GPU-visible material table matches the CPU cache before geometry uploads begin.
+        EnsureMaterialBufferCapacity(m_Materials.size());
+        MarkMaterialBuffersDirty();
 
         if (m_VertexBuffer != VK_NULL_HANDLE)
         {
@@ -1253,7 +1257,10 @@ namespace Trident
             l_PushConstant.m_UseMaterialOverride = it_Command.m_Component->m_UseMaterialOverride ? 1 : 0;
             l_PushConstant.m_SortBias = it_Command.m_Component->m_SortOffset;
 
-            vkCmdPushConstants(commandBuffer, m_Pipeline.GetPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(RenderablePushConstant), &l_PushConstant);
+            l_PushConstant.m_MaterialIndex = -1; // Sprites rely on texture tinting only for now.
+
+            vkCmdPushConstants(commandBuffer, m_Pipeline.GetPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, 
+                sizeof(RenderablePushConstant), &l_PushConstant);
             vkCmdDrawIndexed(commandBuffer, m_SpriteIndexCount, 1, 0, 0, 0);
         }
     }
@@ -1303,9 +1310,9 @@ namespace Trident
                 m_Buffers.DestroyBuffer(m_GlobalUniformBuffers[i], m_GlobalUniformBuffersMemory[i]);
             }
 
-            for (size_t i = 0; i < m_MaterialUniformBuffers.size(); ++i)
+            for (size_t i = 0; i < m_MaterialBuffers.size(); ++i)
             {
-                m_Buffers.DestroyBuffer(m_MaterialUniformBuffers[i], m_MaterialUniformBuffersMemory[i]);
+                m_Buffers.DestroyBuffer(m_MaterialBuffers[i], m_MaterialBuffersMemory[i]);
             }
 
             if (!m_DescriptorSets.empty())
@@ -1326,21 +1333,21 @@ namespace Trident
 
             m_GlobalUniformBuffers.clear();
             m_GlobalUniformBuffersMemory.clear();
-            m_MaterialUniformBuffers.clear();
-            m_MaterialUniformBuffersMemory.clear();
+            m_MaterialBuffers.clear();
+            m_MaterialBuffersMemory.clear();
+            m_MaterialBufferDirty.clear();
 
             VkDeviceSize l_GlobalSize = sizeof(GlobalUniformBuffer);
-            VkDeviceSize l_MaterialSize = sizeof(MaterialUniformBuffer);
-            
+
             m_Buffers.CreateUniformBuffers(l_ImageCount, l_GlobalSize, m_GlobalUniformBuffers, m_GlobalUniformBuffersMemory);
-            m_Buffers.CreateUniformBuffers(l_ImageCount, l_MaterialSize, m_MaterialUniformBuffers, m_MaterialUniformBuffersMemory);
-            
+            EnsureMaterialBufferCapacity(m_Materials.size());
+
             // Recreate the descriptor pool before allocating descriptor sets so the pool matches the new swapchain image count.
             CreateDescriptorPool();
             CreateDescriptorSets();
-            
-            TR_CORE_TRACE("Descriptor resources recreated (SwapchainImages = {}, GlobalUBOs = {}, MaterialUBOs = {}, CombinedSamplers = {}, DescriptorSets = {})",
-                l_ImageCount, m_GlobalUniformBuffers.size(), m_MaterialUniformBuffers.size(), l_ImageCount, m_DescriptorSets.size());
+
+            TR_CORE_TRACE("Descriptor resources recreated (SwapchainImages = {}, GlobalUBOs = {}, MaterialBuffers = {}, CombinedSamplers = {}, DescriptorSets = {})",
+                l_ImageCount, m_GlobalUniformBuffers.size(), m_MaterialBuffers.size(), l_ImageCount, m_DescriptorSets.size());
         }
 
         const ViewportContext* l_ActiveContext = FindViewportContext(m_ActiveViewportId);
@@ -1373,17 +1380,19 @@ namespace Trident
         TR_CORE_TRACE("Creating Descriptor Pool");
 
         uint32_t l_ImageCount = m_Swapchain.GetImageCount();
-        VkDescriptorPoolSize l_PoolSizes[2]{};
+        VkDescriptorPoolSize l_PoolSizes[3]{};
         l_PoolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        l_PoolSizes[0].descriptorCount = l_ImageCount * 3; // Global UBO, material UBO, and skybox global state per frame.
-        l_PoolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        l_PoolSizes[1].descriptorCount = l_ImageCount * 3; // Material textures, skybox in the main set, and the dedicated skybox set.
+        l_PoolSizes[0].descriptorCount = l_ImageCount * 2; // Global UBO for the main pipeline plus the skybox uniform.
+        l_PoolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        l_PoolSizes[1].descriptorCount = l_ImageCount; // Material storage buffer bound once per swapchain image.
+        l_PoolSizes[2].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        l_PoolSizes[2].descriptorCount = l_ImageCount * 3; // Material textures, skybox in the main set, and the dedicated skybox set.
 
         VkDescriptorPoolCreateInfo l_PoolInfo{};
         l_PoolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
         // We free and recreate descriptor sets whenever the swapchain is resized, so enable free-descriptor support.
         l_PoolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
-        l_PoolInfo.poolSizeCount = 2;
+        l_PoolInfo.poolSizeCount = 3;
         l_PoolInfo.pPoolSizes = l_PoolSizes;
         l_PoolInfo.maxSets = l_ImageCount * 2; // Main render pipeline + dedicated skybox descriptors.
 
@@ -1887,6 +1896,8 @@ namespace Trident
             TR_CORE_CRITICAL("Failed to allocate descriptor sets");
         }
 
+        const VkDeviceSize l_MaterialRange = static_cast<VkDeviceSize>(std::max<size_t>(m_MaterialBufferElementCount, static_cast<size_t>(1)) * sizeof(MaterialUniformBuffer));
+
         for (size_t i = 0; i < l_ImageCount; ++i)
         {
             VkDescriptorBufferInfo l_GlobalBufferInfo{};
@@ -1895,9 +1906,9 @@ namespace Trident
             l_GlobalBufferInfo.range = sizeof(GlobalUniformBuffer);
 
             VkDescriptorBufferInfo l_MaterialBufferInfo{};
-            l_MaterialBufferInfo.buffer = m_MaterialUniformBuffers[i];
+            l_MaterialBufferInfo.buffer = (i < m_MaterialBuffers.size()) ? m_MaterialBuffers[i] : VK_NULL_HANDLE;
             l_MaterialBufferInfo.offset = 0;
-            l_MaterialBufferInfo.range = sizeof(MaterialUniformBuffer);
+            l_MaterialBufferInfo.range = l_MaterialRange;
 
             VkDescriptorImageInfo l_ImageInfo{};
             l_ImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -1916,7 +1927,7 @@ namespace Trident
             l_MaterialWrite.dstSet = m_DescriptorSets[i];
             l_MaterialWrite.dstBinding = 1;
             l_MaterialWrite.dstArrayElement = 0;
-            l_MaterialWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            l_MaterialWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
             l_MaterialWrite.descriptorCount = 1;
             l_MaterialWrite.pBufferInfo = &l_MaterialBufferInfo;
 
@@ -1936,6 +1947,8 @@ namespace Trident
         CreateSkyboxDescriptorSets();
 
         TR_CORE_TRACE("Descriptor Sets Allocated (Main = {}, Skybox = {})", l_ImageCount, m_SkyboxDescriptorSets.size());
+
+        MarkMaterialBuffersDirty();
     }
 
     void Renderer::UpdateSkyboxBindingOnMainSets()
@@ -1971,6 +1984,81 @@ namespace Trident
             // sure the upload completes before the next draw touches the cubemap.
             vkUpdateDescriptorSets(Startup::GetDevice(), 1, &l_SkyboxWrite, 0, nullptr);
         }
+    }
+
+    void Renderer::EnsureMaterialBufferCapacity(size_t materialCount)
+    {
+        const size_t l_ImageCount = m_Swapchain.GetImageCount();
+        const size_t l_RequiredCount = std::max(materialCount, static_cast<size_t>(1));
+
+        if (l_ImageCount == 0)
+        {
+            // Record the desired size so the next swapchain creation allocates the correct capacity.
+            m_MaterialBufferElementCount = l_RequiredCount;
+            m_MaterialBuffers.clear();
+            m_MaterialBuffersMemory.clear();
+            m_MaterialBufferDirty.clear();
+            return;
+        }
+
+        const bool l_SizeMismatch = (l_RequiredCount != m_MaterialBufferElementCount);
+        const bool l_ImageMismatch = (m_MaterialBuffers.size() != l_ImageCount);
+        if (!l_SizeMismatch && !l_ImageMismatch)
+        {
+            return;
+        }
+
+        if (!m_MaterialBuffers.empty() && m_ResourceFence != VK_NULL_HANDLE)
+        {
+            // Guarantee that no in-flight draw is still referencing the previous buffers before we recycle them.
+            vkWaitForFences(Startup::GetDevice(), 1, &m_ResourceFence, VK_TRUE, UINT64_MAX);
+        }
+
+        for (size_t it_Index = 0; it_Index < m_MaterialBuffers.size(); ++it_Index)
+        {
+            m_Buffers.DestroyBuffer(m_MaterialBuffers[it_Index], m_MaterialBuffersMemory[it_Index]);
+        }
+
+        const VkDeviceSize l_BufferSize = static_cast<VkDeviceSize>(l_RequiredCount * sizeof(MaterialUniformBuffer));
+        m_Buffers.CreateStorageBuffers(static_cast<uint32_t>(l_ImageCount), l_BufferSize, m_MaterialBuffers, m_MaterialBuffersMemory);
+
+        m_MaterialBufferElementCount = l_RequiredCount;
+        MarkMaterialBuffersDirty();
+        UpdateMaterialDescriptorBindings();
+    }
+
+    void Renderer::UpdateMaterialDescriptorBindings()
+    {
+        if (m_DescriptorSets.empty() || m_MaterialBuffers.empty())
+        {
+            return;
+        }
+
+        const VkDeviceSize l_MaterialRange = static_cast<VkDeviceSize>(std::max<size_t>(m_MaterialBufferElementCount, static_cast<size_t>(1)) * sizeof(MaterialUniformBuffer));
+        for (size_t it_Image = 0; it_Image < m_DescriptorSets.size() && it_Image < m_MaterialBuffers.size(); ++it_Image)
+        {
+            VkDescriptorBufferInfo l_MaterialInfo{};
+            l_MaterialInfo.buffer = m_MaterialBuffers[it_Image];
+            l_MaterialInfo.offset = 0;
+            l_MaterialInfo.range = l_MaterialRange;
+
+            VkWriteDescriptorSet l_MaterialWrite{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
+            l_MaterialWrite.dstSet = m_DescriptorSets[it_Image];
+            l_MaterialWrite.dstBinding = 1;
+            l_MaterialWrite.dstArrayElement = 0;
+            l_MaterialWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            l_MaterialWrite.descriptorCount = 1;
+            l_MaterialWrite.pBufferInfo = &l_MaterialInfo;
+
+            vkUpdateDescriptorSets(Startup::GetDevice(), 1, &l_MaterialWrite, 0, nullptr);
+        }
+    }
+
+    void Renderer::MarkMaterialBuffersDirty()
+    {
+        const size_t l_ImageCount = m_Swapchain.GetImageCount();
+        m_MaterialBufferDirty.resize(l_ImageCount);
+        std::fill(m_MaterialBufferDirty.begin(), m_MaterialBufferDirty.end(), true);
     }
 
     void Renderer::CreateSkyboxDescriptorSets()
@@ -2726,7 +2814,9 @@ namespace Trident
                         RenderablePushConstant l_PushConstant{};
                         l_PushConstant.m_ModelMatrix = l_Command.m_ModelMatrix;
                         l_PushConstant.m_TextureIndex = l_Component.m_MaterialIndex;
-                        vkCmdPushConstants(l_CommandBuffer, m_Pipeline.GetPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(RenderablePushConstant), &l_PushConstant);
+                        l_PushConstant.m_MaterialIndex = l_DrawInfo.m_MaterialIndex;
+                        vkCmdPushConstants(l_CommandBuffer, m_Pipeline.GetPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, 
+                            sizeof(RenderablePushConstant), &l_PushConstant);
 
                         vkCmdDrawIndexed(l_CommandBuffer, l_DrawInfo.m_IndexCount, 1, l_DrawInfo.m_FirstIndex, l_DrawInfo.m_BaseVertex, 0);
                     }
@@ -3069,7 +3159,9 @@ namespace Trident
                     RenderablePushConstant l_PushConstant{};
                     l_PushConstant.m_ModelMatrix = l_Command.m_ModelMatrix;
                     l_PushConstant.m_TextureIndex = l_Component.m_MaterialIndex;
-                    vkCmdPushConstants(l_CommandBuffer, m_Pipeline.GetPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(RenderablePushConstant), &l_PushConstant);
+                    l_PushConstant.m_MaterialIndex = l_DrawInfo.m_MaterialIndex;
+                    vkCmdPushConstants(l_CommandBuffer, m_Pipeline.GetPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, 
+                        sizeof(RenderablePushConstant), &l_PushConstant);
 
                     vkCmdDrawIndexed(l_CommandBuffer, l_DrawInfo.m_IndexCount, 1, l_DrawInfo.m_FirstIndex, l_DrawInfo.m_BaseVertex, 0);
                 }
@@ -3294,7 +3386,7 @@ namespace Trident
 
     void Renderer::UpdateUniformBuffer(uint32_t currentImage, const Camera* cameraOverride, VkCommandBuffer commandBuffer)
     {
-        if (currentImage >= m_GlobalUniformBuffersMemory.size() || currentImage >= m_MaterialUniformBuffersMemory.size())
+        if (currentImage >= m_GlobalUniformBuffersMemory.size() || currentImage >= m_MaterialBuffersMemory.size())
         {
             return;
         }
@@ -3386,43 +3478,90 @@ namespace Trident
         l_Global.DirectionalLightColor = glm::vec4(l_DirectionalColor, l_DirectionalIntensity);
         l_Global.LightCounts = glm::uvec4(l_DirectionalUsed, l_PointLightWriteCount, 0u, 0u);
 
-        MaterialUniformBuffer l_Material{};
-        if (!m_Materials.empty())
-        {
-            const Geometry::Material& l_FirstMaterial = m_Materials.front();
-            l_Material.BaseColorFactor = l_FirstMaterial.BaseColorFactor;
-            l_Material.MaterialFactors = glm::vec4(l_FirstMaterial.MetallicFactor, l_FirstMaterial.RoughnessFactor, 1.0f, 0.0f);
-        }
-        else
-        {
-            l_Material.BaseColorFactor = glm::vec4(1.0f);
-            l_Material.MaterialFactors = glm::vec4(1.0f, 1.0f, 1.0f, 0.0f);
-        }
+        auto BuildMaterialPayload = [this]()
+            {
+                std::vector<MaterialUniformBuffer> l_Payload{};
+                const size_t l_TargetCount = std::max(m_MaterialBufferElementCount, static_cast<size_t>(1));
+                l_Payload.reserve(l_TargetCount);
+
+                for (const Geometry::Material& it_Material : m_Materials)
+                {
+                    MaterialUniformBuffer l_Record{};
+                    l_Record.BaseColorFactor = it_Material.BaseColorFactor;
+                    l_Record.MaterialFactors = glm::vec4(it_Material.MetallicFactor, it_Material.RoughnessFactor, 1.0f, 0.0f);
+                    l_Payload.push_back(l_Record);
+                }
+
+                MaterialUniformBuffer l_Default{};
+                l_Default.BaseColorFactor = glm::vec4(1.0f);
+                l_Default.MaterialFactors = glm::vec4(1.0f, 1.0f, 1.0f, 0.0f);
+
+                while (l_Payload.size() < l_TargetCount)
+                {
+                    l_Payload.push_back(l_Default);
+                }
+
+                return l_Payload;
+            };
+
+        const bool l_HasMaterialBuffers = currentImage < m_MaterialBuffers.size() && currentImage < m_MaterialBuffersMemory.size();
 
         if (commandBuffer != VK_NULL_HANDLE)
         {
             // Record GPU-side buffer updates so each viewport captures the correct camera state before its render pass begins.
             vkCmdUpdateBuffer(commandBuffer, m_GlobalUniformBuffers[currentImage], 0, sizeof(l_Global), &l_Global);
-            vkCmdUpdateBuffer(commandBuffer, m_MaterialUniformBuffers[currentImage], 0, sizeof(l_Material), &l_Material);
+            std::vector<VkBufferMemoryBarrier> l_Barriers{};
+            l_Barriers.reserve(2);
+
+            VkBufferMemoryBarrier l_GlobalBarrier{ VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER };
+            l_GlobalBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            l_GlobalBarrier.dstAccessMask = VK_ACCESS_UNIFORM_READ_BIT;
+            l_GlobalBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            l_GlobalBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            l_GlobalBarrier.buffer = m_GlobalUniformBuffers[currentImage];
+            l_GlobalBarrier.offset = 0;
+            l_GlobalBarrier.size = sizeof(l_Global);
+            l_Barriers.push_back(l_GlobalBarrier);
+
+            if (l_HasMaterialBuffers && currentImage < m_MaterialBufferDirty.size() && m_MaterialBufferDirty[currentImage])
+            {
+                std::vector<MaterialUniformBuffer> l_MaterialPayload = BuildMaterialPayload();
+                const VkDeviceSize l_CopySize = static_cast<VkDeviceSize>(l_MaterialPayload.size() * sizeof(MaterialUniformBuffer));
+                if (l_CopySize > 0)
+                {
+                    const uint8_t* l_RawData = reinterpret_cast<const uint8_t*>(l_MaterialPayload.data());
+                    VkDeviceSize l_Remaining = l_CopySize;
+                    VkDeviceSize l_Offset = 0;
+                    const VkDeviceSize l_MaxChunk = 65536;
+
+                    while (l_Remaining > 0)
+                    {
+                        const VkDeviceSize l_ChunkSize = std::min(l_Remaining, l_MaxChunk);
+                        vkCmdUpdateBuffer(commandBuffer, m_MaterialBuffers[currentImage], l_Offset, l_ChunkSize, l_RawData + l_Offset);
+                        l_Remaining -= l_ChunkSize;
+                        l_Offset += l_ChunkSize;
+                    }
+
+                    VkBufferMemoryBarrier l_MaterialBarrier{ VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER };
+                    l_MaterialBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+                    l_MaterialBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+                    l_MaterialBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                    l_MaterialBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                    l_MaterialBarrier.buffer = m_MaterialBuffers[currentImage];
+                    l_MaterialBarrier.offset = 0;
+                    l_MaterialBarrier.size = l_CopySize;
+                    l_Barriers.push_back(l_MaterialBarrier);
+
+                    m_MaterialBufferDirty[currentImage] = false;
+                }
+            }
 
             // Guarantee the transfer writes are visible before the shader stages fetch the uniform data.
-            std::array<VkBufferMemoryBarrier, 2> l_Barriers{};
-            l_Barriers[0].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-            l_Barriers[0].srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-            l_Barriers[0].dstAccessMask = VK_ACCESS_UNIFORM_READ_BIT;
-            l_Barriers[0].buffer = m_GlobalUniformBuffers[currentImage];
-            l_Barriers[0].offset = 0;
-            l_Barriers[0].size = sizeof(l_Global);
-
-            l_Barriers[1].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-            l_Barriers[1].srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-            l_Barriers[1].dstAccessMask = VK_ACCESS_UNIFORM_READ_BIT;
-            l_Barriers[1].buffer = m_MaterialUniformBuffers[currentImage];
-            l_Barriers[1].offset = 0;
-            l_Barriers[1].size = sizeof(l_Material);
-
-            vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                0, 0, nullptr, static_cast<uint32_t>(l_Barriers.size()), l_Barriers.data(), 0, nullptr);
+            if (!l_Barriers.empty())
+            {
+                vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                    0, 0, nullptr, static_cast<uint32_t>(l_Barriers.size()), l_Barriers.data(), 0, nullptr);
+            }
         }
         else
         {
@@ -3432,9 +3571,33 @@ namespace Trident
             std::memcpy(l_Data, &l_Global, sizeof(l_Global));
             vkUnmapMemory(Startup::GetDevice(), m_GlobalUniformBuffersMemory[currentImage]);
 
-            vkMapMemory(Startup::GetDevice(), m_MaterialUniformBuffersMemory[currentImage], 0, sizeof(l_Material), 0, &l_Data);
-            std::memcpy(l_Data, &l_Material, sizeof(l_Material));
-            vkUnmapMemory(Startup::GetDevice(), m_MaterialUniformBuffersMemory[currentImage]);
+            if (l_HasMaterialBuffers)
+            {
+                const bool l_ShouldUploadAll = std::any_of(m_MaterialBufferDirty.begin(), m_MaterialBufferDirty.end(), [](bool it_Dirty) { return it_Dirty; });
+                if (l_ShouldUploadAll)
+                {
+                    std::vector<MaterialUniformBuffer> l_MaterialPayload = BuildMaterialPayload();
+                    const VkDeviceSize l_CopySize = static_cast<VkDeviceSize>(l_MaterialPayload.size() * sizeof(MaterialUniformBuffer));
+                    for (size_t it_Image = 0; it_Image < m_MaterialBuffersMemory.size() && it_Image < m_MaterialBufferDirty.size(); ++it_Image)
+                    {
+                        if (!m_MaterialBufferDirty[it_Image])
+                        {
+                            continue;
+                        }
+
+                        if (m_MaterialBuffersMemory[it_Image] == VK_NULL_HANDLE)
+                        {
+                            continue;
+                        }
+
+                        void* l_MaterialData = nullptr;
+                        vkMapMemory(Startup::GetDevice(), m_MaterialBuffersMemory[it_Image], 0, l_CopySize, 0, &l_MaterialData);
+                        std::memcpy(l_MaterialData, l_MaterialPayload.data(), static_cast<size_t>(l_CopySize));
+                        vkUnmapMemory(Startup::GetDevice(), m_MaterialBuffersMemory[it_Image]);
+                        m_MaterialBufferDirty[it_Image] = false;
+                    }
+                }
+            }
         }
 
         // TODO: Expand the uniform population to handle per-camera post-processing once those systems exist.

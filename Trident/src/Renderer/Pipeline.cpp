@@ -450,7 +450,8 @@ namespace Trident
 
         VkDescriptorSetLayoutBinding l_MaterialLayoutBinding{};
         l_MaterialLayoutBinding.binding = 1;
-        l_MaterialLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        // Expose the entire material table as a storage buffer so every draw can index its record directly.
+        l_MaterialLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
         l_MaterialLayoutBinding.descriptorCount = 1;
         l_MaterialLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
         l_MaterialLayoutBinding.pImmutableSamplers = nullptr;
@@ -637,7 +638,7 @@ namespace Trident
         l_DynamicState.pDynamicStates = l_DynamicStates;
 
         VkPushConstantRange l_PushConstant{};
-        l_PushConstant.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+        l_PushConstant.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
         l_PushConstant.offset = 0;
         l_PushConstant.size = sizeof(RenderablePushConstant);
 

@@ -137,6 +137,33 @@ namespace Trident
         TR_CORE_TRACE("Uniform Buffers Created ({} Buffers)", uniformBuffers.size());
     }
 
+    void Buffers::CreateStorageBuffers(uint32_t imageCount, VkDeviceSize bufferSize, std::vector<VkBuffer>& storageBuffers, std::vector<VkDeviceMemory>& storageBuffersMemory)
+    {
+        TR_CORE_TRACE("Creating Storage Buffers");
+
+        if (bufferSize == 0)
+        {
+            TR_CORE_WARN("Requested storage buffer of size 0; skipping allocation");
+            storageBuffers.clear();
+            storageBuffersMemory.clear();
+
+            return;
+        }
+
+        storageBuffers.resize(imageCount);
+        storageBuffersMemory.resize(imageCount);
+
+        for (uint32_t i = 0; i < imageCount; ++i)
+        {
+            CreateBuffer(bufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, storageBuffers[i], storageBuffersMemory[i]);
+            m_Allocations.push_back({ storageBuffers[i], storageBuffersMemory[i] });
+        }
+
+        TR_CORE_TRACE("Storage Buffers Created ({} Buffers)", storageBuffers.size());
+    }
+
+
     uint32_t Buffers::FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties)
     {
         // Gather the available memory types so we can select a compatible one for the requested usage.
