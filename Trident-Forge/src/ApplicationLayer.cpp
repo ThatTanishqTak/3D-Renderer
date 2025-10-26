@@ -35,6 +35,14 @@ void ApplicationLayer::Initialize()
     m_ViewportPanel.SetGizmoState(&m_GizmoState);
     m_InspectorPanel.SetGizmoState(&m_GizmoState);
 
+    // Ensure the console mirrors Unity-style defaults by surfacing info/warning/error output immediately.
+    m_ConsolePanel.SetLevelVisibility(spdlog::level::trace, false);
+    m_ConsolePanel.SetLevelVisibility(spdlog::level::debug, false);
+    m_ConsolePanel.SetLevelVisibility(spdlog::level::info, true);
+    m_ConsolePanel.SetLevelVisibility(spdlog::level::warn, true);
+    m_ConsolePanel.SetLevelVisibility(spdlog::level::err, true);
+    m_ConsolePanel.SetLevelVisibility(spdlog::level::critical, true);
+
     // Route drag-and-drop payloads originating inside the editor back into the shared import path.
     m_ViewportPanel.SetAssetDropHandler([this](const std::vector<std::string>& droppedPaths)
         {
@@ -132,6 +140,7 @@ void ApplicationLayer::Update()
     // Mirror the selection for the viewport so camera pivots follow the same entity l_Focus.
     m_ViewportPanel.SetSelectedEntity(l_SelectedEntity);
     m_InspectorPanel.Update();
+    m_ConsolePanel.Update();
 }
 
 void ApplicationLayer::Render()
@@ -144,6 +153,7 @@ void ApplicationLayer::Render()
     m_ContentBrowserPanel.Render();
     m_SceneHierarchyPanel.Render();
     m_InspectorPanel.Render();
+    m_ConsolePanel.Render();
 }
 
 void ApplicationLayer::HandleSceneHierarchyContextMenu(const ImVec2& min, const ImVec2& max)

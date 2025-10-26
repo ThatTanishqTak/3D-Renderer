@@ -11,6 +11,7 @@
 #include "Panels/SceneHierarchyPanel.h"
 #include "Panels/InspectorPanel.h"
 #include "Panels/GizmoState.h"
+#include "Panels/ConsolePanel.h"
 
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
@@ -72,6 +73,7 @@ private:
     ContentBrowserPanel m_ContentBrowserPanel;
     SceneHierarchyPanel m_SceneHierarchyPanel;
     InspectorPanel m_InspectorPanel;
+    ConsolePanel m_ConsolePanel;
 
     Trident::EditorCamera m_EditorCamera;           ///< Viewport camera providing authoring controls.
     Trident::RuntimeCamera m_RuntimeCamera;         ///< Gameplay camera routed into the dedicated runtime viewport.
