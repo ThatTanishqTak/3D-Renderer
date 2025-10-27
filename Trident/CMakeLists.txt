@@ -49,6 +49,9 @@ add_library(physx_sdk INTERFACE IMPORTED)
 set_target_properties(physx_sdk PROPERTIES
   INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/vendor/PhysX/include"
 )
+target_include_directories(physx_sdk INTERFACE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/vendor/PhysX/include>
+)
 
 # Explicitly list the PhysX static libraries we consume. Keeping the libraries
 # grouped and commented makes updating to a new SDK less error prone and
