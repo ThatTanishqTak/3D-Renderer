@@ -41,6 +41,36 @@ target_include_directories(tinyexr INTERFACE
 target_sources(tinyexr INTERFACE
   ${CMAKE_CURRENT_SOURCE_DIR}/vendor/tinyexr/deps/miniz/miniz.c
 )
+# Introduce a PhysX interface target so that we can centralise include paths
+# and link libraries instead of scattering them through the codebase. This
+# makes it clear that the renderer depends on NVIDIA PhysX when we build on
+# Windows with Visual Studio 2022.
+add_library(physx_sdk INTERFACE IMPORTED)
+set_target_properties(physx_sdk PROPERTIES
+  INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/vendor/PhysX/include"
+)
+
+# Explicitly list the PhysX static libraries we consume. Keeping the libraries
+# grouped and commented makes updating to a new SDK less error prone and
+# documents the rationale for each component we pull in.
+target_link_libraries(physx_sdk INTERFACE
+  # Core simulation runtime.
+  "${CMAKE_CURRENT_SOURCE_DIR}/vendor/PhysX/lib/PhysX_64.lib"
+  # Common utilities shared across PhysX components.
+  "${CMAKE_CURRENT_SOURCE_DIR}/vendor/PhysX/lib/PhysXCommon_64.lib"
+  # Foundational allocation and threading support.
+  "${CMAKE_CURRENT_SOURCE_DIR}/vendor/PhysX/lib/PhysXFoundation_64.lib"
+  # Extended helpers that simplify common PhysX tasks.
+  "${CMAKE_CURRENT_SOURCE_DIR}/vendor/PhysX/lib/PhysXExtensions_static_64.lib"
+  # Task manager required by the PhysX job system.
+  "${CMAKE_CURRENT_SOURCE_DIR}/vendor/PhysX/lib/PhysXTask_static_64.lib"
+  # Optional PVD instrumentation – safe to keep linked for debugging.
+  "${CMAKE_CURRENT_SOURCE_DIR}/vendor/PhysX/lib/PhysXPvdSDK_static_64.lib"
+)
+
+# TODO: Port this hard-coded list to a dedicated FindPhysX.cmake helper so that
+# non-Windows toolchains can participate in the build without manual edits.
+
 # Provide KTX texture loading headers and import library to the build.
 add_library(libktx INTERFACE IMPORTED)
 set_target_properties(libktx PROPERTIES
@@ -100,6 +130,9 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 target_link_libraries(${PROJECT_NAME} PRIVATE
   glfw
   imgui
+  # Centralise PhysX usage so the renderer automatically inherits headers,
+  # import libraries and runtime binaries when we are on MSVC.
+  physx_sdk
 )
 
 # Keep existing public dependencies available to dependents.
@@ -157,6 +190,14 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 )
 
 if(WIN32)
+    # Copy the PhysX runtime DLLs next to the built artefact so Visual Studio
+    # developers can run immediately after compilation. Using generator
+    # expressions keeps multi-config IDEs happy.
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_CURRENT_SOURCE_DIR}/vendor/PhysX/dll"
+            "$<TARGET_FILE_DIR:${PROJECT_NAME}>"
+    )
     target_link_libraries(${PROJECT_NAME} PUBLIC
         ${ONNXRUNTIME_ROOT}/lib/onnxruntime.lib
     )
