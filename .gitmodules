@@ -23,3 +23,6 @@
 [submodule "Trident/vendor/tinyexr"]
 	path = Trident/vendor/tinyexr
 	url = https://github.com/syoyo/tinyexr.git
+[submodule "Trident/vendor/PhysX"]
+	path = Trident/vendor/PhysX
+	url = https://github.com/NVIDIA-Omniverse/PhysX.git

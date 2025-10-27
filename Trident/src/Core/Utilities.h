@@ -194,6 +194,7 @@ void operator delete(void* ptr) noexcept;
 void* operator new[](std::size_t size);
 void operator delete[](void* ptr) noexcept;
 
+#ifdef _DEBUG
 // Core log macros
 #define TR_CORE_TRACE(...) ::Trident::Utilities::Log::GetCoreLogger()->trace(__VA_ARGS__)
 #define TR_CORE_INFO(...) ::Trident::Utilities::Log::GetCoreLogger()->info(__VA_ARGS__)
@@ -207,6 +208,21 @@ void operator delete[](void* ptr) noexcept;
 #define TR_WARN(...) ::Trident::Utilities::Log::GetClientLogger()->warn(__VA_ARGS__)
 #define TR_ERROR(...) ::Trident::Utilities::Log::GetClientLogger()->error(__VA_ARGS__)
 #define TR_CRITICAL(...) ::Trident::Utilities::Log::GetClientLogger()->critical(__VA_ARGS__)
+#else
+// Core log macros
+#define TR_CORE_TRACE(...)
+#define TR_CORE_INFO(...) 
+#define TR_CORE_WARN(...) 
+#define TR_CORE_ERROR(...)
+#define TR_CORE_CRITICAL(...) 
+
+// Client log macros
+#define TR_TRACE(...)
+#define TR_INFO(...) 
+#define TR_WARN(...) 
+#define TR_ERROR(...)
+#define TR_CRITICAL(...) 
+#endif
 
 #define TR_MALLOC(size) ::Trident::Utilities::Allocation::Malloc(size, __FILE__, __LINE__)
 #define TR_NEW(TYPE, ...) new(__FILE__, __LINE__) TYPE(__VA_ARGS__)
