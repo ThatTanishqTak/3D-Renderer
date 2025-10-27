@@ -18,33 +18,6 @@ endif()
 add_definitions(-DGLFW_INCLUDE_VULKAN)
 find_package(Vulkan REQUIRED)
 
-# PhysX integration is optional because the SDK is sizeable and not everyone
-# needs rigid body simulation while experimenting with rendering.
-option(TRIDENT_ENABLE_PHYSX "Build Trident with NVIDIA PhysX physics middleware" OFF)
-if(TRIDENT_ENABLE_PHYSX)
-  # PhysX insists on PHYSX_ROOT_DIR pointing at the SDK folder that contains
-  # buildtools/, include/, and source/.  Stash it in the cache so the PhysX
-  # sub-build can re-use it when re-configuring in multi-config generators
-  # such as Visual Studio 2022.
-  set(PHYSX_ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vendor/PhysX/physx" CACHE PATH "PhysX SDK root" FORCE)
-
-  # The PhysX CMake entry point expects TARGET_BUILD_PLATFORM to match one of
-  # its generator-specific folders.  Visual Studio users build against the
-  # "windows" generator, while other hosts default to the "linux" platform.
-  if(MSVC)
-    set(TARGET_BUILD_PLATFORM "windows" CACHE STRING "PhysX generator platform" FORCE)
-  else()
-    set(TARGET_BUILD_PLATFORM "linux" CACHE STRING "PhysX generator platform" FORCE)
-  endif()
-
-  # Generate static PhysX libraries so they link cleanly with Trident's static
-  # engine library.  This keeps MSVC projects consistent with the rest of the
-  # solution output.
-  set(PX_GENERATE_STATIC_LIBRARIES ON CACHE BOOL "Use static PhysX libraries" FORCE)
-
-  add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/vendor/PhysX/physx/source/compiler/cmake)
-endif()
-
 add_library(glm INTERFACE)
 target_include_directories(glm INTERFACE
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/vendor/glm>
@@ -123,14 +96,6 @@ target_include_directories(${PROJECT_NAME} PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
 )
 
-if(TRIDENT_ENABLE_PHYSX)
-  # Surface PhysX headers so engine code can include PxPhysicsAPI.h without
-  # reaching into the vendor directory manually.
-  target_include_directories(${PROJECT_NAME} PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/vendor/PhysX/physx/include>
-  )
-endif()
-
 # Link against windowing and UI middleware fetched via FetchContent.
 target_link_libraries(${PROJECT_NAME} PRIVATE
   glfw
@@ -148,27 +113,6 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
   libktx
   assimp::assimp
 )
-
-if(TRIDENT_ENABLE_PHYSX)
-  # PhysX produces several static libraries; expose the common ones here so
-  # downstream applications automatically link against the physics runtime.
-  target_link_libraries(${PROJECT_NAME} PUBLIC
-    PhysXExtensions
-    PhysX
-    PhysXCommon
-    PhysXFoundation
-    PhysXCooking
-    PhysXTask
-    PhysXPvdSDK
-    SceneQuery
-    SimulationController
-    LowLevel
-    LowLevelAABB
-    LowLevelDynamics
-    PhysXCharacterKinematic
-    PhysXVehicle2
-  )
-endif()
 
 option(TRIDENT_ENABLE_VALIDATION "Enable Vulkan Validation Layers" ON)
 if(TRIDENT_ENABLE_VALIDATION)
