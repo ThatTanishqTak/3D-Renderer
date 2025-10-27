@@ -3,8 +3,10 @@
 #include "Core/Utilities.h"
 
 #include <PxPhysicsAPI.h>
+#include <cooking/PxCooking.h>
 
 #include <cstdint>
+#include <optional>
 
 namespace Trident
 {
@@ -98,11 +100,12 @@ namespace Trident
             void Initialize(physx::PxFoundation& foundation, physx::PxPhysics& physics);
             void Shutdown();
 
-            [[nodiscard]] bool IsValid() const { return m_Cooking != nullptr; }
-            [[nodiscard]] physx::PxCooking& Get() const;
+            [[nodiscard]] bool IsValid() const { return m_CookingParams.has_value(); }
+            [[nodiscard]] const physx::PxCookingParams& GetParams() const;
+            [[nodiscard]] physx::PxInsertionCallback& GetStandaloneInsertionCallback() const;
 
         private:
-            physx::PxCooking* m_Cooking = nullptr;
+            std::optional<physx::PxCookingParams> m_CookingParams;
         };
 
         // Default CPU dispatcher for PhysX task execution.

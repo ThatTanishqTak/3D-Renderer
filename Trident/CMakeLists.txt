@@ -133,8 +133,13 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 target_link_libraries(${PROJECT_NAME} PRIVATE
   glfw
   imgui
-  # Centralise PhysX usage so the renderer automatically inherits headers,
-  # import libraries and runtime binaries when we are on MSVC.
+)
+
+# Make the PhysX SDK a public dependency so downstream targets such as the
+# Trident-Forge editor inherit the PhysX headers and libraries automatically.
+# Without this, consumers would fail to locate PxPhysicsAPI.h at compile time
+# when including PhysicsEngine.h through the runtime's public interface.
+target_link_libraries(${PROJECT_NAME} PUBLIC
   physx_sdk
 )
 

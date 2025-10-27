@@ -164,7 +164,9 @@ namespace Trident
 
         void CookingWrapper::Initialize(physx::PxFoundation& foundation, physx::PxPhysics& physics)
         {
-            if (m_Cooking != nullptr)
+            PX_UNUSED(foundation); // The standalone cooking entry points do not require the foundation directly.
+
+            if (m_CookingParams.has_value())
             {
                 TR_CORE_WARN("PhysX cooking already initialised");
                 return;
@@ -173,32 +175,35 @@ namespace Trident
             physx::PxCookingParams l_Params(physics.getTolerancesScale());
             // Enable mesh pre-processing so cooked assets work well with runtime scene queries.
             l_Params.meshPreprocessParams = physx::PxMeshPreprocessingFlags(physx::PxMeshPreprocessingFlag::eWELD_VERTICES | physx::PxMeshPreprocessingFlag::eFORCE_32BIT_INDICES);
-
-            m_Cooking = PxCreateCooking(PX_PHYSICS_VERSION, foundation, l_Params);
-            if (m_Cooking == nullptr)
-            {
-                TR_CORE_CRITICAL("Failed to create PhysX cooking");
-                throw std::runtime_error("PxCreateCooking returned null");
-            }
+            // Store the configuration so future cooking calls can use the PhysX helper functions directly.
+            m_CookingParams = l_Params;
         }
 
         void CookingWrapper::Shutdown()
         {
-            if (m_Cooking != nullptr)
-            {
-                m_Cooking->release();
-                m_Cooking = nullptr;
-            }
+            // Reset the optional parameters to indicate that the wrapper is inactive.
+            m_CookingParams.reset();
         }
 
-        physx::PxCooking& CookingWrapper::Get() const
+        const physx::PxCookingParams& CookingWrapper::GetParams() const
         {
-            if (m_Cooking == nullptr)
+            if (!m_CookingParams.has_value())
             {
                 throw std::runtime_error("PhysX cooking not initialised");
             }
 
-            return *m_Cooking;
+            return *m_CookingParams;
+        }
+
+        physx::PxInsertionCallback& CookingWrapper::GetStandaloneInsertionCallback() const
+        {
+            physx::PxInsertionCallback* l_Callback = PxGetStandaloneInsertionCallback();
+            if (l_Callback == nullptr)
+            {
+                throw std::runtime_error("PxGetStandaloneInsertionCallback returned null");
+            }
+
+            return *l_Callback;
         }
 
         DispatcherWrapper::~DispatcherWrapper()
@@ -227,7 +232,6 @@ namespace Trident
         {
             if (m_Dispatcher != nullptr)
             {
-                m_Dispatcher->release();
                 m_Dispatcher = nullptr;
             }
         }
