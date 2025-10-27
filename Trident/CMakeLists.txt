@@ -48,25 +48,42 @@ set_target_properties(physx_sdk PROPERTIES
 target_include_directories(physx_sdk INTERFACE
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/vendor/PhysX/include>
 )
-# Explicitly list the PhysX static libraries we consume.
-target_link_libraries(physx_sdk INTERFACE
-  # Core simulation runtime.
-  "${CMAKE_CURRENT_SOURCE_DIR}/vendor/PhysX/lib/PhysX_64.lib"
-  # Common utilities shared across PhysX components.
-  "${CMAKE_CURRENT_SOURCE_DIR}/vendor/PhysX/lib/PhysXCommon_64.lib"
-  # Foundational allocation and threading support.
-  "${CMAKE_CURRENT_SOURCE_DIR}/vendor/PhysX/lib/PhysXFoundation_64.lib"
-  # Extended helpers that simplify common PhysX tasks.
-  "${CMAKE_CURRENT_SOURCE_DIR}/vendor/PhysX/lib/PhysXExtensions_static_64.lib"
-  # Task manager required by the PhysX job system.
-  "${CMAKE_CURRENT_SOURCE_DIR}/vendor/PhysX/lib/PhysXTask_static_64.lib"
-  # Optional PVD instrumentation – safe to keep linked for debugging.
-  "${CMAKE_CURRENT_SOURCE_DIR}/vendor/PhysX/lib/PhysXPvdSDK_static_64.lib"
-  # Cooking library for physics data preparation.
-  "${CMAKE_CURRENT_SOURCE_DIR}/vendor/PhysX/lib/PhysXCooking_64.lib"
+# Keep the directory layout in one place so the generator expressions stay readable.
+set(PHYSX_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/vendor/PhysX")
+set(PHYSX_DEBUG_LIB_DIR "${PHYSX_ROOT}/Debug/lib")
+set(PHYSX_CHECKED_LIB_DIR "${PHYSX_ROOT}/Checked/lib")
+set(PHYSX_DEBUG_DLL_DIR "${PHYSX_ROOT}/Debug/dll")
+set(PHYSX_CHECKED_DLL_DIR "${PHYSX_ROOT}/Checked/dll")
+
+# Build the list of libraries we always need, switching between the Debug and Checked
+# archives based on the active configuration. The Checked variants work well for
+# Release/RelWithDebInfo builds because they include extra validation while still
+# being optimised.
+set(PHYSX_REQUIRED_LIBS
+  PhysX_64.lib
+  PhysXCommon_64.lib
+  PhysXFoundation_64.lib
+  PhysXExtensions_static_64.lib
+  PhysXTask_static_64.lib
+  PhysXPvdSDK_static_64.lib
+  PhysXCooking_64.lib
 )
-# TODO: Port this hard-coded list to a dedicated FindPhysX.cmake helper so that
-# non-Windows toolchains can participate in the build without manual edits.
+
+set(PHYSX_LINK_LIBS "")
+foreach(PHYSX_LIB IN LISTS PHYSX_REQUIRED_LIBS)
+  list(APPEND PHYSX_LINK_LIBS
+    "$<$<CONFIG:Debug>:${PHYSX_DEBUG_LIB_DIR}/${PHYSX_LIB}>"
+    "$<$<NOT:$<CONFIG:Debug>>:${PHYSX_CHECKED_LIB_DIR}/${PHYSX_LIB}>"
+  )
+endforeach()
+
+target_link_libraries(physx_sdk INTERFACE
+  ${PHYSX_LINK_LIBS}
+)
+
+# TODO: Lift this PhysX wiring into a dedicated FindPhysX.cmake helper so that
+# non-Windows toolchains can participate in the build without manual edits and so
+# future configurations (e.g. Profile) can slot in with minimal changes.
 
 # Provide KTX texture loading headers and import library to the build.
 add_library(libktx INTERFACE IMPORTED)
@@ -173,10 +190,10 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 )
 
 if(WIN32)
-    # Copy the PhysX runtime DLLs next to the built artefact.
+    # Copy the PhysX runtime DLLs next to the built artefact, matching the libs above.
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory
-            "${CMAKE_CURRENT_SOURCE_DIR}/vendor/PhysX/dll"
+            "$<IF:$<CONFIG:Debug>,${PHYSX_DEBUG_DLL_DIR},${PHYSX_CHECKED_DLL_DIR}>"
             "$<TARGET_FILE_DIR:${PROJECT_NAME}>"
     )
     target_link_libraries(${PROJECT_NAME} PUBLIC
