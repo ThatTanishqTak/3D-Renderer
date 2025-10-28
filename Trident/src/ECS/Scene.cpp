@@ -21,6 +21,8 @@ namespace Trident
     Scene::Scene(ECS::Registry& registry) : m_Registry(&registry), m_EditorRegistry(&registry)
     {
         // Mirror the editor registry pointer up-front so play mode can swap without expensive lookups.
+        m_AnimationSystem = std::make_unique<ECS::AnimationSystem>();
+        // TODO: Allow dependency injection so specialised animation systems can be swapped during testing.
     }
 
     void Scene::SetName(const std::string& name)
@@ -196,6 +198,12 @@ namespace Trident
                     TR_CORE_TRACE("Updating script '{}' (entity {}, dt={})", l_Script.m_ScriptPath, it_Entity, deltaTime);
                 }
             }
+        }
+
+        if (m_AnimationSystem)
+        {
+            // Advance skeletal animations after scripts so gameplay can modify playback states first.
+            m_AnimationSystem->Update(l_RuntimeRegistry, deltaTime);
         }
     }
 

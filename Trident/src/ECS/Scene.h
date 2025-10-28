@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ECS/Registry.h"
+#include "ECS/AnimationSystem.h"
 
 #include <string>
 #include <iosfwd>
@@ -51,5 +52,6 @@ namespace Trident
         std::string m_SceneName{ "Untitled" };         ///< Friendly label persisted inside the .trident file header.
         bool m_IsPlaying{ false };                      ///< Indicates whether the scene is currently in play mode.
         size_t m_LoadedEntityCount{ 0 };                ///< Helper counter used for logging during deserialisation.
+        std::unique_ptr<ECS::AnimationSystem> m_AnimationSystem; ///< Drives skeletal animation playback during runtime.
     };
 }
