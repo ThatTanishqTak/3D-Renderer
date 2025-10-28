@@ -10,6 +10,7 @@
 #include "ECS/Components/TextureComponent.h"
 #include "ECS/Components/SpriteComponent.h"
 #include "ECS/Components/ScriptComponent.h"
+#include "ECS/Components/AnimationComponent.h"
 #include "Core/Utilities.h"
 
 #include <imgui.h>
@@ -126,6 +127,7 @@ void InspectorPanel::Render()
     DrawMeshComponent(l_Registry);
     DrawTextureComponent(l_Registry);
     DrawSpriteComponent(l_Registry);
+    DrawAnimationComponent(l_Registry);
     DrawScriptComponent(l_Registry);
 
     // Future improvement: reflect over registered component types to avoid manual draw helpers.
@@ -198,6 +200,19 @@ void InspectorPanel::DrawAddComponentMenu(Trident::ECS::Registry& registry)
             if (ImGui::Selectable("Mesh"))
             {
                 registry.AddComponent<Trident::MeshComponent>(m_SelectedEntity, Trident::MeshComponent{});
+                l_ComponentAdded = true;
+                ImGui::CloseCurrentPopup();
+            }
+        }
+
+        if (!l_ComponentAdded && !registry.HasComponent<Trident::AnimationComponent>(m_SelectedEntity) && PassesAddComponentFilter("Animation"))
+        {
+            l_DisplayedAnyComponent = true;
+            if (ImGui::Selectable("Animation"))
+            {
+                Trident::AnimationComponent l_DefaultAnimation{};
+                l_DefaultAnimation.InvalidateCachedAssets();
+                registry.AddComponent<Trident::AnimationComponent>(m_SelectedEntity, l_DefaultAnimation);
                 l_ComponentAdded = true;
                 ImGui::CloseCurrentPopup();
             }
@@ -721,6 +736,108 @@ void InspectorPanel::DrawSpriteComponent(Trident::ECS::Registry& registry)
     if (l_ShouldRemove)
     {
         registry.RemoveComponent<Trident::SpriteComponent>(m_SelectedEntity);
+    }
+}
+
+void InspectorPanel::DrawAnimationComponent(Trident::ECS::Registry& registry)
+{
+    if (!registry.HasComponent<Trident::AnimationComponent>(m_SelectedEntity))
+    {
+        return;
+    }
+
+    ImGui::PushID("AnimationComponent");
+    bool l_ShouldRemove = false;
+    const bool l_IsOpen = ImGui::CollapsingHeader("Animation", ImGuiTreeNodeFlags_DefaultOpen);
+
+    if (ImGui::BeginPopupContextItem("AnimationComponentContext"))
+    {
+        if (ImGui::MenuItem("Remove Component"))
+        {
+            l_ShouldRemove = true;
+        }
+        ImGui::EndPopup();
+    }
+
+    if (l_IsOpen)
+    {
+        Trident::AnimationComponent& l_AnimationComponent = registry.GetComponent<Trident::AnimationComponent>(m_SelectedEntity);
+
+        // Cache editable fields inside buffers so ImGui can safely manipulate the string data.
+        std::array<char, 256> l_SkeletonBuffer{};
+        std::strncpy(l_SkeletonBuffer.data(), l_AnimationComponent.m_SkeletonAssetId.c_str(), l_SkeletonBuffer.size() - 1);
+        if (ImGui::InputText("Skeleton Asset", l_SkeletonBuffer.data(), l_SkeletonBuffer.size()))
+        {
+            const std::string l_PreviousSkeleton = l_AnimationComponent.m_SkeletonAssetId;
+            l_AnimationComponent.m_SkeletonAssetId = l_SkeletonBuffer.data();
+            if (l_AnimationComponent.m_SkeletonAssetId != l_PreviousSkeleton)
+            {
+                // Reset caches so the runtime resolves the new skeleton cleanly.
+                l_AnimationComponent.m_BoneMatrices.clear();
+                l_AnimationComponent.m_CurrentTime = 0.0f;
+                l_AnimationComponent.InvalidateCachedAssets();
+            }
+        }
+
+        std::array<char, 256> l_AnimationBuffer{};
+        std::strncpy(l_AnimationBuffer.data(), l_AnimationComponent.m_AnimationAssetId.c_str(), l_AnimationBuffer.size() - 1);
+        if (ImGui::InputText("Animation Asset", l_AnimationBuffer.data(), l_AnimationBuffer.size()))
+        {
+            const std::string l_PreviousAnimation = l_AnimationComponent.m_AnimationAssetId;
+            l_AnimationComponent.m_AnimationAssetId = l_AnimationBuffer.data();
+            if (l_AnimationComponent.m_AnimationAssetId != l_PreviousAnimation)
+            {
+                l_AnimationComponent.m_BoneMatrices.clear();
+                l_AnimationComponent.m_CurrentTime = 0.0f;
+                l_AnimationComponent.InvalidateCachedAssets();
+            }
+        }
+
+        std::array<char, 256> l_ClipBuffer{};
+        std::strncpy(l_ClipBuffer.data(), l_AnimationComponent.m_CurrentClip.c_str(), l_ClipBuffer.size() - 1);
+        if (ImGui::InputText("Clip", l_ClipBuffer.data(), l_ClipBuffer.size()))
+        {
+            const std::string l_PreviousClip = l_AnimationComponent.m_CurrentClip;
+            l_AnimationComponent.m_CurrentClip = l_ClipBuffer.data();
+            if (l_AnimationComponent.m_CurrentClip != l_PreviousClip)
+            {
+                // Scrub back to the start of the clip and clear cached pose data.
+                l_AnimationComponent.m_BoneMatrices.clear();
+                l_AnimationComponent.m_CurrentTime = 0.0f;
+                l_AnimationComponent.InvalidateCachedAssets();
+            }
+        }
+
+        // Allow designers to quickly reset the cached pose when the animation looks incorrect.
+        if (ImGui::Button("Clear Cached Pose"))
+        {
+            l_AnimationComponent.m_BoneMatrices.clear();
+            l_AnimationComponent.m_CurrentTime = 0.0f;
+            l_AnimationComponent.InvalidateCachedAssets();
+        }
+
+        float l_PlaybackTime = l_AnimationComponent.m_CurrentTime;
+        if (ImGui::DragFloat("Playback Time", &l_PlaybackTime, 0.01f, 0.0f, 10000.0f, "%.2f"))
+        {
+            l_AnimationComponent.m_CurrentTime = std::max(0.0f, l_PlaybackTime);
+        }
+
+        ImGui::DragFloat("Playback Speed", &l_AnimationComponent.m_PlaybackSpeed, 0.01f, -5.0f, 5.0f, "%.2f");
+        ImGui::Checkbox("Playing", &l_AnimationComponent.m_IsPlaying);
+        ImGui::Checkbox("Looping", &l_AnimationComponent.m_IsLooping);
+
+        ImGui::TextDisabled("Cached Bones");
+        ImGui::Text("%zu", l_AnimationComponent.m_BoneMatrices.size());
+
+        ImGui::Separator();
+        ImGui::TextDisabled("Future: asset pickers, clip previews, and blend tree editors will streamline this workflow.");
+    }
+
+    ImGui::PopID();
+
+    if (l_ShouldRemove)
+    {
+        registry.RemoveComponent<Trident::AnimationComponent>(m_SelectedEntity);
     }
 }
 

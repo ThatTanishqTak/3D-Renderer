@@ -9,12 +9,15 @@
 #include "ECS/Components/TagComponent.h"
 #include "ECS/Components/ScriptComponent.h"
 #include "ECS/Components/TextureComponent.h"
+#include "ECS/Components/AnimationComponent.h"
 
 #include <fstream>
 #include <sstream>
 #include <iomanip>
 #include <vector>
 #include <memory>
+
+#include <glm/gtc/type_ptr.hpp>
 
 namespace Trident
 {
@@ -271,6 +274,40 @@ namespace Trident
                 << " Dirty=" << l_Texture.m_IsDirty << "\n";
         }
 
+        if (l_ActiveRegistry.HasComponent<AnimationComponent>(entity))
+        {
+            const AnimationComponent& l_Animation = l_ActiveRegistry.GetComponent<AnimationComponent>(entity);
+            // Persist high level playback data so runtime components resume in the same state after reloads.
+            stream << std::setprecision(6);
+            stream << "Animation "
+                << "Skeleton=\"" << EscapeString(l_Animation.m_SkeletonAssetId) << "\" "
+                << "Animation=\"" << EscapeString(l_Animation.m_AnimationAssetId) << "\" "
+                << "Clip=\"" << EscapeString(l_Animation.m_CurrentClip) << "\" "
+                << "Time=" << l_Animation.m_CurrentTime << ' '
+                << "Speed=" << l_Animation.m_PlaybackSpeed << ' '
+                << "Playing=" << l_Animation.m_IsPlaying << ' '
+                << "Looping=" << l_Animation.m_IsLooping;
+
+            const size_t l_BoneCount = l_Animation.m_BoneMatrices.size();
+            stream << " BoneCount=" << l_BoneCount << "\n";
+
+            if (l_BoneCount > 0)
+            {
+                stream << "AnimationBones";
+                for (size_t it_BoneIndex = 0; it_BoneIndex < l_BoneCount; ++it_BoneIndex)
+                {
+                    const glm::mat4& l_BoneMatrix = l_Animation.m_BoneMatrices[it_BoneIndex];
+                    const float* l_RawValues = glm::value_ptr(l_BoneMatrix);
+                    for (int it_ComponentIndex = 0; it_ComponentIndex < 16; ++it_ComponentIndex)
+                    {
+                        stream << ' ' << l_RawValues[it_ComponentIndex];
+                    }
+                }
+                stream << "\n";
+            }
+        }
+
+
         if (l_ActiveRegistry.HasComponent<LightComponent>(entity))
         {
             const LightComponent& l_Light = l_ActiveRegistry.GetComponent<LightComponent>(entity);
@@ -395,6 +432,128 @@ namespace Trident
                 }
 
                 l_TargetRegistry.AddComponent<TextureComponent>(l_Entity, l_Texture);
+
+                continue;
+            }
+
+            if (l_Line.rfind("Animation ", 0) == 0)
+            {
+                AnimationComponent l_Animation{};
+
+                auto a_ParseQuotedValue = [&](const std::string& a_Line, const std::string& a_Key) -> std::string
+                    {
+                        const size_t l_KeyPos = a_Line.find(a_Key);
+                        if (l_KeyPos == std::string::npos)
+                        {
+                            return {};
+                        }
+
+                        const size_t l_FirstQuote = a_Line.find('\"', l_KeyPos);
+                        if (l_FirstQuote == std::string::npos)
+                        {
+                            return {};
+                        }
+
+                        const size_t l_SecondQuote = a_Line.find('\"', l_FirstQuote + 1);
+                        if (l_SecondQuote == std::string::npos)
+                        {
+                            return {};
+                        }
+
+                        const std::string l_RawValue = a_Line.substr(l_FirstQuote + 1, l_SecondQuote - l_FirstQuote - 1);
+                        return UnescapeString(l_RawValue);
+                    };
+
+                auto a_ParseFloatValue = [&](const std::string& a_Line, const std::string& a_Key, float a_Default) -> float
+                    {
+                        const size_t l_KeyPos = a_Line.find(a_Key);
+                        if (l_KeyPos == std::string::npos)
+                        {
+                            return a_Default;
+                        }
+
+                        std::istringstream l_TokenStream(a_Line.substr(l_KeyPos + a_Key.length()));
+                        float l_Value = a_Default;
+                        l_TokenStream >> l_Value;
+                        return l_Value;
+                    };
+
+                auto a_ParseBoolValue = [&](const std::string& a_Line, const std::string& a_Key, bool a_Default) -> bool
+                    {
+                        const size_t l_KeyPos = a_Line.find(a_Key);
+                        if (l_KeyPos == std::string::npos)
+                        {
+                            return a_Default;
+                        }
+
+                        std::istringstream l_TokenStream(a_Line.substr(l_KeyPos + a_Key.length()));
+                        bool l_Value = a_Default;
+                        l_TokenStream >> std::boolalpha >> l_Value;
+                        return l_Value;
+                    };
+
+                l_Animation.m_SkeletonAssetId = a_ParseQuotedValue(l_Line, "Skeleton=");
+                l_Animation.m_AnimationAssetId = a_ParseQuotedValue(l_Line, "Animation=");
+                l_Animation.m_CurrentClip = a_ParseQuotedValue(l_Line, "Clip=");
+                l_Animation.m_CurrentTime = a_ParseFloatValue(l_Line, "Time=", 0.0f);
+                l_Animation.m_PlaybackSpeed = a_ParseFloatValue(l_Line, "Speed=", 1.0f);
+                l_Animation.m_IsPlaying = a_ParseBoolValue(l_Line, "Playing=", true);
+                l_Animation.m_IsLooping = a_ParseBoolValue(l_Line, "Looping=", true);
+
+                size_t l_BoneCount = 0;
+                const size_t l_BoneCountPos = l_Line.find("BoneCount=");
+                if (l_BoneCountPos != std::string::npos)
+                {
+                    std::istringstream l_BoneCountStream(l_Line.substr(l_BoneCountPos + 10));
+                    l_BoneCountStream >> l_BoneCount;
+                }
+
+                if (l_BoneCount > 0)
+                {
+                    std::string l_BonesLine;
+                    if (std::getline(stream, l_BonesLine))
+                    {
+                        const std::string l_BonePrefix = "AnimationBones";
+                        if (l_BonesLine.rfind(l_BonePrefix, 0) == 0)
+                        {
+                            std::vector<float> l_FlatValues;
+                            l_FlatValues.reserve(l_BoneCount * 16);
+
+                            std::istringstream l_BonesStream(l_BonesLine.substr(l_BonePrefix.length()));
+                            float l_ComponentValue = 0.0f;
+                            while (l_BonesStream >> l_ComponentValue)
+                            {
+                                l_FlatValues.push_back(l_ComponentValue);
+                            }
+
+                            if (l_FlatValues.size() == l_BoneCount * 16)
+                            {
+                                l_Animation.m_BoneMatrices.resize(l_BoneCount);
+                                for (size_t it_BoneIndex = 0; it_BoneIndex < l_BoneCount; ++it_BoneIndex)
+                                {
+                                    glm::mat4& l_BoneMatrix = l_Animation.m_BoneMatrices[it_BoneIndex];
+                                    float* l_BoneValues = glm::value_ptr(l_BoneMatrix);
+                                    for (int it_ComponentIndex = 0; it_ComponentIndex < 16; ++it_ComponentIndex)
+                                    {
+                                        l_BoneValues[it_ComponentIndex] = l_FlatValues[it_BoneIndex * 16 + static_cast<size_t>(it_ComponentIndex)];
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                TR_CORE_WARN("AnimationBoneData size mismatch (expected {} values, found {})", l_BoneCount * 16, l_FlatValues.size());
+                            }
+                        }
+                        else
+                        {
+                            TR_CORE_WARN("Expected AnimationBones line while deserialising animation component, received '{}'", l_BonesLine);
+                        }
+                    }
+                }
+
+                l_Animation.InvalidateCachedAssets();
+
+                l_TargetRegistry.AddComponent<AnimationComponent>(l_Entity, l_Animation);
 
                 continue;
             }

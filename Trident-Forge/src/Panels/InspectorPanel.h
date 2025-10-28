@@ -46,6 +46,7 @@ private:
     void DrawTextureComponent(Trident::ECS::Registry& registry);
     void DrawSpriteComponent(Trident::ECS::Registry& registry);
     void DrawScriptComponent(Trident::ECS::Registry& registry);
+    void DrawAnimationComponent(Trident::ECS::Registry& registry);
     // Helper that renders the add component popup and handles the search workflow.
     void DrawAddComponentMenu(Trident::ECS::Registry& registry);
     // Helper that runs a case-insensitive contains check against the search buffer.
