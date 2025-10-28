@@ -78,6 +78,14 @@ namespace Trident
 
         struct AnimationLayer
         {
+            // AnimationLayer manages unique state ownership which cannot be copied safely.
+            AnimationLayer() = default;
+            AnimationLayer(const AnimationLayer&) = delete;
+            AnimationLayer& operator=(const AnimationLayer&) = delete;
+            AnimationLayer(AnimationLayer&&) noexcept = default;
+            AnimationLayer& operator=(AnimationLayer&&) noexcept = default;
+            ~AnimationLayer() = default;
+
             std::string m_Name;
             float m_Weight = 1.0f;
             bool m_IsAdditive = false;
