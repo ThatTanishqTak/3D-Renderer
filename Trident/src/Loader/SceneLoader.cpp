@@ -53,10 +53,10 @@ namespace Trident
                 if (l_IsAssimpSupported)
                 {
                     auto a_ModelData = ModelLoader::Load(a_Entry.path().string());
-                    if (!a_ModelData.Meshes.empty())
+                    if (!a_ModelData.m_Meshes.empty())
                     {
                         const size_t l_MaterialOffset = l_Scene.Materials.size();
-                        for (auto& l_Mesh : a_ModelData.Meshes)
+                        for (auto& l_Mesh : a_ModelData.m_Meshes)
                         {
                             if (l_Mesh.MaterialIndex >= 0)
                             {
@@ -77,7 +77,7 @@ namespace Trident
                             l_MeshComponent.m_Primitive = MeshComponent::PrimitiveType::None;
                         }
 
-                        l_Scene.Materials.insert(l_Scene.Materials.end(), a_ModelData.Materials.begin(), a_ModelData.Materials.end());
+                        l_Scene.Materials.insert(l_Scene.Materials.end(), a_ModelData.m_Materials.begin(), a_ModelData.m_Materials.end());
                         ++l_Scene.ModelCount;
                     }
                 }

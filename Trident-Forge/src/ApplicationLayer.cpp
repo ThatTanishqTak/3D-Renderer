@@ -506,19 +506,19 @@ bool ApplicationLayer::ImportDroppedAssets(const std::vector<std::string>& dropp
         }
 
         Trident::Loader::ModelData l_ModelData = Trident::Loader::ModelLoader::Load(it_Path);
-        if (l_ModelData.Meshes.empty())
+        if (l_ModelData.m_Meshes.empty())
         {
             continue;
         }
 
         const int l_TextureOffset = static_cast<int>(l_ImportedTextures.size());
-        l_ImportedTextures.reserve(l_ImportedTextures.size() + l_ModelData.Textures.size());
-        for (std::string& it_TexturePath : l_ModelData.Textures)
+        l_ImportedTextures.reserve(l_ImportedTextures.size() + l_ModelData.m_Textures.size());
+        for (std::string& it_TexturePath : l_ModelData.m_Textures)
         {
             l_ImportedTextures.emplace_back(std::move(it_TexturePath));
         }
 
-        for (Trident::Geometry::Material& l_Material : l_ModelData.Materials)
+        for (Trident::Geometry::Material& l_Material : l_ModelData.m_Materials)
         {
             if (l_Material.BaseColorTextureIndex >= 0)
             {
@@ -537,9 +537,9 @@ bool ApplicationLayer::ImportDroppedAssets(const std::vector<std::string>& dropp
         const std::string l_BaseName = l_PathView.stem().string();
         const std::string l_TagRoot = l_BaseName.empty() ? std::string("Imported Mesh") : l_BaseName;
 
-        for (size_t it_MeshIndex = 0; it_MeshIndex < l_ModelData.Meshes.size(); ++it_MeshIndex)
+        for (size_t it_MeshIndex = 0; it_MeshIndex < l_ModelData.m_Meshes.size(); ++it_MeshIndex)
         {
-            Trident::Geometry::Mesh& l_Mesh = l_ModelData.Meshes[it_MeshIndex];
+            Trident::Geometry::Mesh& l_Mesh = l_ModelData.m_Meshes[it_MeshIndex];
 
             // Preserve the mesh data so the renderer can rebuild GPU buffers after all drops are processed.
             const size_t l_PreviousMeshCount = l_ImportedMeshes.size();
@@ -556,7 +556,7 @@ bool ApplicationLayer::ImportDroppedAssets(const std::vector<std::string>& dropp
 
             Trident::TagComponent& l_TagComponent = l_Registry.AddComponent<Trident::TagComponent>(l_NewEntity);
             l_TagComponent.m_Tag = l_TagRoot;
-            if (l_ModelData.Meshes.size() > 1)
+            if (l_ModelData.m_Meshes.size() > 1)
             {
                 l_TagComponent.m_Tag += " (" + std::to_string(it_MeshIndex + 1) + ")";
             }
@@ -565,7 +565,7 @@ bool ApplicationLayer::ImportDroppedAssets(const std::vector<std::string>& dropp
         }
 
         // Transfer materials after entities so the renderer can align indices when rebuilding draw buffers.
-        std::move(l_ModelData.Materials.begin(), l_ModelData.Materials.end(), std::back_inserter(l_ImportedMaterials));
+        std::move(l_ModelData.m_Materials.begin(), l_ModelData.m_Materials.end(), std::back_inserter(l_ImportedMaterials));
     }
 
     if (!l_ImportedAny || l_ImportedMeshes.empty())

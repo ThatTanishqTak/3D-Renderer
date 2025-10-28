@@ -3731,9 +3731,9 @@ namespace Trident
             case Utilities::FileWatcher::WatchType::Model:
             {
                 auto a_ModelData = Loader::ModelLoader::Load(a_Event->Path);
-                if (!a_ModelData.Meshes.empty())
+                if (!a_ModelData.m_Meshes.empty())
                 {
-                    UploadMesh(a_ModelData.Meshes, a_ModelData.Materials, a_ModelData.Textures);
+                    UploadMesh(a_ModelData.m_Meshes, a_ModelData.m_Materials, a_ModelData.m_Textures);
                     l_Success = true;
                     l_Message = "Model assets reuploaded";
                 }
