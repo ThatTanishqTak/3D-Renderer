@@ -1,13 +1,10 @@
 #pragma once
 
+#include "Animation/AnimationPlayer.h"
 #include "ECS/System.h"
 #include "ECS/Entity.h"
 #include "ECS/Components/AnimationComponent.h"
 
-#include <glm/mat4x4.hpp>
-
-#include <cstddef>
-#include <vector>
 
 namespace Trident
 {
@@ -21,7 +18,7 @@ namespace Trident
         class AnimationSystem final : public System
         {
         public:
-            AnimationSystem() = default;
+            AnimationSystem();
             void Update(Registry& registry, float deltaTime) override;
 
             static void RefreshCachedHandles(AnimationComponent& component, Animation::AnimationAssetService& service);
@@ -29,9 +26,8 @@ namespace Trident
 
         private:
             void UpdateComponent(Registry& registry, Entity entity, float deltaTime);
-            static float ResolveClipDuration(const AnimationComponent& component);
-            static size_t ResolveSkeletonBoneCount(const AnimationComponent& component);
-            static void SampleClipPose(const AnimationComponent& component, float sampleTime, std::vector<glm::mat4>& outBoneMatrices);
+
+            Animation::AnimationPlayer m_Player; ///< Shared player reusing scratch buffers for deterministic sampling.
         };
     }
 }
