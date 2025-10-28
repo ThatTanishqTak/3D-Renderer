@@ -22,6 +22,7 @@
 #include "ECS/Components/TransformComponent.h"
 #include "ECS/Components/LightComponent.h"
 #include "ECS/Components/TextureComponent.h"
+#include "ECS/Components/AnimationComponent.h"
 
 #include <vulkan/vulkan.h>
 #include <glm/glm.hpp>
@@ -154,6 +155,8 @@ namespace Trident
         bool m_Shutdown = false;
 
     private:
+        static constexpr uint32_t s_MaxBonesPerSkeleton = 128; ///< Enough for Mixamo rigs with headroom for future assets.
+
         struct MeshDrawInfo
         {
             uint32_t m_FirstIndex = 0;            ///< First index in the shared buffer for the mesh.
@@ -167,6 +170,9 @@ namespace Trident
             glm::mat4 m_ModelMatrix{ 1.0f };      ///< Cached transform ready for the GPU.
             const MeshComponent* m_Component = nullptr; ///< Source component describing the draw parameters.
             const TextureComponent* m_TextureComponent = nullptr; ///< Optional texture binding supplied by the entity.
+            const AnimationComponent* m_AnimationComponent = nullptr; ///< Optional animation data driving skinning.
+            uint32_t m_BoneOffset = 0;            ///< Offset into the bone palette buffer assigned during batching.
+            uint32_t m_BoneCount = 0;             ///< Number of matrices contributing to this palette.
             ECS::Entity m_Entity = 0;             ///< Owning entity for debugging and picking hooks.
         };
 
@@ -183,6 +189,9 @@ namespace Trident
         void DestroySpriteGeometry();
         void GatherSpriteDraws();
         void DrawSprites(VkCommandBuffer commandBuffer, uint32_t imageIndex);
+        void EnsureSkinningBufferCapacity(size_t requiredMatrices);
+        void RefreshBonePaletteDescriptors();
+        void PrepareBonePaletteBuffer(uint32_t imageIndex);
 
         // Swapchain
         Swapchain m_Swapchain;
@@ -196,6 +205,12 @@ namespace Trident
         VkBuffer m_IndexBuffer = VK_NULL_HANDLE;
         VkDeviceMemory m_IndexBufferMemory = VK_NULL_HANDLE;
         uint32_t m_IndexCount = 0;
+
+        std::vector<VkBuffer> m_BonePaletteBuffers;             ///< Storage buffers holding per-draw skinning palettes.
+        std::vector<VkDeviceMemory> m_BonePaletteMemory;        ///< Device memory backing the bone palette buffers.
+        VkDeviceSize m_BonePaletteBufferSize = 0;               ///< Size in bytes of each bone palette buffer.
+        size_t m_BonePaletteMatrixCapacity = 0;                 ///< Number of matrices allocated per swapchain image.
+        std::vector<glm::mat4> m_BonePaletteScratch;            ///< CPU staging area populated before uploading to the GPU.
 
         // Pipeline
         Pipeline m_Pipeline;

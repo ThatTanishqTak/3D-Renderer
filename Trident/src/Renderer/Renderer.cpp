@@ -27,6 +27,7 @@
 #include <cstring>
 #include <cctype>
 #include <cassert>
+#include <iterator>
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/matrix_inverse.hpp>
@@ -94,6 +95,7 @@ namespace Trident
         // Allocate per-frame uniform buffers for camera/light state and the material table.
         m_Buffers.CreateUniformBuffers(m_Swapchain.GetImageCount(), l_GlobalSize, m_GlobalUniformBuffers, m_GlobalUniformBuffersMemory);
         EnsureMaterialBufferCapacity(m_Materials.size());
+        EnsureSkinningBufferCapacity(std::max<size_t>(m_BonePaletteMatrixCapacity, static_cast<size_t>(s_MaxBonesPerSkeleton)));
 
         CreateDescriptorPool();
         CreateDefaultTexture();
@@ -134,6 +136,16 @@ namespace Trident
 
         // Release shared sprite geometry before the buffer allocator clears tracked allocations.
         DestroySpriteGeometry();
+
+        for (size_t it_Index = 0; it_Index < m_BonePaletteBuffers.size(); ++it_Index)
+        {
+            m_Buffers.DestroyBuffer(m_BonePaletteBuffers[it_Index], (it_Index < m_BonePaletteMemory.size()) ? m_BonePaletteMemory[it_Index] : VK_NULL_HANDLE);
+        }
+        m_BonePaletteBuffers.clear();
+        m_BonePaletteMemory.clear();
+        m_BonePaletteScratch.clear();
+        m_BonePaletteBufferSize = 0;
+        m_BonePaletteMatrixCapacity = 0;
 
         if (m_DescriptorPool != VK_NULL_HANDLE)
         {
@@ -1077,10 +1089,19 @@ namespace Trident
                 }
             }
 
+            const AnimationComponent* l_AnimationComponent = nullptr;
+            if (m_Registry->HasComponent<AnimationComponent>(it_Entity))
+            {
+                l_AnimationComponent = &m_Registry->GetComponent<AnimationComponent>(it_Entity);
+            }
+
             MeshDrawCommand l_Command{};
             l_Command.m_ModelMatrix = l_ModelMatrix;
             l_Command.m_Component = &l_MeshComponent;
             l_Command.m_TextureComponent = l_TextureComponent;
+            l_Command.m_AnimationComponent = l_AnimationComponent;
+            l_Command.m_BoneOffset = 0;
+            l_Command.m_BoneCount = 0;
             l_Command.m_Entity = it_Entity;
             m_MeshDrawCommands.push_back(l_Command);
         }
@@ -1179,6 +1200,163 @@ namespace Trident
                 sizeof(RenderablePushConstant), &l_PushConstant);
             vkCmdDrawIndexed(commandBuffer, m_SpriteIndexCount, 1, 0, 0, 0);
         }
+    }
+
+    void Renderer::EnsureSkinningBufferCapacity(size_t requiredMatrices)
+    {
+        const uint32_t l_ImageCount = m_Swapchain.GetImageCount();
+        const size_t l_TargetMatrices = std::max({ requiredMatrices, static_cast<size_t>(1), static_cast<size_t>(s_MaxBonesPerSkeleton) });
+        const VkDeviceSize l_TargetSize = static_cast<VkDeviceSize>(l_TargetMatrices * sizeof(glm::mat4));
+
+        if (l_ImageCount == 0)
+        {
+            m_BonePaletteMatrixCapacity = l_TargetMatrices;
+            m_BonePaletteBufferSize = l_TargetSize;
+            return;
+        }
+
+        const bool l_ImageMismatch = m_BonePaletteBuffers.size() != l_ImageCount;
+        const bool l_CapacityMismatch = l_TargetMatrices > m_BonePaletteMatrixCapacity;
+        if (!l_ImageMismatch && !l_CapacityMismatch)
+        {
+            return;
+        }
+
+        if (!m_BonePaletteBuffers.empty() && m_ResourceFence != VK_NULL_HANDLE)
+        {
+            vkWaitForFences(Startup::GetDevice(), 1, &m_ResourceFence, VK_TRUE, UINT64_MAX);
+        }
+
+        for (size_t it_Index = 0; it_Index < m_BonePaletteBuffers.size(); ++it_Index)
+        {
+            m_Buffers.DestroyBuffer(m_BonePaletteBuffers[it_Index],
+                (it_Index < m_BonePaletteMemory.size()) ? m_BonePaletteMemory[it_Index] : VK_NULL_HANDLE);
+        }
+
+        m_BonePaletteBuffers.clear();
+        m_BonePaletteMemory.clear();
+
+        if (l_TargetSize == 0)
+        {
+            return;
+        }
+
+        // Future improvement: stream these palettes through a device-local ring buffer once animation streaming is mature.
+        m_Buffers.CreateStorageBuffers(l_ImageCount, l_TargetSize, m_BonePaletteBuffers, m_BonePaletteMemory);
+        m_BonePaletteMatrixCapacity = l_TargetMatrices;
+        m_BonePaletteBufferSize = l_TargetSize;
+        m_BonePaletteScratch.resize(m_BonePaletteMatrixCapacity);
+
+        RefreshBonePaletteDescriptors();
+    }
+
+    void Renderer::RefreshBonePaletteDescriptors()
+    {
+        if (m_DescriptorSets.empty() || m_BonePaletteBuffers.empty() || m_BonePaletteBufferSize == 0)
+        {
+            return;
+        }
+
+        std::vector<VkDescriptorBufferInfo> l_BufferInfos(m_DescriptorSets.size());
+        std::vector<VkWriteDescriptorSet> l_Writes(m_DescriptorSets.size());
+
+        for (size_t it_Index = 0; it_Index < m_DescriptorSets.size(); ++it_Index)
+        {
+            VkDescriptorBufferInfo& l_Info = l_BufferInfos[it_Index];
+            l_Info.buffer = (it_Index < m_BonePaletteBuffers.size()) ? m_BonePaletteBuffers[it_Index] : VK_NULL_HANDLE;
+            l_Info.offset = 0;
+            l_Info.range = m_BonePaletteBufferSize;
+
+            VkWriteDescriptorSet& l_Write = l_Writes[it_Index];
+            l_Write = { VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
+            l_Write.dstSet = m_DescriptorSets[it_Index];
+            l_Write.dstBinding = 4;
+            l_Write.dstArrayElement = 0;
+            l_Write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            l_Write.descriptorCount = 1;
+            l_Write.pBufferInfo = &l_BufferInfos[it_Index];
+        }
+
+        vkUpdateDescriptorSets(Startup::GetDevice(), static_cast<uint32_t>(l_Writes.size()), l_Writes.data(), 0, nullptr);
+    }
+
+    void Renderer::PrepareBonePaletteBuffer(uint32_t imageIndex)
+    {
+        if (imageIndex >= m_BonePaletteBuffers.size() || imageIndex >= m_BonePaletteMemory.size())
+        {
+            return;
+        }
+
+        if (m_BonePaletteBuffers[imageIndex] == VK_NULL_HANDLE || m_BonePaletteMemory[imageIndex] == VK_NULL_HANDLE)
+        {
+            return;
+        }
+
+        size_t l_TotalMatrices = 0;
+        for (MeshDrawCommand& it_Command : m_MeshDrawCommands)
+        {
+            it_Command.m_BoneOffset = 0;
+            it_Command.m_BoneCount = 0;
+
+            if (it_Command.m_AnimationComponent == nullptr)
+            {
+                continue;
+            }
+
+            const auto& l_Source = it_Command.m_AnimationComponent->m_BoneMatrices;
+            if (l_Source.empty())
+            {
+                continue;
+            }
+
+            const uint32_t l_ClampedCount = static_cast<uint32_t>(std::min<size_t>(l_Source.size(), s_MaxBonesPerSkeleton));
+            it_Command.m_BoneOffset = static_cast<uint32_t>(l_TotalMatrices);
+            it_Command.m_BoneCount = l_ClampedCount;
+            l_TotalMatrices += l_ClampedCount;
+        }
+
+        if (l_TotalMatrices == 0)
+        {
+            return;
+        }
+
+        EnsureSkinningBufferCapacity(l_TotalMatrices);
+        if (m_BonePaletteBuffers.empty() || imageIndex >= m_BonePaletteBuffers.size())
+        {
+            return;
+        }
+
+        const VkDeviceSize l_CopySize = static_cast<VkDeviceSize>(l_TotalMatrices * sizeof(glm::mat4));
+        if (l_CopySize == 0 || l_CopySize > m_BonePaletteBufferSize)
+        {
+            return;
+        }
+
+        m_BonePaletteScratch.resize(l_TotalMatrices);
+        size_t l_WriteIndex = 0;
+        for (const MeshDrawCommand& it_Command : m_MeshDrawCommands)
+        {
+            if (it_Command.m_BoneCount == 0 || it_Command.m_AnimationComponent == nullptr)
+            {
+                continue;
+            }
+
+            const auto& l_Source = it_Command.m_AnimationComponent->m_BoneMatrices;
+            for (uint32_t it_Bone = 0; it_Bone < it_Command.m_BoneCount && l_WriteIndex < m_BonePaletteScratch.size(); ++it_Bone)
+            {
+                m_BonePaletteScratch[l_WriteIndex++] = l_Source[it_Bone];
+            }
+        }
+
+        void* l_Mapped = nullptr;
+        if (vkMapMemory(Startup::GetDevice(), m_BonePaletteMemory[imageIndex], 0, l_CopySize, 0, &l_Mapped) != VK_SUCCESS)
+        {
+            TR_CORE_CRITICAL("Failed to map bone palette buffer for image {}", imageIndex);
+            return;
+        }
+
+        std::memcpy(l_Mapped, m_BonePaletteScratch.data(), static_cast<size_t>(l_CopySize));
+        vkUnmapMemory(Startup::GetDevice(), m_BonePaletteMemory[imageIndex]);
     }
 
     void Renderer::RecreateSwapchain()
@@ -1296,21 +1474,23 @@ namespace Trident
         TR_CORE_TRACE("Creating Descriptor Pool");
 
         uint32_t l_ImageCount = m_Swapchain.GetImageCount();
-        VkDescriptorPoolSize l_PoolSizes[3]{};
+        VkDescriptorPoolSize l_PoolSizes[4]{};
         l_PoolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         l_PoolSizes[0].descriptorCount = l_ImageCount * 2; // Global UBO for the main pipeline plus the skybox uniform.
         l_PoolSizes[1].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         l_PoolSizes[1].descriptorCount = l_ImageCount; // Material uniform buffer bound once per swapchain image.
-        l_PoolSizes[2].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        l_PoolSizes[2].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        l_PoolSizes[2].descriptorCount = l_ImageCount; // Bone palette buffer updated once per swapchain image.
+        l_PoolSizes[3].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         // Each swapchain image consumes an array of material textures plus a cubemap sampler in the main set and a cubemap
         // sampler in the dedicated skybox set.
-        l_PoolSizes[2].descriptorCount = l_ImageCount * (Pipeline::s_MaxMaterialTextures + 2);
+        l_PoolSizes[3].descriptorCount = l_ImageCount * (Pipeline::s_MaxMaterialTextures + 2);
 
         VkDescriptorPoolCreateInfo l_PoolInfo{};
         l_PoolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
         // We free and recreate descriptor sets whenever the swapchain is resized, so enable free-descriptor support.
         l_PoolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
-        l_PoolInfo.poolSizeCount = 3;
+        l_PoolInfo.poolSizeCount = static_cast<uint32_t>(std::size(l_PoolSizes));
         l_PoolInfo.pPoolSizes = l_PoolSizes;
         l_PoolInfo.maxSets = l_ImageCount * 2; // Main render pipeline + dedicated skybox descriptors.
 
@@ -2082,6 +2262,7 @@ namespace Trident
         }
 
         const VkDeviceSize l_MaterialRange = static_cast<VkDeviceSize>(std::max<size_t>(m_MaterialBufferElementCount, static_cast<size_t>(1)) * sizeof(MaterialUniformBuffer));
+        EnsureSkinningBufferCapacity(std::max(m_BonePaletteMatrixCapacity, static_cast<size_t>(s_MaxBonesPerSkeleton)));
 
         for (size_t i = 0; i < l_ImageCount; ++i)
         {
@@ -2094,6 +2275,11 @@ namespace Trident
             l_MaterialBufferInfo.buffer = (i < m_MaterialBuffers.size()) ? m_MaterialBuffers[i] : VK_NULL_HANDLE;
             l_MaterialBufferInfo.offset = 0;
             l_MaterialBufferInfo.range = l_MaterialRange;
+
+            VkDescriptorBufferInfo l_BonePaletteInfo{};
+            l_BonePaletteInfo.buffer = (i < m_BonePaletteBuffers.size()) ? m_BonePaletteBuffers[i] : VK_NULL_HANDLE;
+            l_BonePaletteInfo.offset = 0;
+            l_BonePaletteInfo.range = m_BonePaletteBufferSize;
 
             VkWriteDescriptorSet l_GlobalWrite{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
             l_GlobalWrite.dstSet = m_DescriptorSets[i];
@@ -2112,8 +2298,16 @@ namespace Trident
             l_MaterialWrite.descriptorCount = 1;
             l_MaterialWrite.pBufferInfo = &l_MaterialBufferInfo;
 
-            VkWriteDescriptorSet l_Writes[] = { l_GlobalWrite, l_MaterialWrite };
-            vkUpdateDescriptorSets(Startup::GetDevice(), 2, l_Writes, 0, nullptr);
+            VkWriteDescriptorSet l_BonePaletteWrite{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
+            l_BonePaletteWrite.dstSet = m_DescriptorSets[i];
+            l_BonePaletteWrite.dstBinding = 4;
+            l_BonePaletteWrite.dstArrayElement = 0;
+            l_BonePaletteWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            l_BonePaletteWrite.descriptorCount = 1;
+            l_BonePaletteWrite.pBufferInfo = &l_BonePaletteInfo;
+
+            VkWriteDescriptorSet l_Writes[] = { l_GlobalWrite, l_MaterialWrite, l_BonePaletteWrite };
+            vkUpdateDescriptorSets(Startup::GetDevice(), static_cast<uint32_t>(std::size(l_Writes)), l_Writes, 0, nullptr);
         }
 
         RefreshTextureDescriptorBindings();
@@ -2810,6 +3004,7 @@ namespace Trident
 
         // Prepare the shared draw lists once so each viewport iteration can reuse the same data set.
         GatherMeshDraws();
+        PrepareBonePaletteBuffer(imageIndex);
 
         auto a_RenderViewport = [&](uint32_t viewportID, ViewportContext& context, bool isPrimary)
             {
@@ -3003,6 +3198,8 @@ namespace Trident
 
                         l_PushConstant.m_TextureSlot = l_TextureSlot;
                         l_PushConstant.m_MaterialIndex = l_MaterialIndex;
+                        l_PushConstant.m_BoneOffset = static_cast<int32_t>(l_Command.m_BoneOffset);
+                        l_PushConstant.m_BoneCount = static_cast<int32_t>(l_Command.m_BoneCount);
                         vkCmdPushConstants(l_CommandBuffer, m_Pipeline.GetPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0,
                             sizeof(RenderablePushConstant), &l_PushConstant);
 

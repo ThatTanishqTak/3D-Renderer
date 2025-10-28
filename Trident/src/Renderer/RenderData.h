@@ -22,9 +22,9 @@ namespace Trident
         int32_t m_UseMaterialOverride{ 0 };///< Non-zero when material overrides should be used.
         float m_SortBias{ 0.0f };          ///< Depth bias reserved for transparent layering.
         int32_t m_MaterialIndex{ -1 };     ///< Material lookup written per draw so the fragment shader can fetch shading data.
-        int32_t m_Padding0{ 0 };           ///< Reserved for future expansion (keeps std140 alignment intact).
-        int32_t m_Padding1{ 0 };           ///< Reserved for future expansion (keeps std140 alignment intact).
-        int32_t m_Padding2{ 0 };           ///< Reserved for future expansion (keeps std140 alignment intact).
+        int32_t m_Padding0{ 0 };           ///< Reserved for feature flags that still need to land.
+        int32_t m_BoneOffset{ 0 };         ///< Offset into the bone palette buffer. Zero when skinning is not used.
+        int32_t m_BoneCount{ 0 };          ///< Number of matrices contributing to this draw's palette.
     };
 
     static_assert(sizeof(RenderablePushConstant) <= 128, "Push constant payload exceeds Vulkan limits");

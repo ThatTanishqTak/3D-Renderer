@@ -7,6 +7,8 @@ layout(location = 2) in vec3 inTangent;
 layout(location = 3) in vec3 inBitangent;
 layout(location = 4) in vec3 inColor;
 layout(location = 5) in vec2 inTexCoord;
+layout(location = 6) in ivec4 inBoneIndices; // Packed as signed ints to match glm::ivec4 layout on the CPU.
+layout(location = 7) in vec4 inBoneWeights;  // Supports four influences; TODO: evaluate dual-quaternion skinning later.
 
 // Interpolated data consumed by the fragment shader.
 layout(location = 0) out vec3 outWorldPosition;
@@ -28,9 +30,14 @@ layout(push_constant) uniform RenderablePushConstant
     float SortBias;            // Depth bias reserved for transparent layering (unused here).
     int MaterialIndex;         // Material lookup index for extended shading data.
     int Padding0;              // Padding to mirror RenderablePushConstant's std140 layout.
-    int Padding1;              // Padding to keep 16-byte alignment intact.
-    int Padding2;              // Padding reserved for future expansion.
+    int BoneOffset;            // Offset into the global bone palette buffer for this draw.
+    int BoneCount;             // Number of matrices that compose the palette for this mesh.
 } pc;
+
+layout(set = 0, binding = 4) readonly buffer BonePalette
+{
+    mat4 BoneMatrices[];
+} g_Bones;
 
 struct PointLightUniform
 {
@@ -52,13 +59,43 @@ layout(set = 0, binding = 0) uniform GlobalUniformBuffer
 
 void main()
 {
-    vec4 l_WorldPosition = pc.ModelMatrix * vec4(inPosition, 1.0);
+    const int kMaxBoneInfluences = 4;
+
+    mat4 l_SkinMatrix = mat4(1.0);
+    if (pc.BoneCount > 0)
+    {
+        l_SkinMatrix = mat4(0.0);
+        for (int it_Index = 0; it_Index < kMaxBoneInfluences; ++it_Index)
+        {
+            float l_Weight = inBoneWeights[it_Index];
+            if (l_Weight <= 0.0)
+            {
+                continue;
+            }
+
+            int l_BoneIndex = inBoneIndices[it_Index];
+            if (l_BoneIndex < 0 || l_BoneIndex >= pc.BoneCount)
+            {
+                continue;
+            }
+
+            uint l_BufferIndex = uint(pc.BoneOffset + l_BoneIndex);
+            l_SkinMatrix += l_Weight * g_Bones.BoneMatrices[l_BufferIndex];
+        }
+    }
+
+    vec4 l_SkinnedPosition = l_SkinMatrix * vec4(inPosition, 1.0);
+    vec3 l_SkinnedNormal = mat3(l_SkinMatrix) * inNormal;
+    vec3 l_SkinnedTangent = mat3(l_SkinMatrix) * inTangent;
+    vec3 l_SkinnedBitangent = mat3(l_SkinMatrix) * inBitangent;
+
+    vec4 l_WorldPosition = pc.ModelMatrix * l_SkinnedPosition;
     outWorldPosition = l_WorldPosition.xyz;
 
     mat3 l_NormalMatrix = transpose(inverse(mat3(pc.ModelMatrix)));
-    outNormal = normalize(l_NormalMatrix * inNormal);
-    outTangent = normalize(l_NormalMatrix * inTangent);
-    outBitangent = normalize(l_NormalMatrix * inBitangent);
+    outNormal = normalize(l_NormalMatrix * l_SkinnedNormal);
+    outTangent = normalize(l_NormalMatrix * l_SkinnedTangent);
+    outBitangent = normalize(l_NormalMatrix * l_SkinnedBitangent);
 
     vec2 l_TiledTexCoord = (inTexCoord * pc.TextureScale * pc.TilingFactor) + pc.TextureOffset; // Apply atlas transforms up front.
     outTexCoord = l_TiledTexCoord;

@@ -473,7 +473,24 @@ namespace Trident
         l_SkyboxSamplerBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
         l_SkyboxSamplerBinding.pImmutableSamplers = nullptr;
 
-        std::array<VkDescriptorSetLayoutBinding, 4> l_Bindings{ l_GlobalLayoutBinding, l_MaterialLayoutBinding, l_SamplerLayoutBinding, l_SkyboxSamplerBinding };
+        VkDescriptorSetLayoutBinding l_BonePaletteBinding{};
+        l_BonePaletteBinding.binding = 4;
+        l_BonePaletteBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        l_BonePaletteBinding.descriptorCount = 1;
+        l_BonePaletteBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+        l_BonePaletteBinding.pImmutableSamplers = nullptr;
+
+        // Descriptor layout summary (set = 0):
+        // 0 -> Global scene uniform buffer, 1 -> Material table, 2 -> Material textures, 3 -> Skybox cubemap,
+        // 4 -> Bone palette storage buffer. Future optimisation passes can extend this without reshuffling existing slots.
+        std::array<VkDescriptorSetLayoutBinding, 5> l_Bindings
+        {
+            l_GlobalLayoutBinding,
+            l_MaterialLayoutBinding,
+            l_SamplerLayoutBinding,
+            l_SkyboxSamplerBinding,
+            l_BonePaletteBinding
+        };
 
         VkDescriptorSetLayoutCreateInfo l_LayoutInfo{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
         l_LayoutInfo.bindingCount = static_cast<uint32_t>(l_Bindings.size());
