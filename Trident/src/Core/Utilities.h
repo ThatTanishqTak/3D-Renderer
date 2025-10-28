@@ -194,7 +194,7 @@ void operator delete(void* ptr) noexcept;
 void* operator new[](std::size_t size);
 void operator delete[](void* ptr) noexcept;
 
-#ifndef _DEBUG
+#ifdef _DEBUG
 // Core log macros
 #define TR_CORE_TRACE(...) ::Trident::Utilities::Log::GetCoreLogger()->trace(__VA_ARGS__)
 #define TR_CORE_INFO(...) ::Trident::Utilities::Log::GetCoreLogger()->info(__VA_ARGS__)

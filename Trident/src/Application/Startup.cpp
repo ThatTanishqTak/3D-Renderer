@@ -36,15 +36,6 @@ namespace Trident
 
     void Startup::Initialize()
     {
-        TR_CORE_INFO("-------INITIALIZING PHYSX-------");
-
-#ifdef _DEBUG
-        bool l_EnablePvd = true;
-#else
-        bool l_EnablePvd = false;
-#endif
-        m_PhysicsEngine.Initialize(l_EnablePvd);
-
         TR_CORE_INFO("-------INITIALIZING VULKAN-------");
 
         CreateInstance();
@@ -96,9 +87,6 @@ namespace Trident
         }
 
         TR_CORE_TRACE("Vulkan Shutdown Complete");
-
-        TR_CORE_TRACE("Shutting down PhysX");
-        m_PhysicsEngine.Shutdown();
     }
 
     //------------------------------------------------------------------------------------------------------------------------------------------------------//

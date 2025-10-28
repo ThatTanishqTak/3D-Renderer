@@ -2,7 +2,6 @@
 
 #include "Vulkan/Vulkan.h"
 #include "Renderer/Renderer.h"
-#include "Physics/PhysicsEngine.h"
 #include "ECS/Registry.h"
 
 #include <optional>
@@ -41,7 +40,6 @@ namespace Trident
             // Expose a safe pointer for callers that may run before the singleton has finished constructing.
             return s_Instance ? &s_Instance->m_Renderer : nullptr;
         }
-        static Physics::PhysicsEngine& GetPhysicsEngine() { return Get().m_PhysicsEngine; }
         static ECS::Registry& GetRegistry() { return Get().m_Registry; }
         static bool HasInstance() { return s_Instance != nullptr; }
 
@@ -65,7 +63,6 @@ namespace Trident
         // Window wrapper while still giving Startup long-term access.
         Window& m_Window;
         Renderer m_Renderer;
-        Physics::PhysicsEngine m_PhysicsEngine;
         ECS::Registry m_Registry;
 
         VkInstance m_Instance = VK_NULL_HANDLE;
