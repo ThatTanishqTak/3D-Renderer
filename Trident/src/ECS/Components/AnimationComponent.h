@@ -2,6 +2,8 @@
 
 #include <glm/mat4x4.hpp>
 
+#include <cstddef>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -36,5 +38,30 @@ namespace Trident
         bool m_IsPlaying{ true };
         /// Cached pose matrices representing the final transform of each skeleton bone.
         std::vector<glm::mat4> m_BoneMatrices{};
+
+        /// Cached handle resolving the skeleton asset through the AnimationAssetService.
+        size_t m_SkeletonAssetHandle{ std::numeric_limits<size_t>::max() };
+        /// Cached handle resolving the animation library through the AnimationAssetService.
+        size_t m_AnimationAssetHandle{ std::numeric_limits<size_t>::max() };
+        /// Cached index pointing at the resolved clip inside the active animation library.
+        size_t m_CurrentClipIndex{ std::numeric_limits<size_t>::max() };
+
+        /// Hash of the last skeleton identifier used to determine whether the cache must refresh.
+        size_t m_SkeletonAssetHash{ 0 };
+        /// Hash of the last animation identifier used to determine whether the cache must refresh.
+        size_t m_AnimationAssetHash{ 0 };
+        /// Hash of the last clip identifier used to determine whether the cache must refresh.
+        size_t m_CurrentClipHash{ 0 };
+
+        /// @brief Reset cached handles forcing the system to refresh on the next update.
+        void InvalidateCachedAssets()
+        {
+            m_SkeletonAssetHandle = std::numeric_limits<size_t>::max();
+            m_AnimationAssetHandle = std::numeric_limits<size_t>::max();
+            m_CurrentClipIndex = std::numeric_limits<size_t>::max();
+            m_SkeletonAssetHash = 0;
+            m_AnimationAssetHash = 0;
+            m_CurrentClipHash = 0;
+        }
     };
 }
