@@ -10,6 +10,7 @@
 #include "ECS/Components/ScriptComponent.h"
 #include "ECS/Components/TextureComponent.h"
 #include "ECS/Components/AnimationComponent.h"
+#include "Animation/AnimationAssetService.h"
 
 #include <fstream>
 #include <sstream>
@@ -120,10 +121,27 @@ namespace Trident
         m_RuntimeRegistry->CopyFrom(GetEditorRegistry());
         m_Registry = m_RuntimeRegistry.get();
 
-        m_IsPlaying = true;
-
         ECS::Registry& l_RuntimeRegistry = GetActiveRegistry();
+        Animation::AnimationAssetService& l_AnimationService = Animation::AnimationAssetService::Get();
         const std::vector<ECS::Entity>& l_Entities = l_RuntimeRegistry.GetEntities();
+        for (ECS::Entity it_Entity : l_Entities)
+        {
+            if (!l_RuntimeRegistry.HasComponent<AnimationComponent>(it_Entity))
+            {
+                continue;
+            }
+
+            AnimationComponent& l_Animation = l_RuntimeRegistry.GetComponent<AnimationComponent>(it_Entity);
+            l_Animation.m_CurrentTime = 0.0f;
+            l_Animation.m_IsPlaying = true;
+            l_Animation.InvalidateCachedAssets();
+
+            // Resolve the cloned component's runtime handles and upload an initial pose for the renderer.
+            ECS::AnimationSystem::RefreshCachedHandles(l_Animation, l_AnimationService);
+            ECS::AnimationSystem::InitialisePose(l_Animation);
+        }
+
+        m_IsPlaying = true;
         for (ECS::Entity it_Entity : l_Entities)
         {
             if (l_RuntimeRegistry.HasComponent<ScriptComponent>(it_Entity))

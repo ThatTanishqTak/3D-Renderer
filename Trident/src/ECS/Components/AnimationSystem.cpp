@@ -136,52 +136,60 @@ namespace Trident
                 return glm::normalize(keys.back().m_Value);
             }
 
-            /// @brief Ensure component cached handles are refreshed when authored identifiers change.
-            void UpdateCachedHandles(AnimationComponent& component, Animation::AnimationAssetService& service)
+        }
+
+        void AnimationSystem::RefreshCachedHandles(AnimationComponent& component, Animation::AnimationAssetService& service)
+        {
+            std::hash<std::string> l_Hasher{};
+
+            const bool l_HasSkeletonId = !component.m_SkeletonAssetId.empty();
+            const size_t l_SkeletonHash = l_HasSkeletonId ? l_Hasher(component.m_SkeletonAssetId) : 0;
+            if (!l_HasSkeletonId)
             {
-                std::hash<std::string> l_Hasher{};
-
-                const bool l_HasSkeletonId = !component.m_SkeletonAssetId.empty();
-                const size_t l_SkeletonHash = l_HasSkeletonId ? l_Hasher(component.m_SkeletonAssetId) : 0;
-                if (!l_HasSkeletonId)
-                {
-                    component.m_SkeletonAssetHandle = Animation::AnimationAssetService::s_InvalidHandle;
-                    component.m_SkeletonAssetHash = 0;
-                }
-                else if (component.m_SkeletonAssetHandle == Animation::AnimationAssetService::s_InvalidHandle || l_SkeletonHash != component.m_SkeletonAssetHash)
-                {
-                    component.m_SkeletonAssetHash = l_SkeletonHash;
-                    component.m_SkeletonAssetHandle = service.AcquireSkeleton(component.m_SkeletonAssetId);
-                }
-
-                const bool l_HasAnimationId = !component.m_AnimationAssetId.empty();
-                const size_t l_AnimationHash = l_HasAnimationId ? l_Hasher(component.m_AnimationAssetId) : 0;
-                if (!l_HasAnimationId)
-                {
-                    component.m_AnimationAssetHandle = Animation::AnimationAssetService::s_InvalidHandle;
-                    component.m_AnimationAssetHash = 0;
-                    component.m_CurrentClipIndex = Animation::AnimationAssetService::s_InvalidHandle;
-                }
-                else if (component.m_AnimationAssetHandle == Animation::AnimationAssetService::s_InvalidHandle || l_AnimationHash != component.m_AnimationAssetHash)
-                {
-                    component.m_AnimationAssetHash = l_AnimationHash;
-                    component.m_AnimationAssetHandle = service.AcquireAnimationLibrary(component.m_AnimationAssetId);
-                    component.m_CurrentClipIndex = Animation::AnimationAssetService::s_InvalidHandle;
-                }
-
-                const bool l_HasClipName = !component.m_CurrentClip.empty();
-                const size_t l_ClipHash = l_HasClipName ? l_Hasher(component.m_CurrentClip) : 0;
-                if (!l_HasClipName || component.m_AnimationAssetHandle == Animation::AnimationAssetService::s_InvalidHandle)
-                {
-                    component.m_CurrentClipIndex = Animation::AnimationAssetService::s_InvalidHandle;
-                    component.m_CurrentClipHash = 0;
-                }
-                else if (l_ClipHash != component.m_CurrentClipHash)
-                {
-                    component.m_CurrentClipHash = l_ClipHash;
-                    component.m_CurrentClipIndex = service.ResolveClipIndex(component.m_AnimationAssetHandle, component.m_CurrentClip);
-                }
+                component.m_SkeletonAssetHandle = Animation::AnimationAssetService::s_InvalidHandle;
+                component.m_SkeletonAssetHash = 0;
             }
+            else if (component.m_SkeletonAssetHandle == Animation::AnimationAssetService::s_InvalidHandle || l_SkeletonHash != component.m_SkeletonAssetHash)
+            {
+                component.m_SkeletonAssetHash = l_SkeletonHash;
+                component.m_SkeletonAssetHandle = service.AcquireSkeleton(component.m_SkeletonAssetId);
+            }
+
+            const bool l_HasAnimationId = !component.m_AnimationAssetId.empty();
+            const size_t l_AnimationHash = l_HasAnimationId ? l_Hasher(component.m_AnimationAssetId) : 0;
+            if (!l_HasAnimationId)
+            {
+                component.m_AnimationAssetHandle = Animation::AnimationAssetService::s_InvalidHandle;
+                component.m_AnimationAssetHash = 0;
+                component.m_CurrentClipIndex = Animation::AnimationAssetService::s_InvalidHandle;
+            }
+            else if (component.m_AnimationAssetHandle == Animation::AnimationAssetService::s_InvalidHandle || l_AnimationHash != component.m_AnimationAssetHash)
+            {
+                component.m_AnimationAssetHash = l_AnimationHash;
+                component.m_AnimationAssetHandle = service.AcquireAnimationLibrary(component.m_AnimationAssetId);
+                component.m_CurrentClipIndex = Animation::AnimationAssetService::s_InvalidHandle;
+            }
+
+            const bool l_HasClipName = !component.m_CurrentClip.empty();
+            const size_t l_ClipHash = l_HasClipName ? l_Hasher(component.m_CurrentClip) : 0;
+            if (!l_HasClipName || component.m_AnimationAssetHandle == Animation::AnimationAssetService::s_InvalidHandle)
+            {
+                component.m_CurrentClipIndex = Animation::AnimationAssetService::s_InvalidHandle;
+                component.m_CurrentClipHash = 0;
+            }
+            else if (l_ClipHash != component.m_CurrentClipHash)
+            {
+                component.m_CurrentClipHash = l_ClipHash;
+                component.m_CurrentClipIndex = service.ResolveClipIndex(component.m_AnimationAssetHandle, component.m_CurrentClip);
+            }
+        }
+
+        void AnimationSystem::InitialisePose(AnimationComponent& component)
+        {
+            // The helper primes the pose cache before the first runtime tick. Future animation blending
+            // or state-machine logic can extend this entry point to layer multiple clips or active states.
+            component.m_BoneMatrices.clear();
+            SampleClipPose(component, 0.0f, component.m_BoneMatrices);
         }
 
         void AnimationSystem::Update(Registry& registry, float deltaTime)
@@ -213,7 +221,7 @@ namespace Trident
             }
 
             Animation::AnimationAssetService& l_AssetService = Animation::AnimationAssetService::Get();
-            UpdateCachedHandles(l_Component, l_AssetService);
+            AnimationSystem::RefreshCachedHandles(l_Component, l_AssetService);
 
             const float l_ScaledDeltaTime = deltaTime * l_Component.m_PlaybackSpeed;
             l_Component.m_CurrentTime += l_ScaledDeltaTime;

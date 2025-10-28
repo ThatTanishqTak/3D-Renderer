@@ -11,6 +11,11 @@
 
 namespace Trident
 {
+    namespace Animation
+    {
+        class AnimationAssetService;
+    }
+
     namespace ECS
     {
         class AnimationSystem final : public System
@@ -18,6 +23,9 @@ namespace Trident
         public:
             AnimationSystem() = default;
             void Update(Registry& registry, float deltaTime) override;
+
+            static void RefreshCachedHandles(AnimationComponent& component, Animation::AnimationAssetService& service);
+            static void InitialisePose(AnimationComponent& component);
 
         private:
             void UpdateComponent(Registry& registry, Entity entity, float deltaTime);
