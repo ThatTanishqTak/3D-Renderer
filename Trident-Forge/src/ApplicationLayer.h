@@ -13,6 +13,7 @@
 #include "Panels/GizmoState.h"
 #include "Panels/ConsolePanel.h"
 #include "ECS/Scene.h"
+#include "Animation/AnimationData.h"
 
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
@@ -20,6 +21,7 @@
 #include <string>
 #include <vector>
 #include <memory>
+#include <unordered_map>
 
 class ApplicationLayer : public Trident::Layer
 {
@@ -120,4 +122,6 @@ private:
     float m_MaxMoveSpeed = 50.0f;
 
     Trident::ECS::Entity m_BoundRuntimeCameraEntity = std::numeric_limits<Trident::ECS::Entity>::max(); ///< Tracks the last entity routed into the runtime viewport.
+    std::unordered_map<std::string, Trident::Animation::Skeleton> m_ImportedSkeletonAssets; ///< Retains skeletons keyed by their normalized asset path for future animation lookups.
+    std::unordered_map<std::string, std::vector<Trident::Animation::AnimationClip>> m_ImportedAnimationLibraries; ///< Stores imported clip libraries alongside their asset identifiers for later runtime use.
 };

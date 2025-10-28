@@ -26,6 +26,8 @@
 #include <glm/gtx/norm.hpp>
 #include <glm/geometric.hpp>
 #include <glm/gtc/quaternion.hpp>
+#include <glm/gtx/matrix_decompose.hpp>
+#include <glm/gtx/quaternion.hpp>
 
 static inline float DegToRad(float deg) { return deg * 0.017453292519943295769f; }
 
@@ -490,9 +492,35 @@ bool ApplicationLayer::ImportDroppedAssets(const std::vector<std::string>& dropp
     bool l_ImportedAny = false;
     std::vector<std::string> l_ImportedTextures{};
 
-    for (const std::string& it_Path : droppedPaths)
+    const auto DecomposeMatrixToTransform = [](const glm::mat4& a_ModelMatrix) -> Trident::Transform
+        {
+            Trident::Transform l_Result{};
+            glm::vec3 l_Scale{ 1.0f };
+            glm::quat l_Rotation{ 1.0f, 0.0f, 0.0f, 0.0f };
+            glm::vec3 l_Translation{ 0.0f };
+            glm::vec3 l_Skew{ 0.0f };
+            glm::vec4 l_Perspective{ 0.0f };
+
+            if (glm::decompose(a_ModelMatrix, l_Scale, l_Rotation, l_Translation, l_Skew, l_Perspective))
+            {
+                l_Rotation = glm::normalize(l_Rotation);
+                l_Result.Position = l_Translation;
+                l_Result.Scale = l_Scale;
+                l_Result.Rotation = glm::degrees(glm::eulerAngles(l_Rotation));
+            }
+            else
+            {
+                // Retain the default transform so failed decompositions do not inject garbage into the scene graph.
+                TR_CORE_WARN("Failed to decompose transform matrix while importing dropped asset");
+            }
+
+            return l_Result;
+        };
+
+    for (const std::string& it_RawPath : droppedPaths)
     {
-        std::filesystem::path l_PathView{ it_Path };
+        std::string l_NormalizedPath = Trident::Utilities::FileManagement::NormalizePath(it_RawPath);
+        std::filesystem::path l_PathView{ l_NormalizedPath };
         std::string l_Extension = l_PathView.extension().string();
         std::transform(l_Extension.begin(), l_Extension.end(), l_Extension.begin(), [](unsigned char character)
             {
@@ -505,11 +533,17 @@ bool ApplicationLayer::ImportDroppedAssets(const std::vector<std::string>& dropp
             continue;
         }
 
-        Trident::Loader::ModelData l_ModelData = Trident::Loader::ModelLoader::Load(it_Path);
-        if (l_ModelData.m_Meshes.empty())
+        Trident::Loader::ModelData l_ModelData = Trident::Loader::ModelLoader::Load(l_NormalizedPath);
+        if (l_ModelData.m_Meshes.empty() && l_ModelData.m_MeshInstances.empty())
         {
             continue;
         }
+
+        // Persist the imported skeleton and clip data so the animation system can resolve them in future updates.
+        Trident::Animation::Skeleton& l_StoredSkeleton = m_ImportedSkeletonAssets[l_NormalizedPath];
+        l_StoredSkeleton = l_ModelData.m_Skeleton;
+        std::vector<Trident::Animation::AnimationClip>& l_StoredClips = m_ImportedAnimationLibraries[l_NormalizedPath];
+        l_StoredClips = l_ModelData.m_AnimationClips;
 
         const int l_TextureOffset = static_cast<int>(l_ImportedTextures.size());
         l_ImportedTextures.reserve(l_ImportedTextures.size() + l_ModelData.m_Textures.size());
@@ -518,6 +552,7 @@ bool ApplicationLayer::ImportDroppedAssets(const std::vector<std::string>& dropp
             l_ImportedTextures.emplace_back(std::move(it_TexturePath));
         }
 
+        const size_t l_MaterialOffset = l_ImportedMaterials.size();
         for (Trident::Geometry::Material& l_Material : l_ModelData.m_Materials)
         {
             if (l_Material.BaseColorTextureIndex >= 0)
@@ -537,31 +572,109 @@ bool ApplicationLayer::ImportDroppedAssets(const std::vector<std::string>& dropp
         const std::string l_BaseName = l_PathView.stem().string();
         const std::string l_TagRoot = l_BaseName.empty() ? std::string("Imported Mesh") : l_BaseName;
 
+        const size_t l_MeshOffset = l_ImportedMeshes.size();
+        std::vector<bool> l_MeshHasSkin(l_ModelData.m_Meshes.size(), false);
         for (size_t it_MeshIndex = 0; it_MeshIndex < l_ModelData.m_Meshes.size(); ++it_MeshIndex)
         {
             Trident::Geometry::Mesh& l_Mesh = l_ModelData.m_Meshes[it_MeshIndex];
 
-            // Preserve the mesh data so the renderer can rebuild GPU buffers after all drops are processed.
-            const size_t l_PreviousMeshCount = l_ImportedMeshes.size();
-            l_ImportedMeshes.emplace_back(std::move(l_Mesh));
-            const size_t l_AssignedMeshIndex = l_InitialMeshCount + l_PreviousMeshCount;
-
-            Trident::ECS::Entity l_NewEntity = l_Registry.CreateEntity();
-            // Default transform keeps the asset centred at the origin with unit l_Scale so artists can position it manually.
-            l_Registry.AddComponent<Trident::Transform>(l_NewEntity, Trident::Transform{});
-
-            Trident::MeshComponent& l_MeshComponent = l_Registry.AddComponent<Trident::MeshComponent>(l_NewEntity);
-            l_MeshComponent.m_MeshIndex = l_AssignedMeshIndex;
-            l_MeshComponent.m_Visible = true;
-
-            Trident::TagComponent& l_TagComponent = l_Registry.AddComponent<Trident::TagComponent>(l_NewEntity);
-            l_TagComponent.m_Tag = l_TagRoot;
-            if (l_ModelData.m_Meshes.size() > 1)
+            if (l_Mesh.MaterialIndex >= 0)
             {
-                l_TagComponent.m_Tag += " (" + std::to_string(it_MeshIndex + 1) + ")";
+                l_Mesh.MaterialIndex += static_cast<int>(l_MaterialOffset);
             }
 
-            l_ImportedAny = true;
+            const bool l_HasBoneWeights = std::any_of(l_Mesh.Vertices.begin(), l_Mesh.Vertices.end(), [](const Vertex& a_Vertex)
+                {
+                    return (a_Vertex.m_BoneWeights.x > 0.0f)
+                        || (a_Vertex.m_BoneWeights.y > 0.0f)
+                        || (a_Vertex.m_BoneWeights.z > 0.0f)
+                        || (a_Vertex.m_BoneWeights.w > 0.0f);
+                });
+            l_MeshHasSkin[it_MeshIndex] = l_HasBoneWeights;
+
+            // Preserve the mesh data so the renderer can rebuild GPU buffers after all drops are processed.
+            l_ImportedMeshes.emplace_back(std::move(l_Mesh));
+        }
+
+        const size_t l_GlobalMeshOffset = l_InitialMeshCount + l_MeshOffset;
+        const size_t l_TotalInstanceCount = !l_ModelData.m_MeshInstances.empty()
+            ? l_ModelData.m_MeshInstances.size()
+            : l_ModelData.m_Meshes.size();
+        size_t l_InstanceCounter = 0;
+
+        const auto SpawnMeshEntity = [&](size_t a_LocalMeshIndex, const glm::mat4& a_ModelMatrix, const std::string& a_NodeName)
+            {
+                if (a_LocalMeshIndex >= l_MeshHasSkin.size())
+                {
+                    // Ignore invalid indices so corrupt assets do not crash the editor.
+                    TR_CORE_WARN("Mesh instance references invalid mesh index {} while importing {}", a_LocalMeshIndex, l_NormalizedPath);
+                    return;
+                }
+
+                const size_t l_GlobalMeshIndex = l_GlobalMeshOffset + a_LocalMeshIndex;
+                if (l_GlobalMeshIndex >= l_InitialMeshCount + l_ImportedMeshes.size())
+                {
+                    TR_CORE_WARN("Mesh instance resolved to out-of-range global index {} while importing {}", l_GlobalMeshIndex, l_NormalizedPath);
+                    return;
+                }
+
+                Trident::ECS::Entity l_NewEntity = l_Registry.CreateEntity();
+
+                // Decompose the baked transform so ECS systems can manipulate TRS values directly.
+                Trident::Transform l_Decomposed = DecomposeMatrixToTransform(a_ModelMatrix);
+                l_Registry.AddComponent<Trident::Transform>(l_NewEntity, l_Decomposed);
+
+                Trident::MeshComponent& l_MeshComponent = l_Registry.AddComponent<Trident::MeshComponent>(l_NewEntity);
+                l_MeshComponent.m_MeshIndex = l_GlobalMeshIndex;
+                l_MeshComponent.m_Visible = true;
+
+                Trident::TagComponent& l_TagComponent = l_Registry.AddComponent<Trident::TagComponent>(l_NewEntity);
+                std::string l_TagValue = l_TagRoot;
+                if (!a_NodeName.empty())
+                {
+                    l_TagValue += " - " + a_NodeName;
+                }
+                if (l_TotalInstanceCount > 1)
+                {
+                    l_TagValue += " (" + std::to_string(l_InstanceCounter + 1) + ")";
+                }
+                l_TagComponent.m_Tag = l_TagValue;
+
+                if (l_MeshHasSkin[a_LocalMeshIndex])
+                {
+                    // Create an animation component so skinned meshes can bind to the imported skeleton on the next update tick.
+                    Trident::AnimationComponent& l_AnimationComponent = l_Registry.AddComponent<Trident::AnimationComponent>(l_NewEntity);
+                    l_AnimationComponent.m_SkeletonAssetId = l_NormalizedPath;
+                    l_AnimationComponent.m_AnimationAssetId = l_NormalizedPath;
+                    if (!l_StoredClips.empty())
+                    {
+                        l_AnimationComponent.m_CurrentClip = l_StoredClips.front().m_Name;
+                    }
+                    l_AnimationComponent.m_BoneMatrices.assign(l_StoredSkeleton.m_Bones.size(), glm::mat4(1.0f));
+                    l_AnimationComponent.m_IsPlaying = true;
+                    l_AnimationComponent.m_IsLooping = true;
+                    // Force cached handles to refresh so the runtime resolves the new skeleton and clip set immediately.
+                    l_AnimationComponent.InvalidateCachedAssets();
+                }
+
+                ++l_InstanceCounter;
+                l_ImportedAny = true;
+            };
+
+        if (!l_ModelData.m_MeshInstances.empty())
+        {
+            for (const Trident::Loader::MeshInstance& l_Instance : l_ModelData.m_MeshInstances)
+            {
+                SpawnMeshEntity(l_Instance.m_MeshIndex, l_Instance.m_ModelMatrix, l_Instance.m_NodeName);
+            }
+        }
+        else
+        {
+            // Fall back to identity transforms so legacy assets without instance data continue to spawn correctly.
+            for (size_t it_MeshIndex = 0; it_MeshIndex < l_ModelData.m_Meshes.size(); ++it_MeshIndex)
+            {
+                SpawnMeshEntity(it_MeshIndex, glm::mat4(1.0f), {});
+            }
         }
 
         // Transfer materials after entities so the renderer can align indices when rebuilding draw buffers.
