@@ -12,6 +12,7 @@
 #include "Panels/InspectorPanel.h"
 #include "Panels/GizmoState.h"
 #include "Panels/ConsolePanel.h"
+#include "Panels/AnimationGraphPanel.h"
 #include "ECS/Scene.h"
 #include "Animation/AnimationData.h"
 
@@ -79,6 +80,7 @@ private:
     SceneHierarchyPanel m_SceneHierarchyPanel;
     InspectorPanel m_InspectorPanel;
     ConsolePanel m_ConsolePanel;
+    AnimationGraphPanel m_AnimationGraphPanel;
 
     std::unique_ptr<Trident::Scene> m_ActiveScene;   ///< Owns the scene bridge responsible for play/edit registry swaps.
 
