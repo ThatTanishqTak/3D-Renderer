@@ -126,7 +126,12 @@ namespace Trident
 
             std::string l_BaseDirectory = Utilities::FileManagement::GetBaseDirectory(l_NormalizedPath);
             std::unordered_map<std::string, int> l_TextureLookup{};
+            std::unordered_map<const aiMesh*, size_t> l_MeshCache{}; // Tracks converted meshes to avoid duplicating geometry buffers
             Animation::Skeleton& l_Skeleton = l_ModelData.m_Skeleton;
+
+            // Reserve mesh storage up front so instancing can reference stable indices created during traversal.
+            l_ModelData.m_Meshes.reserve(l_Scene->mNumMeshes);
+            l_ModelData.m_MeshInstances.reserve(l_Scene->mNumMeshes);
 
             const std::function<int(const std::string&, const aiNode*, const glm::mat4&, bool)> l_AcquireBoneIndex =
                 [&](const std::string& sourceName, const aiNode* assimpNode, const glm::mat4& inverseBindMatrix, bool updateInverseBind) -> int
@@ -507,40 +512,63 @@ namespace Trident
                     return l_Mesh;
                 };
 
-            const std::function<void(const aiNode*)> ProcessNode =
-                [&](const aiNode* a_Node)
-                {
-                    if (!a_Node)
+                const std::function<void(const aiNode*, const glm::mat4&)> ProcessNode =
+                    [&](const aiNode* a_Node, const glm::mat4& a_ParentTransform)
                     {
-                        return;
-                    }
-
-                    // Convert meshes referenced by the current node.
-                    for (unsigned int it_Mesh = 0; it_Mesh < a_Node->mNumMeshes; ++it_Mesh)
-                    {
-                        const unsigned int l_MeshIndex = a_Node->mMeshes[it_Mesh];
-                        if (l_MeshIndex >= l_Scene->mNumMeshes)
+                        if (!a_Node)
                         {
-                            TR_CORE_WARN("Node references invalid mesh index {}", l_MeshIndex);
-                            continue;
+                            return;
                         }
 
-                        const aiMesh* l_AssimpMesh = l_Scene->mMeshes[l_MeshIndex];
-                        Geometry::Mesh l_GeometryMesh = ConvertMesh(l_AssimpMesh);
-                        if (!l_GeometryMesh.Vertices.empty())
+                        // Compose the world transform by chaining the parent's matrix with the node's local transform.
+                        const glm::mat4 l_LocalTransform = ConvertMatrix(a_Node->mTransformation);
+                        const glm::mat4 l_WorldTransform = a_ParentTransform * l_LocalTransform;
+
+                        // Convert meshes referenced by the current node while caching shared geometry.
+                        for (unsigned int it_Mesh = 0; it_Mesh < a_Node->mNumMeshes; ++it_Mesh)
                         {
-                            l_ModelData.m_Meshes.push_back(std::move(l_GeometryMesh));
+                            const unsigned int l_AssimpMeshIndex = a_Node->mMeshes[it_Mesh];
+                            if (l_AssimpMeshIndex >= l_Scene->mNumMeshes)
+                            {
+                                TR_CORE_WARN("Node '{}' references out-of-range mesh index {}", a_Node->mName.C_Str(), l_AssimpMeshIndex);
+                                continue;
+                            }
+
+                            const aiMesh* l_AssimpMesh = l_Scene->mMeshes[l_AssimpMeshIndex];
+                            if (!l_AssimpMesh)
+                            {
+                                continue;
+                            }
+
+                            size_t l_ModelMeshIndex = std::numeric_limits<size_t>::max();
+                            auto a_CachedMesh = l_MeshCache.find(l_AssimpMesh);
+                            if (a_CachedMesh == l_MeshCache.end())
+                            {
+                                Geometry::Mesh l_ConvertedMesh = ConvertMesh(l_AssimpMesh);
+                                l_ModelMeshIndex = l_ModelData.m_Meshes.size();
+                                l_ModelData.m_Meshes.push_back(std::move(l_ConvertedMesh));
+                                l_MeshCache.emplace(l_AssimpMesh, l_ModelMeshIndex);
+                            }
+                            else
+                            {
+                                l_ModelMeshIndex = a_CachedMesh->second;
+                            }
+
+                            MeshInstance l_Instance{};
+                            l_Instance.m_MeshIndex = l_ModelMeshIndex;
+                            l_Instance.m_ModelMatrix = l_WorldTransform;
+                            l_Instance.m_NodeName = a_Node->mName.C_Str();
+                            l_ModelData.m_MeshInstances.push_back(std::move(l_Instance));
                         }
-                    }
 
                     // Recurse through children to cover the full scene graph.
                     for (unsigned int it_Child = 0; it_Child < a_Node->mNumChildren; ++it_Child)
                     {
-                        ProcessNode(a_Node->mChildren[it_Child]);
+                        ProcessNode(a_Node->mChildren[it_Child], l_WorldTransform);
                     }
                 };
 
-            ProcessNode(l_Scene->mRootNode);
+            ProcessNode(l_Scene->mRootNode, glm::mat4(1.0f));
 
             if (l_Scene->mNumAnimations > 0)
             {
