@@ -145,6 +145,9 @@ void ApplicationLayer::Update()
     // Update the editor camera first so viewport interactions read the freshest position/rotation values for this frame.
     UpdateEditorCamera(Trident::Utilities::Time::GetDeltaTime());
 
+    // Process global shortcuts after the camera update so input state is ready for high-level actions like save/load.
+    HandleGlobalShortcuts();
+
     m_ViewportPanel.Update();
     // Keep the runtime viewport state aligned with the editor viewport so shared handlers see up-to-date focus/hover data.
     RefreshRuntimeCameraBinding();
@@ -172,7 +175,9 @@ void ApplicationLayer::Update()
 
 void ApplicationLayer::Render()
 {
+    RenderMainMenuBar();
     RenderSceneToolbar();
+    HandleSceneFileDialogs();
 
     // The editor viewport always renders with the editor camera so gizmos and transform tools remain deterministic.
     m_ViewportPanel.Render();
@@ -186,6 +191,53 @@ void ApplicationLayer::Render()
     m_ConsolePanel.Render();
 }
 
+void ApplicationLayer::RenderMainMenuBar()
+{
+    if (!ImGui::BeginMainMenuBar())
+    {
+        return;
+    }
+
+    const bool l_HasScene = m_ActiveScene != nullptr;
+
+    if (ImGui::BeginMenu("File"))
+    {
+        // Persist the current scene when possible, otherwise fall back to Save As so the user can provide a path.
+        if (ImGui::MenuItem("Save", "Ctrl+S", false, l_HasScene))
+        {
+            if (!m_CurrentScenePath.empty())
+            {
+                SaveScene(m_CurrentScenePath);
+            }
+            else
+            {
+                m_OpenSaveSceneAsPopup = true;
+            }
+        }
+
+        if (ImGui::MenuItem("Save As...", "Ctrl+Shift+S", false, l_HasScene))
+        {
+            m_OpenSaveSceneAsPopup = true;
+        }
+
+        if (ImGui::MenuItem("Open...", "Ctrl+O", false, l_HasScene))
+        {
+            m_OpenLoadScenePopup = true;
+        }
+
+        ImGui::Separator();
+
+        if (ImGui::MenuItem("Exit", "Ctrl+Q"))
+        {
+            RequestApplicationExit();
+        }
+
+        ImGui::EndMenu();
+    }
+
+    ImGui::EndMainMenuBar();
+}
+
 void ApplicationLayer::RenderSceneToolbar()
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f, 4.0f));
@@ -195,72 +247,15 @@ void ApplicationLayer::RenderSceneToolbar()
         const bool l_HasScene = m_ActiveScene != nullptr;
         const bool l_IsPlaying = l_HasScene && m_ActiveScene->IsPlaying();
 
-        // Scene file management controls remain grouped near the play controls for quick iteration.
-        ImGui::BeginDisabled(!l_HasScene);
-        if (ImGui::Button("Save"))
-        {
-            // Persist to the existing path when available, otherwise prompt the user to choose a destination.
-            if (!m_CurrentScenePath.empty())
-            {
-                SaveScene(m_CurrentScenePath);
-            }
-            else
-            {
-                ImGui::OpenPopup("Save Scene As");
-            }
-        }
-        if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNone))
-        {
-            const char* l_SaveTooltip = m_CurrentScenePath.empty() ? "Choose a location with Save As before saving." : "Write the current scene to disk.";
-            ImGui::SetTooltip("%s", l_SaveTooltip);
-        }
-
-        ImGui::SameLine();
-        if (ImGui::Button("Save As"))
-        {
-            // Always prompt for a destination when the user explicitly chooses Save As.
-            ImGui::OpenPopup("Save Scene As");
-        }
-        if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNone))
-        {
-            ImGui::SetTooltip("Select a destination and name for this scene.");
-        }
-
-        ImGui::SameLine();
-        if (ImGui::Button("Load"))
-        {
-            // Loading always prompts before overwriting the current scene contents.
-            ImGui::OpenPopup("Load Scene");
-        }
-        if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNone))
-        {
-            ImGui::SetTooltip("Load a scene from disk and replace the current editor contents.");
-        }
-        ImGui::EndDisabled();
-
-        // Surface the last scene I/O status so artists receive immediate feedback.
+        // Surface the last scene I/O status so artists receive immediate feedback near the transport controls.
         if (!m_SceneIoTooltip.empty())
         {
-            ImGui::SameLine();
             const ImVec4 l_Color = m_LastSceneIoFailed ? ImVec4(0.85f, 0.35f, 0.35f, 1.0f) : ImVec4(0.35f, 0.85f, 0.45f, 1.0f);
             ImGui::TextColored(l_Color, m_LastSceneIoFailed ? "Scene IO Error" : "Scene IO");
             if (ImGui::IsItemHovered())
             {
                 ImGui::SetTooltip("%s", m_SceneIoTooltip.c_str());
             }
-        }
-
-        // Handle modal file dialogs after the buttons so they remain active while the popups are open.
-        std::string l_SavePath = m_CurrentScenePath.empty() ? std::string{} : m_CurrentScenePath.string();
-        if (Trident::UI::FileDialog::Save("Save Scene As", l_SavePath, ".trident"))
-        {
-            SaveScene(l_SavePath);
-        }
-
-        std::string l_LoadPath = m_CurrentScenePath.empty() ? std::string{} : m_CurrentScenePath.string();
-        if (Trident::UI::FileDialog::Open("Load Scene", l_LoadPath, ".trident"))
-        {
-            LoadScene(l_LoadPath);
         }
 
         ImGui::Separator();
@@ -354,6 +349,88 @@ void ApplicationLayer::RenderSceneToolbar()
     }
     ImGui::End();
     ImGui::PopStyleVar();
+}
+
+void ApplicationLayer::HandleGlobalShortcuts()
+{
+    if (ImGui::GetCurrentContext() == nullptr)
+    {
+        return;
+    }
+
+    ImGuiIO& l_ImGuiIO = ImGui::GetIO();
+    if (l_ImGuiIO.WantCaptureKeyboard)
+    {
+        // Respect ImGui's capture so typing into text fields does not accidentally trigger global actions.
+        return;
+    }
+
+    Trident::Input& l_Input = Trident::Input::Get();
+    const bool l_ControlDown = l_Input.IsKeyDown(Trident::Key::LeftControl) || l_Input.IsKeyDown(Trident::Key::RightControl);
+    if (!l_ControlDown)
+    {
+        return;
+    }
+
+    const bool l_ShiftDown = l_Input.IsKeyDown(Trident::Key::LeftShift) || l_Input.IsKeyDown(Trident::Key::RightShift);
+    const bool l_HasScene = m_ActiveScene != nullptr;
+
+    if (l_HasScene && l_Input.IsKeyPressed(Trident::Key::S))
+    {
+        if (l_ShiftDown || m_CurrentScenePath.empty())
+        {
+            m_OpenSaveSceneAsPopup = true;
+        }
+        else
+        {
+            SaveScene(m_CurrentScenePath);
+        }
+    }
+
+    if (l_HasScene && l_Input.IsKeyPressed(Trident::Key::O))
+    {
+        m_OpenLoadScenePopup = true;
+    }
+
+    if (l_Input.IsKeyPressed(Trident::Key::Q))
+    {
+        RequestApplicationExit();
+    }
+}
+
+void ApplicationLayer::HandleSceneFileDialogs()
+{
+    if (m_OpenSaveSceneAsPopup)
+    {
+        ImGui::OpenPopup("Save Scene As");
+        m_OpenSaveSceneAsPopup = false;
+    }
+
+    if (m_OpenLoadScenePopup)
+    {
+        ImGui::OpenPopup("Load Scene");
+        m_OpenLoadScenePopup = false;
+    }
+
+    std::string l_SavePath = m_CurrentScenePath.empty() ? std::string{} : m_CurrentScenePath.string();
+    if (Trident::UI::FileDialog::Save("Save Scene As", l_SavePath, ".trident"))
+    {
+        SaveScene(l_SavePath);
+    }
+
+    std::string l_LoadPath = m_CurrentScenePath.empty() ? std::string{} : m_CurrentScenePath.string();
+    if (Trident::UI::FileDialog::Open("Load Scene", l_LoadPath, ".trident"))
+    {
+        LoadScene(l_LoadPath);
+    }
+}
+
+void ApplicationLayer::RequestApplicationExit()
+{
+    if (!Trident::Startup::HasInstance())
+    {
+        return;
+    }
 }
 
 bool ApplicationLayer::SaveScene(const std::filesystem::path& path)

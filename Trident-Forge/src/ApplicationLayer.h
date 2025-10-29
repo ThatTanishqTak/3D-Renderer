@@ -63,7 +63,11 @@ private:
 
     void UpdateEditorCamera(float deltaTime);
     void RefreshRuntimeCameraBinding();
+    void RenderMainMenuBar();
     void RenderSceneToolbar();
+    void HandleGlobalShortcuts();
+    void HandleSceneFileDialogs();
+    void RequestApplicationExit();
 
     // Scene management helpers
     bool SaveScene(const std::filesystem::path& path);
@@ -135,4 +139,6 @@ private:
     std::filesystem::path m_CurrentScenePath; ///< Tracks the most recent location used to save or load the active scene.
     std::string m_SceneIoTooltip; ///< Holds the most recent scene I/O status message for display in the toolbar.
     bool m_LastSceneIoFailed = false; ///< Flags whether the last scene I/O operation reported a failure so the UI can highlight it.
+    bool m_OpenSaveSceneAsPopup = false; ///< Requests the save-as dialog to open on the next render tick.
+    bool m_OpenLoadScenePopup = false; ///< Requests the load dialog to open on the next render tick.
 };
