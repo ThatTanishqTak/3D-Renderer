@@ -23,3 +23,6 @@
 [submodule "Trident/vendor/tinyexr"]
 	path = Trident/vendor/tinyexr
 	url = https://github.com/syoyo/tinyexr.git
+[submodule "Trident/vendor/nanosvg"]
+	path = Trident/vendor/nanosvg
+	url = https://github.com/ThatTanishqTak/nanosvg.git

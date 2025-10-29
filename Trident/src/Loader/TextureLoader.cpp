@@ -6,10 +6,15 @@
 #define TINYEXR_USE_OPENMP 0
 #define TINYEXR_IMPLEMENTATION
 #include <tinyexr.h>
+#define NANOSVG_IMPLEMENTATION
+#include <nanosvg.h>
+#define NANOSVGRAST_IMPLEMENTATION
+#include <nanosvgrast.h>
 
 #include <algorithm>
 #include <array>
 #include <bit>
+#include <cmath>
 #include <cctype>
 #include <cstdint>
 #include <cstring>
@@ -36,6 +41,87 @@ namespace
         }
     };
     constexpr std::array<std::string_view, 6> s_FaceFriendlyNames{ "+X", "-X", "+Y", "-Y", "+Z", "-Z" };
+
+    void FlipImageVertically(std::vector<uint8_t>& pixels, int width, int height, int channels)
+    {
+        if (pixels.empty() || width <= 0 || height <= 0 || channels <= 0)
+        {
+            return;
+        }
+
+        const size_t l_RowSize = static_cast<size_t>(width) * static_cast<size_t>(channels);
+        std::vector<uint8_t> l_Scratch(l_RowSize);
+        for (int it_Y = 0; it_Y < height / 2; ++it_Y)
+        {
+            uint8_t* l_RowTop = pixels.data() + static_cast<size_t>(it_Y) * l_RowSize;
+            uint8_t* l_RowBottom = pixels.data() + static_cast<size_t>(height - 1 - it_Y) * l_RowSize;
+
+            std::memcpy(l_Scratch.data(), l_RowTop, l_RowSize);
+            std::memcpy(l_RowTop, l_RowBottom, l_RowSize);
+            std::memcpy(l_RowBottom, l_Scratch.data(), l_RowSize);
+        }
+    }
+
+    bool RasterizeSvgToRgba(const std::string& filePath, int& outWidth, int& outHeight, std::vector<uint8_t>& outPixels)
+    {
+        NSVGimage* l_Image = nsvgParseFromFile(filePath.c_str(), "px", 96.0f);
+        if (!l_Image)
+        {
+            TR_CORE_ERROR("Failed to parse SVG file: {}", filePath);
+            return false;
+        }
+
+        // Query the intended output size. We fall back to the viewbox bounds when explicit width/height are missing.
+        float l_TargetWidth = l_Image->width;
+        float l_TargetHeight = l_Image->height;
+        const float l_ViewBoxWidth = l_Image->shapes->bounds[2] - l_Image->shapes->bounds[0];
+        const float l_ViewBoxHeight = l_Image->shapes->bounds[3] - l_Image->shapes->bounds[1];
+
+        if (l_TargetWidth <= 0.0f)
+        {
+            l_TargetWidth = l_ViewBoxWidth;
+        }
+
+        if (l_TargetHeight <= 0.0f)
+        {
+            l_TargetHeight = l_ViewBoxHeight;
+        }
+
+        if (l_TargetWidth <= 0.0f || l_TargetHeight <= 0.0f)
+        {
+            TR_CORE_ERROR("SVG '{}' does not declare a valid size", filePath);
+            nsvgDelete(l_Image);
+            return false;
+        }
+
+        const int l_Width = std::max(1, static_cast<int>(std::ceil(l_TargetWidth)));
+        const int l_Height = std::max(1, static_cast<int>(std::ceil(l_TargetHeight)));
+
+        NSVGrasterizer* l_Rasterizer = nsvgCreateRasterizer();
+        if (!l_Rasterizer)
+        {
+            TR_CORE_ERROR("Failed to create SVG rasterizer for '{}'", filePath);
+            nsvgDelete(l_Image);
+            return false;
+        }
+
+        std::vector<uint8_t> l_PixelBuffer(static_cast<size_t>(l_Width) * static_cast<size_t>(l_Height) * 4u, 0u);
+        const float l_ScaleX = static_cast<float>(l_Width) / l_TargetWidth;
+        const float l_ScaleY = static_cast<float>(l_Height) / l_TargetHeight;
+        const float l_Scale = std::min(l_ScaleX, l_ScaleY);
+
+        // Rasterize directly into the RGBA buffer that mirrors stb_image's output layout.
+        nsvgRasterize(l_Rasterizer, l_Image, 0.0f, 0.0f, l_Scale, l_PixelBuffer.data(), l_Width, l_Height, l_Width * 4);
+
+        nsvgDeleteRasterizer(l_Rasterizer);
+        nsvgDelete(l_Image);
+
+        outWidth = l_Width;
+        outHeight = l_Height;
+        outPixels = std::move(l_PixelBuffer);
+
+        return true;
+    }
 
     size_t AlignToDword(size_t value)
     {
@@ -182,6 +268,24 @@ namespace Trident
         {
             TextureData l_Texture{};
             std::string l_PathUtf8 = Utilities::FileManagement::NormalizePath(filePath);
+
+            std::filesystem::path l_Path = std::filesystem::u8path(l_PathUtf8);
+            std::string l_ExtensionLower = ToLowerCopy(l_Path.extension().string());
+
+            if (l_ExtensionLower == ".svg")
+            {
+                // Vector icons must be rasterized before the renderer can upload them to a GPU texture.
+                if (!RasterizeSvgToRgba(l_PathUtf8, l_Texture.Width, l_Texture.Height, l_Texture.Pixels))
+                {
+                    TR_CORE_CRITICAL("Failed to rasterize SVG texture: {}", filePath);
+                    return l_Texture;
+                }
+
+                l_Texture.Channels = 4;
+                FlipImageVertically(l_Texture.Pixels, l_Texture.Width, l_Texture.Height, l_Texture.Channels);
+
+                return l_Texture;
+            }
 
             stbi_set_flip_vertically_on_load(true);
             // When compiling with MSVC in C++20 mode, stbi_load requires a const char* instead of const char8_t*,

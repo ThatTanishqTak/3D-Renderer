@@ -94,6 +94,7 @@ add_library(${PROJECT_NAME} STATIC ${TRIDENT_SOURCES})
 
 target_include_directories(${PROJECT_NAME} PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/vendor/nanosvg/src>
 )
 
 # Link against windowing and UI middleware fetched via FetchContent.
