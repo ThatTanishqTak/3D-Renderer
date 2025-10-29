@@ -27,6 +27,38 @@ namespace Trident
         // Mirror the editor registry pointer up-front so play mode can swap without expensive lookups.
         m_AnimationSystem = std::make_unique<ECS::AnimationSystem>();
         // TODO: Allow dependency injection so specialised animation systems can be swapped during testing.
+
+        // Seed empty scenes with a camera entity so users can immediately view their work.
+        InitialiseDefaultEntities();
+    }
+
+    void Scene::InitialiseDefaultEntities()
+    {
+        ECS::Registry& l_EditorRegistry = GetEditorRegistry();
+
+        // Avoid injecting defaults when a scene is being rehydrated from disk or duplicated at runtime.
+        const bool l_HasEntities = !l_EditorRegistry.GetEntities().empty();
+        if (l_HasEntities)
+        {
+            return;
+        }
+
+        const ECS::Entity l_CameraEntity = l_EditorRegistry.CreateEntity();
+
+        // Authoring tools expect a transform for spatial manipulation, so create it up-front.
+        l_EditorRegistry.AddComponent<Transform>(l_CameraEntity, Transform{});
+        l_EditorRegistry.GetComponent<Transform>(l_CameraEntity).Position = { 0.0f, 100.0f, 255.0f };
+
+        // Assign a friendly label that matches the viewport hierarchy naming convention.
+        TagComponent& l_Tag = l_EditorRegistry.AddComponent<TagComponent>(l_CameraEntity);
+        l_Tag.m_Tag = "Camera";
+
+        // Promote the default camera to primary so renderers immediately lock onto it.
+        CameraComponent l_CameraComponent{};
+        l_CameraComponent.m_Primary = true;
+        l_EditorRegistry.AddComponent<CameraComponent>(l_CameraEntity, l_CameraComponent);
+
+        // Future enhancement: expose presets so users can pick between orthographic and perspective defaults.
     }
 
     void Scene::SetName(const std::string& name)

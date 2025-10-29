@@ -45,6 +45,8 @@ namespace Trident
         static std::string UnescapeString(const std::string& value);
         static std::string ExtractQuotedToken(const std::string& line);
 
+        void InitialiseDefaultEntities();
+
     private:
         ECS::Registry* m_Registry{ nullptr };          ///< Points to either the editor or runtime registry depending on play state.
         ECS::Registry* m_EditorRegistry{ nullptr };    ///< Non-owning pointer used to restore the editor registry when leaving play mode.
