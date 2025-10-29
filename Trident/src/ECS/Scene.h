@@ -45,6 +45,7 @@ namespace Trident
         static std::string UnescapeString(const std::string& value);
         static std::string ExtractQuotedToken(const std::string& line);
 
+        void RebuildMeshAssetsFromComponents();
         void InitialiseDefaultEntities();
 
     private:

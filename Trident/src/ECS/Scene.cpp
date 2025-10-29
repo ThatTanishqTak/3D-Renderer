@@ -1,6 +1,8 @@
 #include "Scene.h"
 
 #include "Core/Utilities.h"
+#include "Loader/ModelLoader.h"
+#include "Application/Startup.h"
 
 #include "ECS/Components/TransformComponent.h"
 #include "ECS/Components/CameraComponent.h"
@@ -17,7 +19,9 @@
 #include <sstream>
 #include <iomanip>
 #include <vector>
+#include <unordered_map>
 #include <memory>
+#include <limits>
 
 #include <glm/gtc/type_ptr.hpp>
 
@@ -136,6 +140,9 @@ namespace Trident
                 DeserializeEntity(l_Stream, l_Line);
             }
         }
+
+        // Rebuild the renderer-side mesh buffers now that all entities are available.
+        RebuildMeshAssetsFromComponents();
 
         TR_CORE_INFO("Loaded scene '{}' from '{}' ({} entities)", m_SceneName, path, m_LoadedEntityCount);
 
@@ -314,7 +321,16 @@ namespace Trident
             // The primitive flag trails the legacy fields so pre-update files continue to deserialize cleanly.
             stream << "Mesh "
                 << l_Mesh.m_MeshIndex << ' ' << l_Mesh.m_MaterialIndex << ' ' << l_Mesh.m_FirstIndex << ' '
-                << l_Mesh.m_IndexCount << ' ' << l_Mesh.m_BaseVertex << ' ' << l_Mesh.m_Visible << ' ' << static_cast<int>(l_Mesh.m_Primitive) << "\n";
+                << l_Mesh.m_IndexCount << ' ' << l_Mesh.m_BaseVertex << ' ' << l_Mesh.m_Visible << ' ' << static_cast<int>(l_Mesh.m_Primitive);
+
+            if (!l_Mesh.m_SourceAssetPath.empty())
+            {
+                // Record the source asset so deserialisation can rebuild the renderer's mesh cache.
+                stream << ' ' << "SourceAsset=\"" << EscapeString(l_Mesh.m_SourceAssetPath) << "\"";
+                stream << ' ' << "SourceMeshIndex=" << l_Mesh.m_SourceMeshIndex;
+            }
+
+            stream << "\n";
         }
 
         if (l_ActiveRegistry.HasComponent<SpriteComponent>(entity))
@@ -482,6 +498,29 @@ namespace Trident
                     else
                     {
                         l_Mesh.m_Primitive = MeshComponent::PrimitiveType::None;
+                    }
+                }
+
+                const size_t l_SourceAssetPos = l_Line.find("SourceAsset=");
+                if (l_SourceAssetPos != std::string::npos)
+                {
+                    const std::string l_SourceToken = l_Line.substr(l_SourceAssetPos);
+                    l_Mesh.m_SourceAssetPath = ExtractQuotedToken(l_SourceToken);
+                    if (!l_Mesh.m_SourceAssetPath.empty())
+                    {
+                        // Normalise the stored path so duplicate imports collapse to a single renderer upload.
+                        l_Mesh.m_SourceAssetPath = Utilities::FileManagement::NormalizePath(l_Mesh.m_SourceAssetPath);
+                    }
+                }
+
+                const size_t l_SourceMeshPos = l_Line.find("SourceMeshIndex=");
+                if (l_SourceMeshPos != std::string::npos)
+                {
+                    std::istringstream l_SourceStream(l_Line.substr(l_SourceMeshPos + 16));
+                    size_t l_SourceMeshIndex = 0;
+                    if (l_SourceStream >> l_SourceMeshIndex)
+                    {
+                        l_Mesh.m_SourceMeshIndex = l_SourceMeshIndex;
                     }
                 }
                 l_TargetRegistry.AddComponent<MeshComponent>(l_Entity, l_Mesh);
@@ -901,6 +940,126 @@ namespace Trident
 
             TR_CORE_WARN("Encountered unknown token while deserialising entity: '{}'", l_Line);
         }
+    }
+
+    void Scene::RebuildMeshAssetsFromComponents()
+    {
+        ECS::Registry& l_Registry = GetEditorRegistry();
+        const std::vector<ECS::Entity>& l_Entities = l_Registry.GetEntities();
+
+        struct MeshBinding
+        {
+            MeshComponent* m_Component = nullptr;
+            size_t m_LocalMeshIndex = 0;
+        };
+
+        std::unordered_map<std::string, std::vector<MeshBinding>> l_AssetBindings{};
+        bool l_WarnedMissingMetadata = false;
+
+        for (ECS::Entity it_Entity : l_Entities)
+        {
+            if (!l_Registry.HasComponent<MeshComponent>(it_Entity))
+            {
+                continue;
+            }
+
+            MeshComponent& l_Component = l_Registry.GetComponent<MeshComponent>(it_Entity);
+            if (!l_Component.m_SourceAssetPath.empty())
+            {
+                MeshBinding l_Binding{};
+                l_Binding.m_Component = &l_Component;
+                l_Binding.m_LocalMeshIndex = l_Component.m_SourceMeshIndex;
+                l_AssetBindings[l_Component.m_SourceAssetPath].push_back(l_Binding);
+            }
+            else if (l_Component.m_Primitive == MeshComponent::PrimitiveType::None)
+            {
+                // Meshes imported before provenance tracking will not render until the user reimports them.
+                l_Component.m_MeshIndex = std::numeric_limits<size_t>::max();
+                if (!l_WarnedMissingMetadata)
+                {
+                    TR_CORE_WARN("One or more mesh components lacked source asset metadata; geometry will be skipped during reload");
+                    l_WarnedMissingMetadata = true;
+                }
+            }
+        }
+
+        std::vector<Geometry::Mesh> l_RebuiltMeshes{};
+        std::vector<Geometry::Material> l_RebuiltMaterials{};
+        std::vector<std::string> l_RebuiltTextures{};
+
+        for (auto& it_Entry : l_AssetBindings)
+        {
+            const std::string& l_AssetPath = it_Entry.first;
+            std::vector<MeshBinding>& l_Bindings = it_Entry.second;
+
+            Loader::ModelData l_ModelData = Loader::ModelLoader::Load(l_AssetPath);
+            if (l_ModelData.m_Meshes.empty())
+            {
+                TR_CORE_WARN("Failed to reload mesh asset '{}' while deserialising scene", l_AssetPath.c_str());
+                for (MeshBinding& it_Binding : l_Bindings)
+                {
+                    it_Binding.m_Component->m_MeshIndex = std::numeric_limits<size_t>::max();
+                }
+                continue;
+            }
+
+            const size_t l_BaseMeshIndex = l_RebuiltMeshes.size();
+            const size_t l_MeshCount = l_ModelData.m_Meshes.size();
+            const size_t l_MaterialBaseIndex = l_RebuiltMaterials.size();
+            const int l_TextureOffset = static_cast<int>(l_RebuiltTextures.size());
+
+            for (std::string& it_Texture : l_ModelData.m_Textures)
+            {
+                l_RebuiltTextures.emplace_back(std::move(it_Texture));
+            }
+
+            for (Geometry::Material& it_Material : l_ModelData.m_Materials)
+            {
+                if (it_Material.BaseColorTextureIndex >= 0)
+                {
+                    it_Material.BaseColorTextureIndex += l_TextureOffset;
+                }
+                if (it_Material.MetallicRoughnessTextureIndex >= 0)
+                {
+                    it_Material.MetallicRoughnessTextureIndex += l_TextureOffset;
+                }
+                if (it_Material.NormalTextureIndex >= 0)
+                {
+                    it_Material.NormalTextureIndex += l_TextureOffset;
+                }
+                l_RebuiltMaterials.emplace_back(std::move(it_Material));
+            }
+
+            for (Geometry::Mesh& it_Mesh : l_ModelData.m_Meshes)
+            {
+                if (it_Mesh.MaterialIndex >= 0)
+                {
+                    it_Mesh.MaterialIndex += static_cast<int32_t>(l_MaterialBaseIndex);
+                }
+                l_RebuiltMeshes.emplace_back(std::move(it_Mesh));
+            }
+
+            for (MeshBinding& it_Binding : l_Bindings)
+            {
+                if (it_Binding.m_LocalMeshIndex >= l_MeshCount)
+                {
+                    TR_CORE_WARN("Mesh component references out-of-range local mesh {} for asset '{}'", it_Binding.m_LocalMeshIndex, l_AssetPath.c_str());
+                    it_Binding.m_Component->m_MeshIndex = std::numeric_limits<size_t>::max();
+                    continue;
+                }
+
+                it_Binding.m_Component->m_MeshIndex = l_BaseMeshIndex + it_Binding.m_LocalMeshIndex;
+                it_Binding.m_Component->m_Primitive = MeshComponent::PrimitiveType::None;
+            }
+        }
+
+        if (!Startup::HasInstance())
+        {
+            return;
+        }
+
+        // Replace the renderer geometry cache so draw commands reference valid GPU buffers on the next frame.
+        Startup::GetRenderer().UploadMesh(l_RebuiltMeshes, l_RebuiltMaterials, l_RebuiltTextures);
     }
 
     std::string Scene::EscapeString(const std::string& value)

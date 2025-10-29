@@ -878,6 +878,9 @@ bool ApplicationLayer::ImportDroppedAssets(const std::vector<std::string>& dropp
                 Trident::MeshComponent& l_MeshComponent = l_Registry.AddComponent<Trident::MeshComponent>(l_NewEntity);
                 l_MeshComponent.m_MeshIndex = l_GlobalMeshIndex;
                 l_MeshComponent.m_Visible = true;
+                // Persist the asset provenance so saved scenes can reconstruct renderer geometry after reloads.
+                l_MeshComponent.m_SourceAssetPath = l_NormalizedPath;
+                l_MeshComponent.m_SourceMeshIndex = localMeshIndex;
 
                 Trident::TagComponent& l_TagComponent = l_Registry.AddComponent<Trident::TagComponent>(l_NewEntity);
                 std::string l_TagValue = l_TagRoot;
