@@ -36,91 +36,91 @@ namespace Trident
                 aiProcess_OptimizeMeshes |
                 aiProcess_ValidateDataStructure;
 
-            glm::mat4 ConvertMatrix(const aiMatrix4x4& a_Matrix)
+            glm::mat4 ConvertMatrix(const aiMatrix4x4& matrix)
             {
-                glm::mat4 l_Matrix = glm::transpose(glm::make_mat4(&a_Matrix.a1));
+                glm::mat4 l_Matrix = glm::transpose(glm::make_mat4(&matrix.a1));
                 return l_Matrix;
             }
 
-            glm::vec3 ConvertVector(const aiVector3D& a_Vector)
+            glm::vec3 ConvertVector(const aiVector3D& vector)
             {
-                return { a_Vector.x, a_Vector.y, a_Vector.z };
+                return { vector.x, vector.y, vector.z };
             }
 
-            glm::vec4 ConvertColor(const aiColor4D& a_Color)
+            glm::vec4 ConvertColor(const aiColor4D& color)
             {
-                return { a_Color.r, a_Color.g, a_Color.b, a_Color.a };
+                return { color.r, color.g, color.b, color.a };
             }
 
-            std::string NormalizeBoneName(std::string a_Name)
+            std::string NormalizeBoneName(std::string name)
             {
-                auto a_IsSpace = [](unsigned char a_Char)
+                auto a_IsSpace = [](unsigned char character)
                     {
-                        return std::isspace(a_Char) != 0;
+                        return std::isspace(character) != 0;
                     };
 
-                a_Name.erase(a_Name.begin(), std::find_if(a_Name.begin(), a_Name.end(), [a_IsSpace](unsigned char a_Char)
+                name.erase(name.begin(), std::find_if(name.begin(), name.end(), [a_IsSpace](unsigned char character)
                     {
-                        return !a_IsSpace(a_Char);
+                        return !a_IsSpace(character);
                     }));
-                a_Name.erase(std::find_if(a_Name.rbegin(), a_Name.rend(), [a_IsSpace](unsigned char a_Char)
+                name.erase(std::find_if(name.rbegin(), name.rend(), [a_IsSpace](unsigned char character)
                     {
-                        return !a_IsSpace(a_Char);
-                    }).base(), a_Name.end());
+                        return !a_IsSpace(character);
+                    }).base(), name.end());
 
                 constexpr std::string_view s_MixamoPrefix = "mixamorig:";
-                if (a_Name.size() > s_MixamoPrefix.size() && a_Name.compare(0, s_MixamoPrefix.size(), s_MixamoPrefix) == 0)
+                if (name.size() > s_MixamoPrefix.size() && name.compare(0, s_MixamoPrefix.size(), s_MixamoPrefix) == 0)
                 {
-                    a_Name.erase(0, s_MixamoPrefix.size());
+                    name.erase(0, s_MixamoPrefix.size());
                 }
 
-                return a_Name;
+                return name;
             }
 
-            const aiNode* FindNode(const std::unordered_map<std::string, const aiNode*>& a_NodeLookup, const std::string& a_Name)
+            const aiNode* FindNode(const std::unordered_map<std::string, const aiNode*>& nodeLookup, const std::string& name)
             {
-                auto a_It = a_NodeLookup.find(a_Name);
-                return a_It != a_NodeLookup.end() ? a_It->second : nullptr;
+                auto a_It = nodeLookup.find(name);
+                return a_It != nodeLookup.end() ? a_It->second : nullptr;
             }
 
-            void AssignBoneWeight(Vertex& a_Vertex, int a_BoneIndex, float a_Weight)
+            void AssignBoneWeight(Vertex& vertex, int boneIndex, float weight)
             {
-                if (a_BoneIndex < 0 || a_Weight <= 0.0f)
+                if (boneIndex < 0 || weight <= 0.0f)
                 {
                     return;
                 }
 
                 for (int it_Index = 0; it_Index < static_cast<int>(Vertex::MaxBoneInfluences); ++it_Index)
                 {
-                    if (a_Vertex.m_BoneWeights[it_Index] <= 0.0f)
+                    if (vertex.m_BoneWeights[it_Index] <= 0.0f)
                     {
-                        a_Vertex.m_BoneIndices[it_Index] = a_BoneIndex;
-                        a_Vertex.m_BoneWeights[it_Index] = a_Weight;
+                        vertex.m_BoneIndices[it_Index] = boneIndex;
+                        vertex.m_BoneWeights[it_Index] = weight;
                         return;
                     }
                 }
 
                 int l_MinIndex = 0;
-                float l_MinWeight = a_Vertex.m_BoneWeights[0];
+                float l_MinWeight = vertex.m_BoneWeights[0];
                 for (int it_Index = 1; it_Index < static_cast<int>(Vertex::MaxBoneInfluences); ++it_Index)
                 {
-                    if (a_Vertex.m_BoneWeights[it_Index] < l_MinWeight)
+                    if (vertex.m_BoneWeights[it_Index] < l_MinWeight)
                     {
-                        l_MinWeight = a_Vertex.m_BoneWeights[it_Index];
+                        l_MinWeight = vertex.m_BoneWeights[it_Index];
                         l_MinIndex = it_Index;
                     }
                 }
 
-                if (a_Weight > l_MinWeight)
+                if (weight > l_MinWeight)
                 {
-                    a_Vertex.m_BoneIndices[l_MinIndex] = a_BoneIndex;
-                    a_Vertex.m_BoneWeights[l_MinIndex] = a_Weight;
+                    vertex.m_BoneIndices[l_MinIndex] = boneIndex;
+                    vertex.m_BoneWeights[l_MinIndex] = weight;
                 }
             }
 
-            void NormaliseBoneWeights(Vertex& a_Vertex)
+            void NormaliseBoneWeights(Vertex& vertex)
             {
-                const float l_TotalWeight = a_Vertex.m_BoneWeights.x + a_Vertex.m_BoneWeights.y + a_Vertex.m_BoneWeights.z + a_Vertex.m_BoneWeights.w;
+                const float l_TotalWeight = vertex.m_BoneWeights.x + vertex.m_BoneWeights.y + vertex.m_BoneWeights.z + vertex.m_BoneWeights.w;
                 if (l_TotalWeight <= 0.0f)
                 {
                     return;
@@ -129,53 +129,48 @@ namespace Trident
                 const float l_InvTotal = 1.0f / l_TotalWeight;
                 for (int it_Index = 0; it_Index < static_cast<int>(Vertex::MaxBoneInfluences); ++it_Index)
                 {
-                    a_Vertex.m_BoneWeights[it_Index] *= l_InvTotal;
+                    vertex.m_BoneWeights[it_Index] *= l_InvTotal;
                 }
             }
 
-            int EnsureBoneExists(const std::string& a_SourceName,
-                Animation::Skeleton& a_Skeleton,
-                const std::unordered_map<std::string, const aiNode*>& a_NodeLookup,
-                std::unordered_map<std::string, int>& a_BoneLookup)
+            int EnsureBoneExists(const std::string& sourceName, Animation::Skeleton& skeleton, const std::unordered_map<std::string, const aiNode*>& nodeLookup,
+                std::unordered_map<std::string, int>& boneLookup)
             {
-                if (a_SourceName.empty())
+                if (sourceName.empty())
                 {
                     return -1;
                 }
 
-                auto a_Existing = a_BoneLookup.find(a_SourceName);
-                if (a_Existing != a_BoneLookup.end())
+                auto a_Existing = boneLookup.find(sourceName);
+                if (a_Existing != boneLookup.end())
                 {
                     return a_Existing->second;
                 }
 
                 Animation::Bone l_Bone{};
-                l_Bone.m_SourceName = a_SourceName;
-                l_Bone.m_Name = NormalizeBoneName(a_SourceName);
+                l_Bone.m_SourceName = sourceName;
+                l_Bone.m_Name = NormalizeBoneName(sourceName);
                 l_Bone.m_LocalBindTransform = glm::mat4(1.0f);
                 l_Bone.m_InverseBindMatrix = glm::mat4(1.0f);
 
-                if (const aiNode* l_Node = FindNode(a_NodeLookup, a_SourceName))
+                if (const aiNode* l_Node = FindNode(nodeLookup, sourceName))
                 {
                     l_Bone.m_LocalBindTransform = ConvertMatrix(l_Node->mTransformation);
                 }
 
-                const int l_NewIndex = static_cast<int>(a_Skeleton.m_Bones.size());
-                a_Skeleton.m_Bones.push_back(l_Bone);
-                a_Skeleton.m_NameToIndex[l_Bone.m_Name] = l_NewIndex;
-                a_Skeleton.m_SourceNameToIndex[l_Bone.m_SourceName] = l_NewIndex;
-                a_BoneLookup.emplace(a_SourceName, l_NewIndex);
+                const int l_NewIndex = static_cast<int>(skeleton.m_Bones.size());
+                skeleton.m_Bones.push_back(l_Bone);
+                skeleton.m_NameToIndex[l_Bone.m_Name] = l_NewIndex;
+                skeleton.m_SourceNameToIndex[l_Bone.m_SourceName] = l_NewIndex;
+                boneLookup.emplace(sourceName, l_NewIndex);
                 return l_NewIndex;
             }
 
-            int ResolveTextureIndex(const aiMaterial* a_Material,
-                aiTextureType a_Type,
-                const std::filesystem::path& a_ModelDirectory,
-                std::vector<std::string>& a_Textures,
-                std::unordered_map<std::string, int>& a_TextureLookup)
+            int ResolveTextureIndex(const aiMaterial* material, aiTextureType type, const std::filesystem::path& modelDirectory, std::vector<std::string>& textures,
+                std::unordered_map<std::string, int>& textureLookup)
             {
                 aiString l_Path{};
-                if (a_Material->GetTexture(a_Type, 0, &l_Path) != AI_SUCCESS)
+                if (material->GetTexture(type, 0, &l_Path) != AI_SUCCESS)
                 {
                     return -1;
                 }
@@ -194,7 +189,7 @@ namespace Trident
 
                 if (!l_TexturePath.is_absolute())
                 {
-                    l_TexturePath = a_ModelDirectory / l_TexturePath;
+                    l_TexturePath = modelDirectory / l_TexturePath;
                 }
 
                 std::string l_Normalised = Utilities::FileManagement::NormalizePath(l_TexturePath.string());
@@ -203,39 +198,38 @@ namespace Trident
                     return -1;
                 }
 
-                auto a_Found = a_TextureLookup.find(l_Normalised);
-                if (a_Found != a_TextureLookup.end())
+                auto a_Found = textureLookup.find(l_Normalised);
+                if (a_Found != textureLookup.end())
                 {
                     return a_Found->second;
                 }
 
-                const int l_NewIndex = static_cast<int>(a_Textures.size());
-                a_Textures.push_back(l_Normalised);
-                a_TextureLookup.emplace(l_Normalised, l_NewIndex);
+                const int l_NewIndex = static_cast<int>(textures.size());
+                textures.push_back(l_Normalised);
+                textureLookup.emplace(l_Normalised, l_NewIndex);
                 return l_NewIndex;
             }
 
-            void FinaliseSkeletonHierarchy(Animation::Skeleton& a_Skeleton,
-                const std::unordered_map<std::string, const aiNode*>& a_NodeLookup,
-                const std::unordered_map<std::string, int>& a_BoneLookup)
+            void FinaliseSkeletonHierarchy(Animation::Skeleton& skeleton, const std::unordered_map<std::string, const aiNode*>& nodeLookup,
+                const std::unordered_map<std::string, int>& boneLookup)
             {
-                for (size_t it_Index = 0; it_Index < a_Skeleton.m_Bones.size(); ++it_Index)
+                for (size_t it_Index = 0; it_Index < skeleton.m_Bones.size(); ++it_Index)
                 {
-                    Animation::Bone& l_Bone = a_Skeleton.m_Bones[it_Index];
+                    Animation::Bone& l_Bone = skeleton.m_Bones[it_Index];
                     if (l_Bone.m_SourceName.empty())
                     {
                         continue;
                     }
 
-                    const aiNode* l_Node = FindNode(a_NodeLookup, l_Bone.m_SourceName);
+                    const aiNode* l_Node = FindNode(nodeLookup, l_Bone.m_SourceName);
                     const aiNode* l_ParentNode = l_Node != nullptr ? l_Node->mParent : nullptr;
 
                     int l_ParentIndex = -1;
                     while (l_ParentNode != nullptr)
                     {
                         std::string l_ParentName = l_ParentNode->mName.C_Str();
-                        auto a_ParentIt = a_BoneLookup.find(l_ParentName);
-                        if (a_ParentIt != a_BoneLookup.end())
+                        auto a_ParentIt = boneLookup.find(l_ParentName);
+                        if (a_ParentIt != boneLookup.end())
                         {
                             l_ParentIndex = a_ParentIt->second;
                             break;
@@ -247,12 +241,12 @@ namespace Trident
                     l_Bone.m_ParentIndex = l_ParentIndex;
                     if (l_ParentIndex >= 0)
                     {
-                        Animation::Bone& l_Parent = a_Skeleton.m_Bones[static_cast<size_t>(l_ParentIndex)];
+                        Animation::Bone& l_Parent = skeleton.m_Bones[static_cast<size_t>(l_ParentIndex)];
                         l_Parent.m_Children.push_back(static_cast<int>(it_Index));
                     }
-                    else if (a_Skeleton.m_RootBoneIndex < 0)
+                    else if (skeleton.m_RootBoneIndex < 0)
                     {
-                        a_Skeleton.m_RootBoneIndex = static_cast<int>(it_Index);
+                        skeleton.m_RootBoneIndex = static_cast<int>(it_Index);
                     }
                 }
             }
@@ -292,17 +286,17 @@ namespace Trident
             }
 
             std::unordered_map<std::string, const aiNode*> l_NodeLookup{};
-            std::function<void(const aiNode*)> l_PopulateNodeLookup = [&](const aiNode* a_Node)
+            std::function<void(const aiNode*)> l_PopulateNodeLookup = [&](const aiNode* node)
                 {
-                    if (a_Node == nullptr)
+                    if (node == nullptr)
                     {
                         return;
                     }
 
-                    l_NodeLookup.emplace(a_Node->mName.C_Str(), a_Node);
-                    for (unsigned int it_Child = 0; it_Child < a_Node->mNumChildren; ++it_Child)
+                    l_NodeLookup.emplace(node->mName.C_Str(), node);
+                    for (unsigned int it_Child = 0; it_Child < node->mNumChildren; ++it_Child)
                     {
-                        l_PopulateNodeLookup(a_Node->mChildren[it_Child]);
+                        l_PopulateNodeLookup(node->mChildren[it_Child]);
                     }
                 };
             l_PopulateNodeLookup(l_Scene->mRootNode);
@@ -346,7 +340,8 @@ namespace Trident
                 l_Material.MetallicRoughnessTextureIndex = ResolveTextureIndex(l_AssimpMaterial, aiTextureType_METALNESS, l_ModelDirectory, l_ModelData.m_Textures, l_TextureLookup);
                 if (l_Material.MetallicRoughnessTextureIndex < 0)
                 {
-                    l_Material.MetallicRoughnessTextureIndex = ResolveTextureIndex(l_AssimpMaterial, aiTextureType_DIFFUSE_ROUGHNESS, l_ModelDirectory, l_ModelData.m_Textures, l_TextureLookup);
+                    l_Material.MetallicRoughnessTextureIndex = ResolveTextureIndex(l_AssimpMaterial, aiTextureType_DIFFUSE_ROUGHNESS, l_ModelDirectory, l_ModelData.m_Textures, 
+                        l_TextureLookup);
                 }
 
                 l_Material.NormalTextureIndex = ResolveTextureIndex(l_AssimpMaterial, aiTextureType_NORMALS, l_ModelDirectory, l_ModelData.m_Textures, l_TextureLookup);
@@ -459,19 +454,19 @@ namespace Trident
             l_ModelData.m_MeshInstances.clear();
             l_ModelData.m_MeshInstances.reserve(static_cast<size_t>(l_Scene->mNumMeshes));
 
-            const std::function<void(const aiNode*, const glm::mat4&)> l_VisitNode = [&](const aiNode* a_Node, const glm::mat4& a_ParentTransform)
+            const std::function<void(const aiNode*, const glm::mat4&)> l_VisitNode = [&](const aiNode* node, const glm::mat4& parentTransform)
                 {
-                    if (a_Node == nullptr)
+                    if (node == nullptr)
                     {
                         return;
                     }
 
-                    const glm::mat4 l_Local = ConvertMatrix(a_Node->mTransformation);
-                    const glm::mat4 l_ModelMatrix = a_ParentTransform * l_Local;
+                    const glm::mat4 l_Local = ConvertMatrix(node->mTransformation);
+                    const glm::mat4 l_ModelMatrix = parentTransform * l_Local;
 
-                    for (unsigned int it_MeshIndex = 0; it_MeshIndex < a_Node->mNumMeshes; ++it_MeshIndex)
+                    for (unsigned int it_MeshIndex = 0; it_MeshIndex < node->mNumMeshes; ++it_MeshIndex)
                     {
-                        const unsigned int l_AssimpMeshIndex = a_Node->mMeshes[it_MeshIndex];
+                        const unsigned int l_AssimpMeshIndex = node->mMeshes[it_MeshIndex];
                         if (l_AssimpMeshIndex >= l_MeshIndexMap.size())
                         {
                             continue;
@@ -486,13 +481,13 @@ namespace Trident
                         MeshInstance l_Instance{};
                         l_Instance.m_MeshIndex = l_ModelMeshIndex;
                         l_Instance.m_ModelMatrix = l_ModelMatrix;
-                        l_Instance.m_NodeName = a_Node->mName.C_Str();
+                        l_Instance.m_NodeName = node->mName.C_Str();
                         l_ModelData.m_MeshInstances.emplace_back(std::move(l_Instance));
                     }
 
-                    for (unsigned int it_Child = 0; it_Child < a_Node->mNumChildren; ++it_Child)
+                    for (unsigned int it_Child = 0; it_Child < node->mNumChildren; ++it_Child)
                     {
-                        l_VisitNode(a_Node->mChildren[it_Child], l_ModelMatrix);
+                        l_VisitNode(node->mChildren[it_Child], l_ModelMatrix);
                     }
                 };
             l_VisitNode(l_Scene->mRootNode, glm::mat4(1.0f));
