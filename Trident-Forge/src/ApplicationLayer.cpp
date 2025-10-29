@@ -496,7 +496,7 @@ bool ApplicationLayer::ImportDroppedAssets(const std::vector<std::string>& dropp
     bool l_ImportedAny = false;
     std::vector<std::string> l_ImportedTextures{};
 
-    const auto DecomposeMatrixToTransform = [](const glm::mat4& a_ModelMatrix) -> Trident::Transform
+    const auto DecomposeMatrixToTransform = [](const glm::mat4& modelMatrix) -> Trident::Transform
         {
             Trident::Transform l_Result{};
             glm::vec3 l_Scale{ 1.0f };
@@ -505,7 +505,7 @@ bool ApplicationLayer::ImportDroppedAssets(const std::vector<std::string>& dropp
             glm::vec3 l_Skew{ 0.0f };
             glm::vec4 l_Perspective{ 0.0f };
 
-            if (glm::decompose(a_ModelMatrix, l_Scale, l_Rotation, l_Translation, l_Skew, l_Perspective))
+            if (glm::decompose(modelMatrix, l_Scale, l_Rotation, l_Translation, l_Skew, l_Perspective))
             {
                 l_Rotation = glm::normalize(l_Rotation);
                 l_Result.Position = l_Translation;
@@ -587,12 +587,9 @@ bool ApplicationLayer::ImportDroppedAssets(const std::vector<std::string>& dropp
                 l_Mesh.MaterialIndex += static_cast<int>(l_MaterialOffset);
             }
 
-            const bool l_HasBoneWeights = std::any_of(l_Mesh.Vertices.begin(), l_Mesh.Vertices.end(), [](const Vertex& a_Vertex)
+            const bool l_HasBoneWeights = std::any_of(l_Mesh.Vertices.begin(), l_Mesh.Vertices.end(), [](const Vertex& vertex)
                 {
-                    return (a_Vertex.m_BoneWeights.x > 0.0f)
-                        || (a_Vertex.m_BoneWeights.y > 0.0f)
-                        || (a_Vertex.m_BoneWeights.z > 0.0f)
-                        || (a_Vertex.m_BoneWeights.w > 0.0f);
+                    return (vertex.m_BoneWeights.x > 0.0f) || (vertex.m_BoneWeights.y > 0.0f) || (vertex.m_BoneWeights.z > 0.0f) || (vertex.m_BoneWeights.w > 0.0f);
                 });
             l_MeshHasSkin[it_MeshIndex] = l_HasBoneWeights;
 
@@ -601,21 +598,19 @@ bool ApplicationLayer::ImportDroppedAssets(const std::vector<std::string>& dropp
         }
 
         const size_t l_GlobalMeshOffset = l_InitialMeshCount + l_MeshOffset;
-        const size_t l_TotalInstanceCount = !l_ModelData.m_MeshInstances.empty()
-            ? l_ModelData.m_MeshInstances.size()
-            : l_ModelData.m_Meshes.size();
+        const size_t l_TotalInstanceCount = !l_ModelData.m_MeshInstances.empty() ? l_ModelData.m_MeshInstances.size() : l_ModelData.m_Meshes.size();
         size_t l_InstanceCounter = 0;
 
-        const auto SpawnMeshEntity = [&](size_t a_LocalMeshIndex, const glm::mat4& a_ModelMatrix, const std::string& a_NodeName)
+        const auto SpawnMeshEntity = [&](size_t localMeshIndex, const glm::mat4& modelMatrix, const std::string& nodeName)
             {
-                if (a_LocalMeshIndex >= l_MeshHasSkin.size())
+                if (localMeshIndex >= l_MeshHasSkin.size())
                 {
                     // Ignore invalid indices so corrupt assets do not crash the editor.
-                    TR_CORE_WARN("Mesh instance references invalid mesh index {} while importing {}", a_LocalMeshIndex, l_NormalizedPath);
+                    TR_CORE_WARN("Mesh instance references invalid mesh index {} while importing {}", localMeshIndex, l_NormalizedPath);
                     return;
                 }
 
-                const size_t l_GlobalMeshIndex = l_GlobalMeshOffset + a_LocalMeshIndex;
+                const size_t l_GlobalMeshIndex = l_GlobalMeshOffset + localMeshIndex;
                 if (l_GlobalMeshIndex >= l_InitialMeshCount + l_ImportedMeshes.size())
                 {
                     TR_CORE_WARN("Mesh instance resolved to out-of-range global index {} while importing {}", l_GlobalMeshIndex, l_NormalizedPath);
@@ -625,7 +620,7 @@ bool ApplicationLayer::ImportDroppedAssets(const std::vector<std::string>& dropp
                 Trident::ECS::Entity l_NewEntity = l_Registry.CreateEntity();
 
                 // Decompose the baked transform so ECS systems can manipulate TRS values directly.
-                Trident::Transform l_Decomposed = DecomposeMatrixToTransform(a_ModelMatrix);
+                Trident::Transform l_Decomposed = DecomposeMatrixToTransform(modelMatrix);
                 l_Registry.AddComponent<Trident::Transform>(l_NewEntity, l_Decomposed);
 
                 Trident::MeshComponent& l_MeshComponent = l_Registry.AddComponent<Trident::MeshComponent>(l_NewEntity);
@@ -634,9 +629,9 @@ bool ApplicationLayer::ImportDroppedAssets(const std::vector<std::string>& dropp
 
                 Trident::TagComponent& l_TagComponent = l_Registry.AddComponent<Trident::TagComponent>(l_NewEntity);
                 std::string l_TagValue = l_TagRoot;
-                if (!a_NodeName.empty())
+                if (!nodeName.empty())
                 {
-                    l_TagValue += " - " + a_NodeName;
+                    l_TagValue += " - " + nodeName;
                 }
                 if (l_TotalInstanceCount > 1)
                 {
@@ -644,7 +639,7 @@ bool ApplicationLayer::ImportDroppedAssets(const std::vector<std::string>& dropp
                 }
                 l_TagComponent.m_Tag = l_TagValue;
 
-                if (l_MeshHasSkin[a_LocalMeshIndex])
+                if (l_MeshHasSkin[localMeshIndex])
                 {
                     // Create an animation component so skinned meshes can bind to the imported skeleton on the next update tick.
                     Trident::AnimationComponent& l_AnimationComponent = l_Registry.AddComponent<Trident::AnimationComponent>(l_NewEntity);

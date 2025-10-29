@@ -58,6 +58,9 @@ private:
         ImVec2 m_Position{ 0.0f, 0.0f }; ///< Top-left position in canvas space.
         ImVec2 m_Size{ 0.0f, 0.0f };     ///< Dimensions of the rendered node.
         bool m_IsActive = false;    ///< Highlights the node when its clip is currently playing.
+        size_t m_ClipIndex = std::numeric_limits<size_t>::max(); ///< Source clip index for quick lookups.
+        mutable ImVec2 m_LabelSize{ 0.0f, 0.0f }; ///< Cached text bounds to avoid repeated CalcTextSize calls.
+        mutable bool m_IsLabelSizeDirty = true; ///< Tracks when the cached text bounds require recomputation.
     };
 
     struct GraphParameter
@@ -66,6 +69,8 @@ private:
         ImVec2 m_Position{ 0.0f, 0.0f }; ///< Top-left position in canvas space.
         ImVec2 m_Size{ 0.0f, 0.0f };     ///< Dimensions of the parameter widget.
         bool m_IsActive = false;    ///< Visual indicator showing when a parameter drives the state.
+        mutable ImVec2 m_LabelSize{ 0.0f, 0.0f }; ///< Cached text bounds for ImGui rendering.
+        mutable bool m_IsLabelSizeDirty = true; ///< Flag to determine when to refresh cached text bounds.
     };
 
     struct GraphConnection
@@ -114,8 +119,11 @@ private:
     std::vector<GraphTransition> m_GraphTransitions; ///< Edges representing clip transitions.
 
     std::optional<size_t> m_ActiveNodeIndex; ///< Index of the currently active clip node when resolved.
+    std::optional<size_t> m_PreviousActiveNodeIndex; ///< Stores the previous active node to skip redundant updates.
+    std::optional<size_t> m_LastConnectionNodeIndex; ///< Last node index used for parameter connections.
     std::string m_ActiveClipName{}; ///< Name of the clip currently in focus, used for highlighting.
     float m_ActiveClipDuration = 0.0f; ///< Duration in seconds for the active clip to drive the timeline.
 
     size_t m_CachedClipHash = 0; ///< Tracks the most recent clip set so layout refreshes when assets change.
+    bool m_NodeActivationDirty = true; ///< Signals when node highlights must be recomputed.
 };

@@ -32,11 +32,20 @@ namespace
 void AnimationGraphPanel::SetRegistry(Trident::ECS::Registry* registry)
 {
     m_Registry = registry;
+    m_NodeActivationDirty = true; // Registry changes can invalidate highlighted nodes.
+    m_PreviousActiveNodeIndex.reset();
+    m_LastConnectionNodeIndex.reset();
 }
 
 void AnimationGraphPanel::SetSelectedEntity(Trident::ECS::Entity selectedEntity)
 {
-    m_SelectedEntity = selectedEntity;
+    if (m_SelectedEntity != selectedEntity)
+    {
+        m_SelectedEntity = selectedEntity;
+        m_NodeActivationDirty = true; // Force a refresh when the inspected entity changes.
+        m_PreviousActiveNodeIndex.reset();
+        m_LastConnectionNodeIndex.reset();
+    }
 }
 
 void AnimationGraphPanel::Update()
@@ -44,20 +53,35 @@ void AnimationGraphPanel::Update()
     m_HasValidSelection = false;
     m_ActiveClipDuration = 0.0f;
     m_ActiveClipName.clear();
-    m_ActiveNodeIndex.reset();
+    std::optional<size_t> l_NewActiveNodeIndex{}; // Will be populated once a valid component is resolved.
 
     if (m_Registry == nullptr)
     {
+        m_ActiveNodeIndex.reset();
+        m_PreviousActiveNodeIndex.reset();
+        m_LastConnectionNodeIndex.reset();
+        m_NodeActivationDirty = true;
+
         return;
     }
 
     if (m_SelectedEntity == std::numeric_limits<Trident::ECS::Entity>::max())
     {
+        m_ActiveNodeIndex.reset();
+        m_PreviousActiveNodeIndex.reset();
+        m_LastConnectionNodeIndex.reset();
+        m_NodeActivationDirty = true;
+
         return;
     }
 
     if (!m_Registry->HasComponent<Trident::AnimationComponent>(m_SelectedEntity))
     {
+        m_ActiveNodeIndex.reset();
+        m_PreviousActiveNodeIndex.reset();
+        m_LastConnectionNodeIndex.reset();
+        m_NodeActivationDirty = true;
+
         return;
     }
 
@@ -84,6 +108,10 @@ void AnimationGraphPanel::Update()
         {
             m_ActiveClipDuration = a_ActiveClip->m_DurationSeconds;
             m_ActiveClipName = a_ActiveClip->m_Name;
+            if (static_cast<size_t>(l_Component.m_CurrentClipIndex) < a_Clips->size())
+            {
+                l_NewActiveNodeIndex = static_cast<size_t>(l_Component.m_CurrentClipIndex);
+            }
         }
     }
     else
@@ -91,6 +119,20 @@ void AnimationGraphPanel::Update()
         m_GraphNodes.clear();
         m_GraphTransitions.clear();
         m_CachedClipHash = 0;
+        m_LastConnectionNodeIndex.reset();
+        m_PreviousActiveNodeIndex.reset();
+        m_NodeActivationDirty = true;
+    }
+
+    if (m_ActiveNodeIndex != l_NewActiveNodeIndex)
+    {
+        m_ActiveNodeIndex = l_NewActiveNodeIndex;
+        m_NodeActivationDirty = true; // Ensure highlights respond immediately to clip changes.
+
+        if (!m_ActiveNodeIndex.has_value())
+        {
+            m_LastConnectionNodeIndex.reset();
+        }
     }
 
     EnsureParameterLayout();
@@ -136,6 +178,15 @@ void AnimationGraphPanel::RefreshClipLayout(const std::vector<Trident::Animation
 {
     m_GraphNodes.clear();
     m_GraphTransitions.clear();
+    m_GraphNodes.reserve(clips.size());
+    if (clips.size() > 1)
+    {
+        m_GraphTransitions.reserve(clips.size() - 1);
+    }
+
+    m_NodeActivationDirty = true; // Layout rebuilds invalidate cached activation state.
+    m_PreviousActiveNodeIndex.reset();
+    m_LastConnectionNodeIndex.reset();
 
     const float l_StartX = 260.0f; // Offset nodes to the right so parameter boxes fit on the left.
     const float l_StartY = 120.0f;
@@ -146,6 +197,8 @@ void AnimationGraphPanel::RefreshClipLayout(const std::vector<Trident::Animation
         l_Node.m_Label = clips[it_Index].m_Name;
         l_Node.m_Size = ImVec2(s_NodeWidth, s_NodeHeight);
         l_Node.m_Position = ImVec2(l_StartX + static_cast<float>(it_Index) * (s_NodeWidth + s_NodeSpacing), l_StartY);
+        l_Node.m_ClipIndex = it_Index; // Store the index so activation checks avoid string comparisons.
+        l_Node.m_IsLabelSizeDirty = true; // Mark text bounds dirty because the label has changed.
         m_GraphNodes.push_back(std::move(l_Node));
     }
 
@@ -172,16 +225,19 @@ void AnimationGraphPanel::EnsureParameterLayout()
     l_PlayParameter.m_Label = "Playback";
     l_PlayParameter.m_Size = ImVec2(s_ParameterWidth, s_ParameterHeight);
     l_PlayParameter.m_Position = ImVec2(32.0f, 100.0f);
+    l_PlayParameter.m_IsLabelSizeDirty = true;
 
     GraphParameter l_LoopParameter{};
     l_LoopParameter.m_Label = "Looping";
     l_LoopParameter.m_Size = ImVec2(s_ParameterWidth, s_ParameterHeight);
     l_LoopParameter.m_Position = ImVec2(32.0f, 100.0f + s_ParameterSpacing);
+    l_LoopParameter.m_IsLabelSizeDirty = true;
 
     GraphParameter l_SpeedParameter{};
     l_SpeedParameter.m_Label = "Speed";
     l_SpeedParameter.m_Size = ImVec2(s_ParameterWidth, s_ParameterHeight);
     l_SpeedParameter.m_Position = ImVec2(32.0f, 100.0f + (s_ParameterSpacing * 2.0f));
+    l_SpeedParameter.m_IsLabelSizeDirty = true;
 
     m_Parameters.emplace_back(std::move(l_PlayParameter));
     m_Parameters.emplace_back(std::move(l_LoopParameter));
@@ -190,17 +246,25 @@ void AnimationGraphPanel::EnsureParameterLayout()
 
 void AnimationGraphPanel::UpdateNodeActivation()
 {
-    m_ActiveNodeIndex.reset();
-
-    for (size_t it_Index = 0; it_Index < m_GraphNodes.size(); ++it_Index)
+    if (m_ActiveNodeIndex.has_value() && m_ActiveNodeIndex.value() >= m_GraphNodes.size())
     {
-        GraphNode& l_Node = m_GraphNodes[it_Index];
-        l_Node.m_IsActive = (l_Node.m_Label == m_ActiveClipName);
-        if (l_Node.m_IsActive)
-        {
-            m_ActiveNodeIndex = it_Index;
-        }
+        m_ActiveNodeIndex.reset();
     }
+
+    if (!m_NodeActivationDirty && m_PreviousActiveNodeIndex == m_ActiveNodeIndex)
+    {
+        return; // Skip work when nothing has changed since the last frame.
+    }
+
+    const size_t l_TargetIndex = m_ActiveNodeIndex.value_or(std::numeric_limits<size_t>::max());
+    for (GraphNode& it_Node : m_GraphNodes)
+    {
+        const bool l_ShouldBeActive = m_ActiveNodeIndex.has_value() && it_Node.m_ClipIndex == l_TargetIndex;
+        it_Node.m_IsActive = l_ShouldBeActive;
+    }
+
+    m_PreviousActiveNodeIndex = m_ActiveNodeIndex;
+    m_NodeActivationDirty = false;
 }
 
 void AnimationGraphPanel::UpdateParameterActivation(const Trident::AnimationComponent& component)
@@ -217,20 +281,30 @@ void AnimationGraphPanel::UpdateParameterActivation(const Trident::AnimationComp
 
 void AnimationGraphPanel::RebuildConnections()
 {
-    m_GraphConnections.clear();
-
     if (!m_ActiveNodeIndex.has_value())
     {
+        m_GraphConnections.clear();
+        m_LastConnectionNodeIndex.reset();
         return;
     }
 
+    const size_t l_TargetNodeIndex = m_ActiveNodeIndex.value();
+    const bool l_ShouldResize = m_GraphConnections.size() != m_Parameters.size();
+    const bool l_TargetChanged = !m_LastConnectionNodeIndex.has_value() || m_LastConnectionNodeIndex.value() != l_TargetNodeIndex;
+    if (!l_ShouldResize && !l_TargetChanged)
+    {
+        return; // Connections already point to the active node.
+    }
+
+    m_GraphConnections.resize(m_Parameters.size());
     for (size_t it_Index = 0; it_Index < m_Parameters.size(); ++it_Index)
     {
-        GraphConnection l_Connection{};
+        GraphConnection& l_Connection = m_GraphConnections[it_Index];
         l_Connection.m_ParameterIndex = it_Index;
-        l_Connection.m_NodeIndex = m_ActiveNodeIndex.value();
-        m_GraphConnections.push_back(l_Connection);
+        l_Connection.m_NodeIndex = l_TargetNodeIndex;
     }
+
+    m_LastConnectionNodeIndex = l_TargetNodeIndex;
 }
 
 void AnimationGraphPanel::DrawViewportSection()
@@ -419,8 +493,13 @@ void AnimationGraphPanel::DrawNodes(ImDrawList* drawList, const ImVec2& origin) 
         drawList->AddRectFilled(l_Min, l_Max, l_Fill, 10.0f);
         drawList->AddRect(l_Min, l_Max, s_NodeOutlineColor, 10.0f);
 
-        const ImVec2 l_TextSize = ImGui::CalcTextSize(it_Node.m_Label.c_str());
-        const ImVec2 l_TextPos = ImVec2(l_Min.x + (it_Node.m_Size.x - l_TextSize.x) * 0.5f, l_Min.y + (it_Node.m_Size.y - l_TextSize.y) * 0.5f);
+        if (it_Node.m_IsLabelSizeDirty)
+        {
+            it_Node.m_LabelSize = ImGui::CalcTextSize(it_Node.m_Label.c_str());
+            it_Node.m_IsLabelSizeDirty = false; // Cache the text bounds for subsequent frames.
+        }
+
+        const ImVec2 l_TextPos = ImVec2(l_Min.x + (it_Node.m_Size.x - it_Node.m_LabelSize.x) * 0.5f, l_Min.y + (it_Node.m_Size.y - it_Node.m_LabelSize.y) * 0.5f);
         drawList->AddText(l_TextPos, IM_COL32(20, 20, 20, 255), it_Node.m_Label.c_str());
     }
 }
@@ -436,8 +515,13 @@ void AnimationGraphPanel::DrawParameters(ImDrawList* drawList, const ImVec2& ori
         drawList->AddRectFilled(l_Min, l_Max, l_Color, 10.0f);
         drawList->AddRect(l_Min, l_Max, IM_COL32(45, 45, 45, 255), 10.0f);
 
-        const ImVec2 l_TextSize = ImGui::CalcTextSize(it_Param.m_Label.c_str());
-        const ImVec2 l_TextPos = ImVec2(l_Min.x + (it_Param.m_Size.x - l_TextSize.x) * 0.5f, l_Min.y + (it_Param.m_Size.y - l_TextSize.y) * 0.5f);
+        if (it_Param.m_IsLabelSizeDirty)
+        {
+            it_Param.m_LabelSize = ImGui::CalcTextSize(it_Param.m_Label.c_str());
+            it_Param.m_IsLabelSizeDirty = false;
+        }
+
+        const ImVec2 l_TextPos = ImVec2(l_Min.x + (it_Param.m_Size.x - it_Param.m_LabelSize.x) * 0.5f, l_Min.y + (it_Param.m_Size.y - it_Param.m_LabelSize.y) * 0.5f);
         drawList->AddText(l_TextPos, IM_COL32(20, 20, 20, 255), it_Param.m_Label.c_str());
     }
 }
