@@ -26,10 +26,13 @@ namespace
 {
     struct CameraOverlayIcon
     {
-        ImTextureID m_TextureId = nullptr; ///< ImGui descriptor for the overlay texture.
+        // Default to an empty descriptor because ImTextureID resolves to either a pointer or integer depending
+        // on the backend. Using value-initialisation keeps the code portable across those variations.
+        ImTextureID m_TextureId = ImTextureID{}; ///< ImGui descriptor for the overlay texture.
         ImVec2 m_Size{ 24.0f, 24.0f };     ///< Preferred draw size when the texture loads successfully.
 
-        bool IsValid() const { return m_TextureId != nullptr; }
+        // Treat zero/empty descriptors as invalid regardless of the underlying ImTextureID typedef.
+        bool IsValid() const { return m_TextureId != ImTextureID{}; }
     };
 
     const CameraOverlayIcon& GetCameraOverlayIcon()
@@ -46,7 +49,7 @@ namespace
 
         const std::array<std::filesystem::path, 2> l_SearchPaths
         {
-            std::filesystem::path("Assets/Icons/camera.png"),
+            std::filesystem::path("Assets/Icons/Camera.svg"),
             std::filesystem::path("Trident-Forge/Assets/Icons/Camera.svg")
         };
 
