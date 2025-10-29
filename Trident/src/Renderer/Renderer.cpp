@@ -348,7 +348,6 @@ namespace Trident
             m_StagingIndices.reset(new uint32_t[m_MaxIndexCount]);
         }
 
-        uint32_t l_Offset = 0;
         size_t l_VertOffset = 0;
         size_t l_IndexOffset = 0;
         for (const auto& it_Mesh : l_Meshes)
@@ -356,10 +355,12 @@ namespace Trident
             std::copy(it_Mesh.Vertices.begin(), it_Mesh.Vertices.end(), m_StagingVertices.get() + l_VertOffset);
             for (auto index : it_Mesh.Indices)
             {
-                m_StagingIndices[l_IndexOffset++] = index + l_Offset;
+                // Preserve the mesh-local indices and rely on the base vertex during draw submission.
+                // Offsetting the index here as well as supplying a base vertex later would double-apply
+                // the vertex offset and corrupt geometry once multiple meshes share the combined buffers.
+                m_StagingIndices[l_IndexOffset++] = index;
             }
             l_VertOffset += it_Mesh.Vertices.size();
-            l_Offset += static_cast<uint32_t>(it_Mesh.Vertices.size());
         }
 
         std::vector<Vertex> l_AllVertices(m_StagingVertices.get(), m_StagingVertices.get() + l_VertexCount);
