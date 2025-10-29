@@ -162,9 +162,9 @@ void ApplicationLayer::Update()
     m_InspectorPanel.SetSelectedEntity(l_SelectedEntity);
     // Mirror the selection for the viewport so camera pivots follow the same entity l_Focus.
     m_ViewportPanel.SetSelectedEntity(l_SelectedEntity);
-    m_AnimationGraphPanel.SetSelectedEntity(l_SelectedEntity);
+    //m_AnimationGraphPanel.SetSelectedEntity(l_SelectedEntity);
     m_InspectorPanel.Update();
-    m_AnimationGraphPanel.Update();
+    //m_AnimationGraphPanel.Update();
     m_ConsolePanel.Update();
 }
 
@@ -180,7 +180,7 @@ void ApplicationLayer::Render()
     m_ContentBrowserPanel.Render();
     m_SceneHierarchyPanel.Render();
     m_InspectorPanel.Render();
-    m_AnimationGraphPanel.Render();
+    //m_AnimationGraphPanel.Render();
     m_ConsolePanel.Render();
 }
 
