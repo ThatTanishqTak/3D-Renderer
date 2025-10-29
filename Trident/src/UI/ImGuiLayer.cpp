@@ -1,5 +1,7 @@
 #include "UI/ImGuiLayer.h"
 
+#include "UI/ImGuiStyleManager.h"
+
 #include "Application.h"
 #include "Core/Utilities.h"
 
@@ -95,9 +97,9 @@ namespace Trident
 
             ImGui::CreateContext();
             ImGuiIO& io = ImGui::GetIO();
-            io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-            io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
-            ImGui::StyleColorsDark();
+            // Centralise theme setup so future profile swaps only touch the style manager.
+            ImGuiStyleManager l_StyleManager{};
+            l_StyleManager.ApplyStyle(io);
 
             // Persist layout customisation to a renderer-scoped file so editor and runtime do not conflict.
             const std::filesystem::path l_LayoutDirectory{ "Assets/Layouts/" };
@@ -125,13 +127,6 @@ namespace Trident
             {
                 TR_CORE_INFO("ImGui layout file '{}' not found. Applying default dockspace and awaiting user save.", m_LayoutIniFilePath);
                 ResetLayoutToDefault();
-            }
-
-            if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
-            {
-                ImGuiStyle& style = ImGui::GetStyle();
-                style.WindowRounding = 0.0f;
-                style.Colors[ImGuiCol_WindowBg].w = 1.0f;
             }
 
             ImGui_ImplGlfw_InitForVulkan(window, true);
