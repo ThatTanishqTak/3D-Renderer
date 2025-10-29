@@ -4,11 +4,17 @@
 
 #include <cstddef>
 #include <limits>
+#include <memory>
 #include <string>
 #include <vector>
 
 namespace Trident
 {
+    namespace Animation
+    {
+        class AnimationStateMachine;
+    }
+
     /**
      * @brief Stores high level animation state for a skinned entity.
      *
@@ -45,6 +51,8 @@ namespace Trident
         size_t m_AnimationAssetHandle{ std::numeric_limits<size_t>::max() };
         /// Cached index pointing at the resolved clip inside the active animation library.
         size_t m_CurrentClipIndex{ std::numeric_limits<size_t>::max() };
+        /// Optional runtime state machine driving this component when configured by tooling or gameplay.
+        std::shared_ptr<Animation::AnimationStateMachine> m_StateMachine{};
 
         /// Hash of the last skeleton identifier used to determine whether the cache must refresh.
         size_t m_SkeletonAssetHash{ 0 };

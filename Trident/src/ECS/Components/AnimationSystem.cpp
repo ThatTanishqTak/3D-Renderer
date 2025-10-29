@@ -70,6 +70,17 @@ namespace Trident
             Animation::AnimationAssetService& l_Service = Animation::AnimationAssetService::Get();
             AnimationSystem::RefreshCachedHandles(component, l_Service);
 
+            if (component.m_StateMachine)
+            {
+                // Allow authoring tools to warm the pose directly from the configured state machine.
+                component.m_StateMachine->SetSkeletonHandle(component.m_SkeletonAssetHandle);
+                component.m_StateMachine->SetAnimationLibraryHandle(component.m_AnimationAssetHandle);
+                component.m_StateMachine->Update(0.0f);
+                component.m_StateMachine->CopyPose(component.m_BoneMatrices);
+
+                return;
+            }
+
             Animation::AnimationPlayer l_Player(l_Service);
             l_Player.SetSkeletonHandle(component.m_SkeletonAssetHandle);
             l_Player.SetAnimationHandle(component.m_AnimationAssetHandle);
@@ -107,6 +118,19 @@ namespace Trident
 
             Animation::AnimationAssetService& l_AssetService = Animation::AnimationAssetService::Get();
             AnimationSystem::RefreshCachedHandles(l_Component, l_AssetService);
+
+            if (l_Component.m_StateMachine)
+            {
+                // Drive authored graphs when a state machine is present instead of falling back to raw clip playback.
+                l_Component.m_StateMachine->SetSkeletonHandle(l_Component.m_SkeletonAssetHandle);
+                l_Component.m_StateMachine->SetAnimationLibraryHandle(l_Component.m_AnimationAssetHandle);
+
+                const float l_DeltaSeconds = l_Component.m_IsPlaying ? deltaTime : 0.0f;
+                l_Component.m_StateMachine->Update(l_DeltaSeconds);
+                l_Component.m_StateMachine->CopyPose(l_Component.m_BoneMatrices);
+
+                return;
+            }
 
             // Mirror the component state onto the reusable player instance before evaluating the clip.
             m_Player.SetSkeletonHandle(l_Component.m_SkeletonAssetHandle);

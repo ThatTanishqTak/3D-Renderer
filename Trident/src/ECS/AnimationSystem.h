@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Animation/AnimationPlayer.h"
+#include "Animation/AnimationStateMachine.h"
 #include "ECS/System.h"
 #include "ECS/Entity.h"
 #include "ECS/Components/AnimationComponent.h"
