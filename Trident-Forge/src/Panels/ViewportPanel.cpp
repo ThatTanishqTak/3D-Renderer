@@ -7,8 +7,12 @@
 #include <glm/common.hpp>
 #include <glm/vec4.hpp>
 
+#include "Application/Startup.h"
+#include "Loader/TextureLoader.h"
+#include "Renderer/Renderer.h"
 #include "ECS/Registry.h"
 #include "ECS/Components/TransformComponent.h"
+#include "ECS/Components/CameraComponent.h"
 
 #include <utility>
 #include <algorithm>
@@ -16,9 +20,69 @@
 #include <array>
 #include <numeric>
 #include <limits>
+#include <filesystem>
 
 namespace
 {
+    struct CameraOverlayIcon
+    {
+        ImTextureID m_TextureId = nullptr; ///< ImGui descriptor for the overlay texture.
+        ImVec2 m_Size{ 24.0f, 24.0f };     ///< Preferred draw size when the texture loads successfully.
+
+        bool IsValid() const { return m_TextureId != nullptr; }
+    };
+
+    const CameraOverlayIcon& GetCameraOverlayIcon()
+    {
+        // Delay icon loading until the viewport requests it so startup times stay lean.
+        static CameraOverlayIcon s_CameraOverlayIcon{};
+        static bool s_HasAttemptedLoad = false;
+        if (s_HasAttemptedLoad)
+        {
+            return s_CameraOverlayIcon;
+        }
+
+        s_HasAttemptedLoad = true;
+
+        const std::array<std::filesystem::path, 2> l_SearchPaths
+        {
+            std::filesystem::path("Assets/Icons/camera.png"),
+            std::filesystem::path("Trident-Forge/Assets/Icons/Camera.svg")
+        };
+
+        std::filesystem::path l_SelectedPath{};
+        for (const std::filesystem::path& it_Path : l_SearchPaths)
+        {
+            std::error_code l_ExistsError{};
+            if (std::filesystem::exists(it_Path, l_ExistsError) && !l_ExistsError)
+            {
+                l_SelectedPath = it_Path;
+                break;
+            }
+        }
+
+        if (l_SelectedPath.empty())
+        {
+            return s_CameraOverlayIcon;
+        }
+
+        const std::string l_PathString = l_SelectedPath.string();
+        Trident::Loader::TextureData l_TextureData = Trident::Loader::TextureLoader::Load(l_PathString);
+        if (l_TextureData.Pixels.empty())
+        {
+            return s_CameraOverlayIcon;
+        }
+
+        Trident::Renderer::ImGuiTexture* a_Texture = Trident::Startup::GetRenderer().CreateImGuiTexture(l_TextureData);
+        if (a_Texture != nullptr)
+        {
+            s_CameraOverlayIcon.m_TextureId = a_Texture->m_Descriptor;
+            s_CameraOverlayIcon.m_Size = ImVec2(static_cast<float>(a_Texture->m_Extent.width), static_cast<float>(a_Texture->m_Extent.height));
+        }
+
+        return s_CameraOverlayIcon;
+    }
+
     glm::mat4 ComposeMatrixFromTransform(const Trident::Transform& transform)
     {
         // Translate the component vectors into a matrix ImGuizmo understands.
