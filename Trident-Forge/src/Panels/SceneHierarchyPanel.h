@@ -45,6 +45,8 @@ private:
 private:
     // Sentinel value indicating that no entity is currently selected.
     Trident::ECS::Entity m_SelectedEntity = std::numeric_limits<Trident::ECS::Entity>::max();
+    // Track entity deletions requested by the context menu so removal can be deferred until it is safe.
+    Trident::ECS::Entity m_PendingEntityDeletion = std::numeric_limits<Trident::ECS::Entity>::max();
     // Registry observed by the hierarchy; defaults to nullptr until the layer provides one.
     Trident::ECS::Registry* m_Registry = nullptr;
 

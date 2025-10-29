@@ -101,6 +101,24 @@ void SceneHierarchyPanel::Render()
         DrawEntityNode(it_Entity, *m_Registry);
     }
 
+    // Apply deletions after iterating so the registry's entity list is never invalidated mid-loop.
+    const Trident::ECS::Entity l_NoSelection = std::numeric_limits<Trident::ECS::Entity>::max();
+    if (m_Registry != nullptr && m_PendingEntityDeletion != l_NoSelection)
+    {
+        // Remove the entity and clear any stale selection that pointed to it.
+        m_Registry->DestroyEntity(m_PendingEntityDeletion);
+        if (m_SelectedEntity == m_PendingEntityDeletion)
+        {
+            m_SelectedEntity = l_NoSelection;
+        }
+        m_PendingEntityDeletion = l_NoSelection;
+    }
+    else if (m_PendingEntityDeletion != l_NoSelection)
+    {
+        // Fallback guard: clear stale requests if the registry becomes unavailable.
+        m_PendingEntityDeletion = l_NoSelection;
+    }
+
     // Allow deselection by clicking an empty portion of the window.
     // Use engine mouse codes so hierarchy deselection honours the shared input layer.
     if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(Trident::Mouse::ButtonLeft))
@@ -162,5 +180,15 @@ void SceneHierarchyPanel::DrawEntityNode(Trident::ECS::Entity entity, Trident::E
         ImGui::TreePop();
     }
 
-    // Future improvement: add context menus here for creating and deleting entities.
+    // Offer a context menu so authors can delete entities directly from the hierarchy view.
+    if (ImGui::BeginPopupContextItem())
+    {
+        if (ImGui::MenuItem("Delete Entity"))
+        {
+            // Delay destruction until we leave the draw loop to avoid mutating the entity list while iterating.
+            m_PendingEntityDeletion = entity;
+        }
+
+        ImGui::EndPopup();
+    }
 }
