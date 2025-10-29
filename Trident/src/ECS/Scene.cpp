@@ -10,6 +10,7 @@
 #include "ECS/Components/ScriptComponent.h"
 #include "ECS/Components/TextureComponent.h"
 #include "ECS/Components/AnimationComponent.h"
+#include "ECS/Components/SpriteComponent.h"
 #include "Animation/AnimationAssetService.h"
 
 #include <fstream>
@@ -316,6 +317,32 @@ namespace Trident
                 << l_Mesh.m_IndexCount << ' ' << l_Mesh.m_BaseVertex << ' ' << l_Mesh.m_Visible << ' ' << static_cast<int>(l_Mesh.m_Primitive) << "\n";
         }
 
+        if (l_ActiveRegistry.HasComponent<SpriteComponent>(entity))
+        {
+            const SpriteComponent& l_Sprite = l_ActiveRegistry.GetComponent<SpriteComponent>(entity);
+            // Serialise every field explicitly so manual edits remain approachable for artists and QA.
+            stream << std::setprecision(6);
+            stream << "Sprite "
+                << "Texture=\"" << EscapeString(l_Sprite.m_TextureId) << "\" "
+                << "Tint=" << l_Sprite.m_TintColor.r << ',' << l_Sprite.m_TintColor.g << ','
+                << l_Sprite.m_TintColor.b << ',' << l_Sprite.m_TintColor.a << ' '
+                << "UVScale=" << l_Sprite.m_UVScale.x << ',' << l_Sprite.m_UVScale.y << ' '
+                << "UVOffset=" << l_Sprite.m_UVOffset.x << ',' << l_Sprite.m_UVOffset.y << ' '
+                << "Tiling=" << l_Sprite.m_TilingFactor << ' '
+                << "Visible=" << l_Sprite.m_Visible << ' '
+                << "UseMaterialOverride=" << l_Sprite.m_UseMaterialOverride << ' ';
+
+            if (!l_Sprite.m_MaterialOverrideId.empty())
+            {
+                stream << "Material=\"" << EscapeString(l_Sprite.m_MaterialOverrideId) << "\" ";
+            }
+
+            stream << "AtlasTiles=" << l_Sprite.m_AtlasTiles.x << ',' << l_Sprite.m_AtlasTiles.y << ' '
+                << "AtlasIndex=" << l_Sprite.m_AtlasIndex << ' '
+                << "AnimationSpeed=" << l_Sprite.m_AnimationSpeed << ' '
+                << "SortOffset=" << l_Sprite.m_SortOffset << "\n";
+        }
+
         if (l_ActiveRegistry.HasComponent<TextureComponent>(entity))
         {
             const TextureComponent& l_Texture = l_ActiveRegistry.GetComponent<TextureComponent>(entity);
@@ -458,6 +485,238 @@ namespace Trident
                     }
                 }
                 l_TargetRegistry.AddComponent<MeshComponent>(l_Entity, l_Mesh);
+
+                continue;
+            }
+
+            if (l_Line.rfind("Sprite ", 0) == 0)
+            {
+                SpriteComponent l_Sprite{};
+
+                // Helpers local to this scope keep the parsing logic compact and readable.
+                auto a_ExtractToken = [](const std::string& a_Source, const std::string& a_Key) -> std::string
+                    {
+                        const size_t l_KeyPos = a_Source.find(a_Key);
+                        if (l_KeyPos == std::string::npos)
+                        {
+                            return {};
+                        }
+
+                        const size_t l_ValueStart = l_KeyPos + a_Key.length();
+                        size_t l_ValueEnd = a_Source.find(' ', l_ValueStart);
+                        if (l_ValueEnd == std::string::npos)
+                        {
+                            l_ValueEnd = a_Source.length();
+                        }
+
+                        return a_Source.substr(l_ValueStart, l_ValueEnd - l_ValueStart);
+                    };
+
+                auto a_ParseVec2 = [](const std::string& a_Value, glm::vec2& a_Output) -> bool
+                    {
+                        if (a_Value.empty())
+                        {
+                            return true;
+                        }
+
+                        std::istringstream l_TokenStream(a_Value);
+                        char l_Comma = ',';
+                        if (!(l_TokenStream >> a_Output.x))
+                        {
+                            return false;
+                        }
+                        if (!(l_TokenStream >> l_Comma) || l_Comma != ',')
+                        {
+                            return false;
+                        }
+                        if (!(l_TokenStream >> a_Output.y))
+                        {
+                            return false;
+                        }
+
+                        return true;
+                    };
+
+                auto a_ParseVec4 = [](const std::string& a_Value, glm::vec4& a_Output) -> bool
+                    {
+                        if (a_Value.empty())
+                        {
+                            return true;
+                        }
+
+                        std::istringstream l_TokenStream(a_Value);
+                        char l_Comma = ',';
+                        if (!(l_TokenStream >> a_Output.r))
+                        {
+                            return false;
+                        }
+                        for (int it_Index = 0; it_Index < 3; ++it_Index)
+                        {
+                            if (!(l_TokenStream >> l_Comma) || l_Comma != ',')
+                            {
+                                return false;
+                            }
+
+                            if (!(l_TokenStream >> a_Output[it_Index + 1]))
+                            {
+                                return false;
+                            }
+                        }
+
+                        return true;
+                    };
+
+                auto a_ParseIvec2 = [](const std::string& a_Value, glm::ivec2& a_Output) -> bool
+                    {
+                        if (a_Value.empty())
+                        {
+                            return true;
+                        }
+
+                        std::istringstream l_TokenStream(a_Value);
+                        char l_Comma = ',';
+                        if (!(l_TokenStream >> a_Output.x))
+                        {
+                            return false;
+                        }
+                        if (!(l_TokenStream >> l_Comma) || l_Comma != ',')
+                        {
+                            return false;
+                        }
+                        if (!(l_TokenStream >> a_Output.y))
+                        {
+                            return false;
+                        }
+
+                        return true;
+                    };
+
+                auto a_ParseFloat = [](const std::string& a_Value, float& a_Output) -> bool
+                    {
+                        if (a_Value.empty())
+                        {
+                            return true;
+                        }
+
+                        std::istringstream l_TokenStream(a_Value);
+                        if (!(l_TokenStream >> a_Output))
+                        {
+                            return false;
+                        }
+
+                        return true;
+                    };
+
+                auto a_ParseInt = [](const std::string& a_Value, int& a_Output) -> bool
+                    {
+                        if (a_Value.empty())
+                        {
+                            return true;
+                        }
+
+                        std::istringstream l_TokenStream(a_Value);
+                        if (!(l_TokenStream >> a_Output))
+                        {
+                            return false;
+                        }
+
+                        return true;
+                    };
+
+                auto a_ParseBool = [](const std::string& a_Value, bool& a_Output) -> bool
+                    {
+                        if (a_Value.empty())
+                        {
+                            return true;
+                        }
+
+                        std::istringstream l_TokenStream(a_Value);
+                        if (l_TokenStream >> std::boolalpha >> a_Output)
+                        {
+                            return true;
+                        }
+
+                        l_TokenStream.clear();
+                        l_TokenStream.str(a_Value);
+                        int l_IntValue = 0;
+                        if (l_TokenStream >> l_IntValue)
+                        {
+                            a_Output = (l_IntValue != 0);
+                            return true;
+                        }
+
+                        return false;
+                    };
+
+                l_Sprite.m_TextureId = ExtractQuotedToken(l_Line);
+
+                const std::string l_TintToken = a_ExtractToken(l_Line, "Tint=");
+                if (!a_ParseVec4(l_TintToken, l_Sprite.m_TintColor))
+                {
+                    TR_CORE_WARN("Failed to parse sprite tint token '{}'", l_TintToken);
+                }
+
+                const std::string l_UVScaleToken = a_ExtractToken(l_Line, "UVScale=");
+                if (!a_ParseVec2(l_UVScaleToken, l_Sprite.m_UVScale))
+                {
+                    TR_CORE_WARN("Failed to parse sprite UVScale token '{}'", l_UVScaleToken);
+                }
+
+                const std::string l_UVOffsetToken = a_ExtractToken(l_Line, "UVOffset=");
+                if (!a_ParseVec2(l_UVOffsetToken, l_Sprite.m_UVOffset))
+                {
+                    TR_CORE_WARN("Failed to parse sprite UVOffset token '{}'", l_UVOffsetToken);
+                }
+
+                const std::string l_TilingToken = a_ExtractToken(l_Line, "Tiling=");
+                if (!a_ParseFloat(l_TilingToken, l_Sprite.m_TilingFactor))
+                {
+                    TR_CORE_WARN("Failed to parse sprite tiling token '{}'", l_TilingToken);
+                }
+
+                const std::string l_VisibleToken = a_ExtractToken(l_Line, "Visible=");
+                if (!a_ParseBool(l_VisibleToken, l_Sprite.m_Visible))
+                {
+                    TR_CORE_WARN("Failed to parse sprite visibility token '{}'", l_VisibleToken);
+                }
+
+                const std::string l_MaterialOverrideToken = a_ExtractToken(l_Line, "UseMaterialOverride=");
+                if (!a_ParseBool(l_MaterialOverrideToken, l_Sprite.m_UseMaterialOverride))
+                {
+                    TR_CORE_WARN("Failed to parse sprite material override flag '{}'", l_MaterialOverrideToken);
+                }
+
+                const size_t l_MaterialTokenPos = l_Line.find("Material=");
+                    if (l_MaterialTokenPos != std::string::npos)
+                    {
+                        l_Sprite.m_MaterialOverrideId = ExtractQuotedToken(l_Line.substr(l_MaterialTokenPos));
+                    }
+
+                const std::string l_AtlasTilesToken = a_ExtractToken(l_Line, "AtlasTiles=");
+                if (!a_ParseIvec2(l_AtlasTilesToken, l_Sprite.m_AtlasTiles))
+                {
+                    TR_CORE_WARN("Failed to parse sprite atlas tiles token '{}'", l_AtlasTilesToken);
+                }
+
+                const std::string l_AtlasIndexToken = a_ExtractToken(l_Line, "AtlasIndex=");
+                if (!a_ParseInt(l_AtlasIndexToken, l_Sprite.m_AtlasIndex))
+                {
+                    TR_CORE_WARN("Failed to parse sprite atlas index token '{}'", l_AtlasIndexToken);
+                }
+
+                const std::string l_AnimationSpeedToken = a_ExtractToken(l_Line, "AnimationSpeed=");
+                if (!a_ParseFloat(l_AnimationSpeedToken, l_Sprite.m_AnimationSpeed))
+                {
+                    TR_CORE_WARN("Failed to parse sprite animation speed token '{}'", l_AnimationSpeedToken);
+                }
+
+                const std::string l_SortOffsetToken = a_ExtractToken(l_Line, "SortOffset=");
+                if (!a_ParseFloat(l_SortOffsetToken, l_Sprite.m_SortOffset))
+                {
+                    TR_CORE_WARN("Failed to parse sprite sort offset token '{}'", l_SortOffsetToken);
+                }
+
+                l_TargetRegistry.AddComponent<SpriteComponent>(l_Entity, l_Sprite);
 
                 continue;
             }
