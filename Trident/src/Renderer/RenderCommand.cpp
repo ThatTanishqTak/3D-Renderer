@@ -81,6 +81,24 @@ namespace Trident
         return Startup::GetRenderer().HasRuntimeCamera();
     }
 
+    bool RenderCommand::IsPerformanceCaptureEnabled()
+    {
+        // Surface the renderer flag so the editor UI can mirror the active capture state to the user.
+        return Startup::GetRenderer().IsPerformanceCaptureEnabled();
+    }
+
+    size_t RenderCommand::GetPerformanceCaptureSampleCount()
+    {
+        // Provide the capture sample count so UI elements can display how much data the session has collected so far.
+        return Startup::GetRenderer().GetPerformanceCaptureSampleCount();
+    }
+
+    void RenderCommand::SetPerformanceCaptureEnabled(bool enabled)
+    {
+        // Allow application-level widgets to start or finish a capture session without touching renderer internals.
+        Startup::GetRenderer().SetPerformanceCaptureEnabled(enabled);
+    }
+
     Transform RenderCommand::GetTransform()
     {
         return Startup::GetRenderer().GetTransform();

@@ -27,6 +27,13 @@ namespace Trident
         static void SetActiveRegistry(ECS::Registry* registry);
         static bool HasRuntimeCamera();
 
+        // Allow tooling to query whether a capture session is currently active for status displays.
+        static bool IsPerformanceCaptureEnabled();
+        // Surface the current capture sample count so UI overlays can visualise progress to artists.
+        static size_t GetPerformanceCaptureSampleCount();
+        // Toggle the renderer's capture mode so the application layer can start or end sessions.
+        static void SetPerformanceCaptureEnabled(bool enabled);
+
         static Transform GetTransform();
         static ViewportInfo GetViewport();
         static VkDescriptorSet GetViewportTexture(uint32_t viewportId);

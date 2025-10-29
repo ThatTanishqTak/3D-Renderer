@@ -253,6 +253,31 @@ void ApplicationLayer::RenderSceneToolbar()
         const char* l_StatusLabel = l_IsPlaying ? "Playing" : "Editing";
         ImGui::Text("Scene State: %s", l_StatusLabel);
 
+        ImGui::Separator();
+
+        // Mirror renderer performance capture controls so teams can trigger recordings from the editor toolbar.
+        const bool l_IsCapturing = Trident::RenderCommand::IsPerformanceCaptureEnabled();
+        const size_t l_CaptureSamples = Trident::RenderCommand::GetPerformanceCaptureSampleCount();
+        const char* l_CaptureLabel = l_IsCapturing ? "Stop Performance Capture" : "Start Performance Capture";
+        if (ImGui::Button(l_CaptureLabel))
+        {
+            // Toggling the flag automatically starts or exports the capture through the renderer's existing logic.
+            Trident::RenderCommand::SetPerformanceCaptureEnabled(!l_IsCapturing);
+        }
+
+        ImGui::SameLine();
+        ImGui::Text("Captured Samples: %zu", l_CaptureSamples);
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Samples export automatically when capture stops. Future tooling can expand analytics here.");
+        }
+
+        if (l_IsCapturing)
+        {
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(0.85f, 0.25f, 0.25f, 1.0f), "Recording...");
+        }
+
         // Future improvements can add icons, hotkeys, or advanced transport controls here without touching other panels.
     }
     ImGui::End();
