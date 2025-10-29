@@ -253,6 +253,44 @@ void ViewportPanel::Render()
             // matrix for Vulkan, so the off-screen image is stored upright and does not require an additional flip.
             ImGui::Image(reinterpret_cast<ImTextureID>(l_Descriptor), l_ContentRegion, ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f));
 
+            // Overlay editor camera icons so artists can quickly identify authored viewpoints.
+            const CameraOverlayIcon& l_CameraIcon = GetCameraOverlayIcon();
+            if (l_CameraIcon.IsValid())
+            {
+                const std::vector<Trident::CameraOverlayInstance> l_CameraOverlays = Trident::RenderCommand::GetCameraOverlayInstances(m_ViewportID);
+                if (!l_CameraOverlays.empty())
+                {
+                    ImDrawList* l_DrawList = ImGui::GetWindowDrawList();
+                    const ImVec2 l_HalfIconSize{ l_CameraIcon.m_Size.x * 0.5f, l_CameraIcon.m_Size.y * 0.5f };
+
+                    for (const Trident::CameraOverlayInstance& it_Overlay : l_CameraOverlays)
+                    {
+                        const ImVec2 l_Center{ l_ViewportPos.x + it_Overlay.m_ScreenPosition.x, l_ViewportPos.y + it_Overlay.m_ScreenPosition.y };
+                        const ImVec2 l_Min{ l_Center.x - l_HalfIconSize.x, l_Center.y - l_HalfIconSize.y };
+                        const ImVec2 l_Max{ l_Center.x + l_HalfIconSize.x, l_Center.y + l_HalfIconSize.y };
+
+                        ImU32 l_Tint = IM_COL32(255, 255, 255, 255);
+                        if (it_Overlay.m_IsViewportCamera)
+                        {
+                            l_Tint = IM_COL32(129, 199, 132, 255);
+                        }
+                        else if (it_Overlay.m_Entity == m_SelectedEntity)
+                        {
+                            l_Tint = IM_COL32(255, 213, 79, 255);
+                        }
+                        else if (it_Overlay.m_IsPrimary)
+                        {
+                            l_Tint = IM_COL32(100, 181, 246, 255);
+                        }
+
+                        // Draw a faint rounded backdrop so the icon remains visible over varied scene colours.
+                        const ImU32 l_BackdropColor = IM_COL32(0, 0, 0, 96);
+                        l_DrawList->AddRectFilled(ImVec2(l_Min.x - 2.0f, l_Min.y - 2.0f), ImVec2(l_Max.x + 2.0f, l_Max.y + 2.0f), l_BackdropColor, 4.0f);
+                        l_DrawList->AddImage(l_CameraIcon.m_TextureId, l_Min, l_Max, ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f), l_Tint);
+                    }
+                }
+            }
+
             if (ImGui::BeginDragDropTarget())
             {
                 const ImGuiPayload* l_Payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM");

@@ -3,6 +3,7 @@
 #include "Application/Startup.h"
 
 #include "ECS/Components/TransformComponent.h"
+#include "ECS/Components/CameraComponent.h"
 #include "Geometry/Mesh.h"
 #include "UI/ImGuiLayer.h"
 #include "Core/Utilities.h"
@@ -15,6 +16,7 @@
 #include <array>
 #include <string>
 #include <string_view>
+#include <cmath>
 #include <chrono>
 #include <fstream>
 #include <sstream>
@@ -813,6 +815,11 @@ namespace Trident
     {
         // Persist the registry pointer so draw gathering always references the intended data source (editor vs runtime).
         m_Registry = registry;
+        if (m_ViewportCamera != std::numeric_limits<ECS::Entity>::max())
+        {
+            // Reset the cached viewport camera when the underlying registry changes to avoid dangling entity references.
+            m_ViewportCamera = std::numeric_limits<ECS::Entity>::max();
+        }
     }
 
     void Renderer::SetClearColor(const glm::vec4& color)
@@ -874,6 +881,93 @@ namespace Trident
         }
 
         return l_Camera->GetProjectionMatrix();
+    }
+
+    std::vector<Renderer::CameraOverlayInstance> Renderer::GetCameraOverlayInstances(uint32_t viewportId) const
+    {
+        std::vector<CameraOverlayInstance> l_Instances{};
+
+        const ViewportContext* l_Context = FindViewportContext(viewportId);
+        if (!l_Context || !IsValidViewport(l_Context->m_Info))
+        {
+            // Without a valid viewport the overlay has nowhere to draw, so bail out early.
+            return l_Instances;
+        }
+
+        if (m_Registry == nullptr)
+        {
+            // No registry means no entities to evaluate for overlays.
+            return l_Instances;
+        }
+
+        const Camera* l_Camera = GetActiveCamera(*l_Context);
+        if (l_Camera == nullptr)
+        {
+            // Viewports without an active camera cannot project world-space positions into screen-space.
+            return l_Instances;
+        }
+
+        const glm::vec2 l_ViewportSize = l_Context->m_Info.Size;
+        if (l_ViewportSize.x <= std::numeric_limits<float>::epsilon() || l_ViewportSize.y <= std::numeric_limits<float>::epsilon())
+        {
+            return l_Instances;
+        }
+
+        const glm::mat4 l_ViewProjection = l_Camera->GetProjectionMatrix() * l_Camera->GetViewMatrix();
+        const std::vector<ECS::Entity>& l_Entities = m_Registry->GetEntities();
+        l_Instances.reserve(l_Entities.size());
+
+        for (ECS::Entity it_Entity : l_Entities)
+        {
+            if (!m_Registry->HasComponent<CameraComponent>(it_Entity))
+            {
+                continue;
+            }
+
+            if (!m_Registry->HasComponent<Transform>(it_Entity))
+            {
+                // Cameras without transforms cannot be located in the world yet.
+                continue;
+            }
+
+            const Transform& l_Transform = m_Registry->GetComponent<Transform>(it_Entity);
+            const glm::vec4 l_WorldPosition{ l_Transform.Position, 1.0f };
+            const glm::vec4 l_ClipPosition = l_ViewProjection * l_WorldPosition;
+
+            if (std::abs(l_ClipPosition.w) <= std::numeric_limits<float>::epsilon())
+            {
+                continue;
+            }
+
+            const glm::vec3 l_Ndc = glm::vec3(l_ClipPosition) / l_ClipPosition.w;
+            if (l_Ndc.z < 0.0f || l_Ndc.z > 1.0f)
+            {
+                continue;
+            }
+
+            if (std::abs(l_Ndc.x) > 1.0f || std::abs(l_Ndc.y) > 1.0f)
+            {
+                continue;
+            }
+
+            CameraOverlayInstance& l_Instance = l_Instances.emplace_back();
+            l_Instance.m_Entity = it_Entity;
+            l_Instance.m_ScreenPosition.x = (l_Ndc.x * 0.5f + 0.5f) * l_ViewportSize.x;
+            l_Instance.m_ScreenPosition.y = (1.0f - (l_Ndc.y * 0.5f + 0.5f)) * l_ViewportSize.y;
+            l_Instance.m_Depth = l_Ndc.z;
+
+            const CameraComponent& l_CameraComponent = m_Registry->GetComponent<CameraComponent>(it_Entity);
+            l_Instance.m_IsPrimary = l_CameraComponent.m_Primary;
+            l_Instance.m_IsViewportCamera = (it_Entity == m_ViewportCamera);
+        }
+
+        std::sort(l_Instances.begin(), l_Instances.end(), [](const CameraOverlayInstance& lhs, const CameraOverlayInstance& rhs)
+            {
+                // Draw farther cameras first so nearer overlays stack on top of the list visually.
+                return lhs.m_Depth > rhs.m_Depth;
+            });
+
+        return l_Instances;
     }
 
     void Renderer::SetViewport(uint32_t viewportId, const ViewportInfo& info)
@@ -4002,6 +4096,12 @@ namespace Trident
     {
         // Store the inspector's active entity so gizmo updates reference the same transform as the UI selection.
         m_Entity = entity;
+    }
+
+    void Renderer::SetViewportCamera(ECS::Entity entity)
+    {
+        // Cache which ECS camera currently drives the viewport so overlays can highlight it.
+        m_ViewportCamera = entity;
     }
 
     void Renderer::SetTransform(const Transform& props)

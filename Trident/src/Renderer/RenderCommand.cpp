@@ -75,6 +75,12 @@ namespace Trident
         Startup::GetRenderer().SetActiveRegistry(registry);
     }
 
+    void RenderCommand::SetViewportCamera(ECS::Entity entity)
+    {
+        // Tell the renderer which ECS camera currently feeds the viewport so overlays can highlight it.
+        Startup::GetRenderer().SetViewportCamera(entity);
+    }
+
     bool RenderCommand::HasRuntimeCamera()
     {
         // Expose whether a valid, ready runtime camera is bound so panels can surface helpful overlays or fallbacks.
@@ -124,6 +130,12 @@ namespace Trident
     {
         // Gameplay tooling can query either viewport knowing the renderer will select the matching camera feed.
         return Startup::GetRenderer().GetViewportProjectionMatrix(viewportId);
+    }
+
+    std::vector<Renderer::CameraOverlayInstance> RenderCommand::GetCameraOverlayInstances(uint32_t viewportId)
+    {
+        // Retrieve the projected overlay list so UI code can draw camera icons in screen-space.
+        return Startup::GetRenderer().GetCameraOverlayInstances(viewportId);
     }
 
     size_t RenderCommand::GetCurrentFrame()

@@ -25,6 +25,7 @@ namespace Trident
         static void SetRuntimeCamera(Camera* camera);
         static void SetRuntimeCameraReady(bool cameraReady);
         static void SetActiveRegistry(ECS::Registry* registry);
+        static void SetViewportCamera(ECS::Entity entity);
         static bool HasRuntimeCamera();
 
         // Allow tooling to query whether a capture session is currently active for status displays.
@@ -39,6 +40,7 @@ namespace Trident
         static VkDescriptorSet GetViewportTexture(uint32_t viewportId);
         static glm::mat4 GetViewportViewMatrix(uint32_t viewportId);
         static glm::mat4 GetViewportProjectionMatrix(uint32_t viewportId);
+        static std::vector<CameraOverlayInstance> GetCameraOverlayInstances(uint32_t viewportId);
         static size_t GetCurrentFrame();
         // Expose the active clear colour so UI panels can stay in sync with renderer preferences.
         static glm::vec4 GetClearColor();

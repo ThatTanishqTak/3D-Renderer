@@ -49,6 +49,21 @@ namespace Trident
         glm::vec2 Size{ 0.0f };
     };
 
+    /**
+     * @brief Describes a projected camera overlay used by viewport UI layers.
+     *
+     * Each instance stores the screen-space location of an entity driven camera along
+     * with metadata that allows tooling to highlight primary or active viewpoints.
+     */
+    struct CameraOverlayInstance
+    {
+        ECS::Entity m_Entity = std::numeric_limits<ECS::Entity>::max(); ///< Entity owning the camera component.
+        glm::vec2 m_ScreenPosition{ 0.0f, 0.0f };                     ///< Position inside the viewport in pixels.
+        float m_Depth = 1.0f;                                         ///< Normalised device depth used for front-to-back sorting.
+        bool m_IsPrimary = false;                                     ///< True when the camera component is flagged as primary.
+        bool m_IsViewportCamera = false;                              ///< True when the camera currently drives the viewport.
+    };
+
     class Renderer
     {
     public:
@@ -130,6 +145,8 @@ namespace Trident
         void SetViewport(uint32_t viewportId, const ViewportInfo& info);
         // Cache the inspector's selection so gizmo transforms lock onto the same entity as the editor UI.
         void SetSelectedEntity(ECS::Entity entity);
+        // Track which ECS camera currently drives the viewport so overlays can highlight it for designers.
+        void SetViewportCamera(ECS::Entity entity);
 
         Transform GetTransform() const;
         ViewportInfo GetViewport() const;
@@ -139,6 +156,8 @@ namespace Trident
         // Provide tooling with the matrices required for gizmo overlay composition.
         glm::mat4 GetViewportViewMatrix(uint32_t viewportId) const;
         glm::mat4 GetViewportProjectionMatrix(uint32_t viewportId) const;
+        // Gather the projected positions of ECS cameras so UI overlays can render icons in 2D space.
+        std::vector<CameraOverlayInstance> GetCameraOverlayInstances(uint32_t viewportId) const;
         const Camera* GetActiveCamera() const;
 
         // Access to the CPU-side material cache so editor widgets can tweak shading values.

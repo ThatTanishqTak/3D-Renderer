@@ -1133,6 +1133,7 @@ void ApplicationLayer::RefreshRuntimeCameraBinding()
         // Future upgrades may promote this to support multiple simultaneous runtime cameras streamed to different views.
         Trident::RenderCommand::SetRuntimeCamera(&m_RuntimeCamera);
         Trident::RenderCommand::SetRuntimeCameraReady(true);
+        Trident::RenderCommand::SetViewportCamera(l_SelectedEntity);
     }
     else
     {
@@ -1140,6 +1141,7 @@ void ApplicationLayer::RefreshRuntimeCameraBinding()
         m_BoundRuntimeCameraEntity = l_InvalidEntity;
         Trident::RenderCommand::SetRuntimeCamera(nullptr);
         Trident::RenderCommand::SetRuntimeCameraReady(false);
+        Trident::RenderCommand::SetViewportCamera(l_InvalidEntity);
     }
 }
 
