@@ -132,7 +132,7 @@ namespace Trident
         return Startup::GetRenderer().GetViewportProjectionMatrix(viewportId);
     }
 
-    std::vector<Renderer::CameraOverlayInstance> RenderCommand::GetCameraOverlayInstances(uint32_t viewportId)
+    std::vector<CameraOverlayInstance> RenderCommand::GetCameraOverlayInstances(uint32_t viewportId)
     {
         // Retrieve the projected overlay list so UI code can draw camera icons in screen-space.
         return Startup::GetRenderer().GetCameraOverlayInstances(viewportId);

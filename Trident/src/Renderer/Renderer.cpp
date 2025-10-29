@@ -883,7 +883,7 @@ namespace Trident
         return l_Camera->GetProjectionMatrix();
     }
 
-    std::vector<Renderer::CameraOverlayInstance> Renderer::GetCameraOverlayInstances(uint32_t viewportId) const
+    std::vector<CameraOverlayInstance> Renderer::GetCameraOverlayInstances(uint32_t viewportId) const
     {
         std::vector<CameraOverlayInstance> l_Instances{};
 
