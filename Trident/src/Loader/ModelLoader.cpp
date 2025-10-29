@@ -14,6 +14,7 @@
 #include <functional>
 #include <limits>
 #include <string>
+#include <type_traits>
 #include <unordered_map>
 #include <utility>
 #include <glm/glm.hpp>
@@ -89,8 +90,10 @@ namespace Trident
                     }
                     break;
                 }
+#ifdef AI_AICOLOR4D
                 case AI_AICOLOR4D:
                 {
+                    // Preserve RGBA metadata when the Assimp build exposes the dedicated color type.
                     const aiColor4D* l_Color = static_cast<aiColor4D*>(sourceEntry.mData);
                     if (l_Color)
                     {
@@ -99,6 +102,7 @@ namespace Trident
                     }
                     break;
                 }
+#endif
                 default:
                 {
                     l_MetadataValue.m_Type = Loader::MetadataValue::Type::Binary;
@@ -369,6 +373,8 @@ namespace Trident
 
 
             // Helper that records a texture reference and registers file-backed payloads for the renderer.
+            using MaterialGetTextureWithFlags = aiReturn(aiMaterial::*)(aiTextureType, unsigned int, aiString*, aiTextureMapping*, unsigned int*, float*, aiTextureOp*, aiTextureMapMode*, unsigned int*) const;
+            constexpr bool s_MaterialGetTextureIncludesFlags = std::is_same_v<decltype(&aiMaterial::GetTexture), MaterialGetTextureWithFlags>;
             const auto CaptureTextureSlot =
                 [&](const aiMaterial* sourceMaterial, aiTextureType type, unsigned int textureIndex, Loader::MaterialExtra& matrialExtra) -> int
                 {
@@ -383,11 +389,22 @@ namespace Trident
                     float l_Blend = 1.0f;
                     aiTextureOp l_Operation = aiTextureOp_Multiply;
                     aiTextureMapMode l_MapModes[3] = { aiTextureMapMode_Wrap, aiTextureMapMode_Wrap, aiTextureMapMode_Wrap };
-                    unsigned int l_Flags = 0;
-
-                    if (sourceMaterial->GetTexture(type, textureIndex, &l_TexturePath, &l_Mapping, &l_UVIndex, &l_Blend, &l_Operation, l_MapModes, &l_Flags) != aiReturn_SUCCESS)
+                    if constexpr (s_MaterialGetTextureIncludesFlags)
                     {
-                        return -1;
+                        // Newer Assimp builds expose an extra flag parameter; capture it when available.
+                        unsigned int l_Flags = 0;
+                        if (sourceMaterial->GetTexture(type, textureIndex, &l_TexturePath, &l_Mapping, &l_UVIndex, &l_Blend, &l_Operation, l_MapModes, &l_Flags) != aiReturn_SUCCESS)
+                        {
+                            return -1;
+                        }
+                    }
+                    else
+                    {
+                        // Older signatures omit the flag payload; ignore it while still collecting texture metadata.
+                        if (sourceMaterial->GetTexture(type, textureIndex, &l_TexturePath, &l_Mapping, &l_UVIndex, &l_Blend, &l_Operation, l_MapModes) != aiReturn_SUCCESS)
+                        {
+                            return -1;
+                        }
                     }
 
                     Loader::TextureReference l_Reference{};
@@ -975,7 +992,16 @@ namespace Trident
                     l_Clip.m_TicksPerSecond = static_cast<float>(l_TicksPerSecond);
                     const double l_DurationTicks = l_AssimpAnimation->mDuration;
                     l_Clip.m_DurationSeconds = l_TicksPerSecond > 0.0 ? static_cast<float>(l_DurationTicks / l_TicksPerSecond) : 0.0f;
-                    l_AnimationExtra.m_Flags = l_AssimpAnimation->mFlags;
+                    if constexpr (requires(const aiAnimation & animation) { animation.mFlags; })
+                    {
+                        // Retain debug visibility into the original animation flags when the SDK provides them.
+                        l_AnimationExtra.m_Flags = static_cast<uint32_t>(l_AssimpAnimation->mFlags);
+                    }
+                    else
+                    {
+                        // Future improvement: infer equivalent metadata when Assimp omits explicit animation flags.
+                        l_AnimationExtra.m_Flags = 0u;
+                    }
 
                     l_Clip.m_Channels.reserve(l_AssimpAnimation->mNumChannels);
                     for (unsigned int it_Channel = 0; it_Channel < l_AssimpAnimation->mNumChannels; ++it_Channel)
@@ -1060,7 +1086,16 @@ namespace Trident
 
                         Loader::AnimationExtra::MeshChannel l_Channel{};
                         l_Channel.m_Name = l_MeshChannel->mName.length > 0 ? l_MeshChannel->mName.C_Str() : std::string{};
-                        l_Channel.m_MeshId = l_MeshChannel->mMeshId;
+                        if constexpr (requires(const aiMeshAnim & channelInfo) { channelInfo.mMeshId; })
+                        {
+                            // Preserve direct mesh links for legacy Assimp structures that expose explicit identifiers.
+                            l_Channel.m_MeshId = l_MeshChannel->mMeshId;
+                        }
+                        else
+                        {
+                            // Without mesh identifiers we fall back to zero for now; mapping by name would be a useful enhancement.
+                            l_Channel.m_MeshId = 0u;
+                        }
                         l_Channel.m_Keys.reserve(l_MeshChannel->mNumKeys);
 
                         for (unsigned int it_Key = 0; it_Key < l_MeshChannel->mNumKeys; ++it_Key)
@@ -1086,7 +1121,16 @@ namespace Trident
 
                         Loader::AnimationExtra::MorphChannel l_Channel{};
                         l_Channel.m_Name = l_MorphChannel->mName.length > 0 ? l_MorphChannel->mName.C_Str() : std::string{};
-                        l_Channel.m_MeshId = l_MorphChannel->mMeshId;
+                        if constexpr (requires(const aiMeshMorphAnim & channelInfo) { channelInfo.mMeshId; })
+                        {
+                            // Capture the mesh identifier when the SDK exposes it directly on the morph channel.
+                            l_Channel.m_MeshId = l_MorphChannel->mMeshId;
+                        }
+                        else
+                        {
+                            // TODO: resolve the target mesh via the channel name for SDK builds without explicit IDs.
+                            l_Channel.m_MeshId = 0u;
+                        }
                         l_Channel.m_Keys.reserve(l_MorphChannel->mNumKeys);
 
                         for (unsigned int it_Key = 0; it_Key < l_MorphChannel->mNumKeys; ++it_Key)
