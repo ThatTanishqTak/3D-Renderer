@@ -13,6 +13,8 @@
 #include <string>
 #include <cctype>
 #include <system_error>
+#include <array>
+#include <cstdio>
 
 namespace fs = std::filesystem;
 
@@ -23,6 +25,7 @@ namespace Trident
         namespace
         {
             fs::path s_CurrentDirectory = fs::current_path();
+            std::array<char, 256> s_FileNameBuffer{}; ///< Shared buffer used by the save dialog to capture a filename entry.
 
             class IconLibrary
             {
@@ -179,6 +182,19 @@ namespace Trident
             {
                 IconLibrary& l_IconLibrary = GetIconLibrary();
 
+                // Reset the working directory when the dialog first appears.
+                if (ImGui::IsWindowAppearing())
+                {
+                    if (!path.empty())
+                    {
+                        fs::path l_InitialPath = path;
+                        if (l_InitialPath.has_parent_path())
+                        {
+                            s_CurrentDirectory = l_InitialPath.parent_path();
+                        }
+                    }
+                }
+
                 ImGui::TextUnformatted(s_CurrentDirectory.string().c_str());
                 if (ImGui::Button(".."))
                 {
@@ -275,6 +291,184 @@ namespace Trident
 
                 ImGui::EndChild();
 
+                if (ImGui::Button("Cancel"))
+                {
+                    ImGui::CloseCurrentPopup();
+                }
+
+                ImGui::EndPopup();
+            }
+
+            return l_FileChosen;
+        }
+
+        bool FileDialog::Save(const char* id, std::string& path, const char* extension)
+        {
+            bool l_FileChosen = false;
+            bool l_Open = true;
+            if (ImGui::BeginPopupModal(id, &l_Open))
+            {
+                IconLibrary& l_IconLibrary = GetIconLibrary();
+
+                // Reset the working directory when the dialog first appears.
+                if (ImGui::IsWindowAppearing())
+                {
+                    if (!path.empty())
+                    {
+                        fs::path l_InitialPath = path;
+                        if (l_InitialPath.has_parent_path())
+                        {
+                            s_CurrentDirectory = l_InitialPath.parent_path();
+                        }
+
+                        const std::string l_FileName = l_InitialPath.filename().string();
+                        std::fill(s_FileNameBuffer.begin(), s_FileNameBuffer.end(), '\0');
+                        std::snprintf(s_FileNameBuffer.data(), s_FileNameBuffer.size(), "%s", l_FileName.c_str());
+                    }
+                    else
+                    {
+                        std::fill(s_FileNameBuffer.begin(), s_FileNameBuffer.end(), '\0');
+                    }
+                }
+
+                ImGui::TextUnformatted(s_CurrentDirectory.string().c_str());
+                if (ImGui::Button(".."))
+                {
+                    if (s_CurrentDirectory.has_parent_path())
+                    {
+                        s_CurrentDirectory = s_CurrentDirectory.parent_path();
+                    }
+                }
+
+                if (extension != nullptr && *extension != '\0')
+                {
+                    ImGui::SameLine();
+                    ImGui::Text("Saving as *%s", extension);
+                }
+
+                ImGui::BeginChild("##browser_save", ImVec2(500, 300), true);
+
+                std::vector<fs::directory_entry> l_Entries;
+                std::error_code l_IteratorError{};
+                for (fs::directory_iterator it_Entry{ s_CurrentDirectory, l_IteratorError }; it_Entry != fs::directory_iterator{}; ++it_Entry)
+                {
+                    l_Entries.push_back(*it_Entry);
+                }
+
+                std::sort(l_Entries.begin(), l_Entries.end(), [](const fs::directory_entry& a, const fs::directory_entry& b)
+                    {
+                        if (a.is_directory() != b.is_directory())
+                        {
+                            return a.is_directory() > b.is_directory();
+                        }
+
+                        return a.path().filename().string() < b.path().filename().string();
+                    });
+
+                if (ImGui::BeginTable("##FileSaveTable", 2, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_ScrollY))
+                {
+                    ImGui::TableSetupColumn("Icon", ImGuiTableColumnFlags_WidthFixed, 28.0f);
+                    ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
+
+                    for (const auto& it_Entry : l_Entries)
+                    {
+                        const fs::directory_entry& l_Entry = it_Entry;
+                        const std::string l_Name = l_Entry.path().filename().string();
+                        const bool l_IsDirectory = l_Entry.is_directory();
+
+                        ImGui::PushID(l_Name.c_str());
+
+                        ImGui::TableNextRow();
+                        ImGui::TableSetColumnIndex(0);
+
+                        const IconLibrary::Icon l_Icon = l_IconLibrary.GetIconForEntry(l_Entry);
+                        const ImVec2 l_IconSize = l_Icon.IsValid() ? l_Icon.m_Size : ImVec2(18.0f, 18.0f);
+
+                        if (l_Icon.IsValid())
+                        {
+                            ImGui::Image(l_Icon.m_TextureId, l_IconSize);
+                        }
+                        else
+                        {
+                            ImGui::Dummy(l_IconSize);
+                        }
+                        ImGui::TableSetColumnIndex(1);
+
+                        const std::string l_DisplayName = l_IsDirectory ? l_Name + "/" : l_Name;
+                        const ImGuiSelectableFlags l_SelectFlags = ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowDoubleClick;
+                        const bool l_Selected = ImGui::Selectable(l_DisplayName.c_str(), false, l_SelectFlags);
+                        if (l_Selected)
+                        {
+                            if (l_IsDirectory)
+                            {
+                                if (ImGui::IsMouseDoubleClicked(Trident::Mouse::ButtonLeft))
+                                {
+                                    s_CurrentDirectory /= l_Name;
+                                }
+                            }
+                            else
+                            {
+                                std::snprintf(s_FileNameBuffer.data(), s_FileNameBuffer.size(), "%s", l_Name.c_str());
+
+                                bool l_Matches = true;
+                                if (extension != nullptr && *extension != '\0')
+                                {
+                                    l_Matches = l_Entry.path().extension() == extension;
+                                }
+
+                                if (l_Matches && ImGui::IsMouseDoubleClicked(Trident::Mouse::ButtonLeft))
+                                {
+                                    fs::path l_ResultPath = s_CurrentDirectory / l_Name;
+                                    if (extension != nullptr && *extension != '\0' && l_ResultPath.extension() != extension)
+                                    {
+                                        l_ResultPath.replace_extension(extension);
+                                    }
+
+                                    path = l_ResultPath.string();
+                                    l_FileChosen = true;
+                                    ImGui::CloseCurrentPopup();
+                                }
+                            }
+                        }
+
+                        ImGui::PopID();
+                    }
+
+                    ImGui::EndTable();
+                }
+
+                ImGui::EndChild();
+
+                ImGui::InputText("File Name", s_FileNameBuffer.data(), s_FileNameBuffer.size());
+
+                const std::string l_FileNameInput = s_FileNameBuffer.data();
+                const bool l_FileNameProvided = !l_FileNameInput.empty();
+
+                if (ImGui::Button("Save"))
+                {
+                    // Only commit the selection once the user has provided a filename.
+                    if (l_FileNameProvided)
+                    {
+                        fs::path l_ResultPath = s_CurrentDirectory / l_FileNameInput;
+                        if (extension != nullptr && *extension != '\0')
+                        {
+                            if (!l_ResultPath.has_extension() || l_ResultPath.extension() != extension)
+                            {
+                                l_ResultPath.replace_extension(extension);
+                            }
+                        }
+
+                        path = l_ResultPath.string();
+                        l_FileChosen = true;
+                        ImGui::CloseCurrentPopup();
+                    }
+                }
+                if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled) && !l_FileNameProvided)
+                {
+                    ImGui::SetTooltip("Enter a filename to enable saving.");
+                }
+
+                ImGui::SameLine();
                 if (ImGui::Button("Cancel"))
                 {
                     ImGui::CloseCurrentPopup();

@@ -12,6 +12,7 @@
 #include "Application/Input.h"
 #include "Events/KeyCodes.h"
 #include "Events/MouseCodes.h"
+#include "UI/FileDialog.h"
 
 #include <imgui.h>
 
@@ -21,6 +22,7 @@
 #include <cmath>
 #include <iterator>
 #include <limits>
+#include <system_error>
 
 #include <glm/vec2.hpp>
 #include <glm/gtx/norm.hpp>
@@ -193,6 +195,76 @@ void ApplicationLayer::RenderSceneToolbar()
         const bool l_HasScene = m_ActiveScene != nullptr;
         const bool l_IsPlaying = l_HasScene && m_ActiveScene->IsPlaying();
 
+        // Scene file management controls remain grouped near the play controls for quick iteration.
+        ImGui::BeginDisabled(!l_HasScene);
+        if (ImGui::Button("Save"))
+        {
+            // Persist to the existing path when available, otherwise prompt the user to choose a destination.
+            if (!m_CurrentScenePath.empty())
+            {
+                SaveScene(m_CurrentScenePath);
+            }
+            else
+            {
+                ImGui::OpenPopup("Save Scene As");
+            }
+        }
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNone))
+        {
+            const char* l_SaveTooltip = m_CurrentScenePath.empty() ? "Choose a location with Save As before saving." : "Write the current scene to disk.";
+            ImGui::SetTooltip("%s", l_SaveTooltip);
+        }
+
+        ImGui::SameLine();
+        if (ImGui::Button("Save As"))
+        {
+            // Always prompt for a destination when the user explicitly chooses Save As.
+            ImGui::OpenPopup("Save Scene As");
+        }
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNone))
+        {
+            ImGui::SetTooltip("Select a destination and name for this scene.");
+        }
+
+        ImGui::SameLine();
+        if (ImGui::Button("Load"))
+        {
+            // Loading always prompts before overwriting the current scene contents.
+            ImGui::OpenPopup("Load Scene");
+        }
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNone))
+        {
+            ImGui::SetTooltip("Load a scene from disk and replace the current editor contents.");
+        }
+        ImGui::EndDisabled();
+
+        // Surface the last scene I/O status so artists receive immediate feedback.
+        if (!m_SceneIoTooltip.empty())
+        {
+            ImGui::SameLine();
+            const ImVec4 l_Color = m_LastSceneIoFailed ? ImVec4(0.85f, 0.35f, 0.35f, 1.0f) : ImVec4(0.35f, 0.85f, 0.45f, 1.0f);
+            ImGui::TextColored(l_Color, m_LastSceneIoFailed ? "Scene IO Error" : "Scene IO");
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("%s", m_SceneIoTooltip.c_str());
+            }
+        }
+
+        // Handle modal file dialogs after the buttons so they remain active while the popups are open.
+        std::string l_SavePath = m_CurrentScenePath.empty() ? std::string{} : m_CurrentScenePath.string();
+        if (Trident::UI::FileDialog::Save("Save Scene As", l_SavePath, ".trident"))
+        {
+            SaveScene(l_SavePath);
+        }
+
+        std::string l_LoadPath = m_CurrentScenePath.empty() ? std::string{} : m_CurrentScenePath.string();
+        if (Trident::UI::FileDialog::Open("Load Scene", l_LoadPath, ".trident"))
+        {
+            LoadScene(l_LoadPath);
+        }
+
+        ImGui::Separator();
+
         ImGui::BeginDisabled(!l_HasScene);
         if (l_HasScene)
         {
@@ -282,6 +354,161 @@ void ApplicationLayer::RenderSceneToolbar()
     }
     ImGui::End();
     ImGui::PopStyleVar();
+}
+
+bool ApplicationLayer::SaveScene(const std::filesystem::path& path)
+{
+    if (m_ActiveScene == nullptr)
+    {
+        // The scene bridge should always exist while the editor is running, but guard against unexpected lifetimes.
+        TR_CORE_ERROR("Cannot save scene because no active scene is available.");
+        m_SceneIoTooltip = "Saving failed because there is no active scene.";
+        m_LastSceneIoFailed = true;
+        return false;
+    }
+
+    if (path.empty())
+    {
+        TR_CORE_ERROR("Cannot save scene because the provided path is empty.");
+        m_SceneIoTooltip = "Saving failed because the selected path was empty.";
+        m_LastSceneIoFailed = true;
+        return false;
+    }
+
+    std::filesystem::path l_TargetPath = path;
+    if (!l_TargetPath.has_extension() || l_TargetPath.extension() != ".trident")
+    {
+        // Normalise the extension to the project-standard format so future loads resolve cleanly.
+        l_TargetPath.replace_extension(".trident");
+    }
+
+    if (!l_TargetPath.has_filename())
+    {
+        TR_CORE_ERROR("Cannot save scene because the path '{}' is missing a filename.", l_TargetPath.string());
+        m_SceneIoTooltip = "Saving failed because no filename was provided.";
+        m_LastSceneIoFailed = true;
+        return false;
+    }
+
+    const std::filesystem::path l_TargetDirectory = l_TargetPath.parent_path();
+    if (!l_TargetDirectory.empty())
+    {
+        std::error_code l_CreateError{};
+        std::filesystem::create_directories(l_TargetDirectory, l_CreateError);
+        if (l_CreateError)
+        {
+            TR_CORE_ERROR("Failed to create scene directory '{}': {}", l_TargetDirectory.string(), l_CreateError.message());
+            m_SceneIoTooltip = "Saving failed because the destination directory could not be created.";
+            m_LastSceneIoFailed = true;
+            return false;
+        }
+    }
+
+    // Keep the scene metadata aligned with the filename so hierarchy panels display friendly titles.
+    m_ActiveScene->SetName(l_TargetPath.stem().string());
+    m_ActiveScene->Save(l_TargetPath.string());
+
+    std::error_code l_ExistsError{};
+    const bool l_FileExists = std::filesystem::exists(l_TargetPath, l_ExistsError);
+    if (!l_FileExists || l_ExistsError)
+    {
+        if (l_ExistsError)
+        {
+            TR_CORE_ERROR("Failed to verify saved scene '{}': {}", l_TargetPath.string(), l_ExistsError.message());
+        }
+        else
+        {
+            TR_CORE_ERROR("Scene file '{}' was not created during save.", l_TargetPath.string());
+        }
+
+        m_SceneIoTooltip = "Saving failed. Check the log for details.";
+        m_LastSceneIoFailed = true;
+        return false;
+    }
+
+    m_CurrentScenePath = l_TargetPath;
+    m_SceneIoTooltip = "Scene saved to " + l_TargetPath.string();
+    m_LastSceneIoFailed = false;
+
+    // Rebind the current registry and cameras so renderer state stays consistent with the new save point.
+    if (m_ActiveScene->IsPlaying())
+    {
+        Trident::RenderCommand::SetActiveRegistry(&m_ActiveScene->GetActiveRegistry());
+    }
+    else
+    {
+        Trident::RenderCommand::SetActiveRegistry(&m_ActiveScene->GetEditorRegistry());
+    }
+    RefreshRuntimeCameraBinding();
+
+    return true;
+}
+
+bool ApplicationLayer::LoadScene(const std::filesystem::path& path)
+{
+    if (m_ActiveScene == nullptr)
+    {
+        TR_CORE_ERROR("Cannot load scene because no active scene is available.");
+        m_SceneIoTooltip = "Loading failed because there is no active scene.";
+        m_LastSceneIoFailed = true;
+        return false;
+    }
+
+    if (path.empty())
+    {
+        TR_CORE_ERROR("Cannot load scene because the provided path is empty.");
+        m_SceneIoTooltip = "Loading failed because the selected path was empty.";
+        m_LastSceneIoFailed = true;
+        return false;
+    }
+
+    std::filesystem::path l_SourcePath = path;
+    if (!l_SourcePath.has_extension() || l_SourcePath.extension() != ".trident")
+    {
+        l_SourcePath.replace_extension(".trident");
+    }
+
+    std::error_code l_ExistsError{};
+    const bool l_FileExists = std::filesystem::exists(l_SourcePath, l_ExistsError);
+    if (!l_FileExists || l_ExistsError)
+    {
+        if (l_ExistsError)
+        {
+            TR_CORE_ERROR("Failed to validate scene '{}' before loading: {}", l_SourcePath.string(), l_ExistsError.message());
+        }
+        else
+        {
+            TR_CORE_ERROR("Scene file '{}' does not exist.", l_SourcePath.string());
+        }
+
+        m_SceneIoTooltip = "Loading failed because the file could not be found.";
+        m_LastSceneIoFailed = true;
+        return false;
+    }
+
+    if (m_ActiveScene->IsPlaying())
+    {
+        // Stop runtime playback so the load operation can safely rebuild the editor registry.
+        m_ActiveScene->Stop();
+    }
+
+    const bool l_Loaded = m_ActiveScene->Load(l_SourcePath.string());
+    if (!l_Loaded)
+    {
+        m_SceneIoTooltip = "Loading failed. Check the log for details.";
+        m_LastSceneIoFailed = true;
+        return false;
+    }
+
+    m_ActiveScene->SetName(l_SourcePath.stem().string());
+    m_CurrentScenePath = l_SourcePath;
+    m_SceneIoTooltip = "Scene loaded from " + l_SourcePath.string();
+    m_LastSceneIoFailed = false;
+
+    Trident::RenderCommand::SetActiveRegistry(&m_ActiveScene->GetEditorRegistry());
+    RefreshRuntimeCameraBinding();
+
+    return true;
 }
 
 void ApplicationLayer::HandleSceneHierarchyContextMenu(const ImVec2& min, const ImVec2& max)

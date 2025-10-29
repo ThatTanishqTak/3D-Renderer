@@ -23,6 +23,7 @@
 #include <vector>
 #include <memory>
 #include <unordered_map>
+#include <filesystem>
 
 class ApplicationLayer : public Trident::Layer
 {
@@ -63,6 +64,10 @@ private:
     void UpdateEditorCamera(float deltaTime);
     void RefreshRuntimeCameraBinding();
     void RenderSceneToolbar();
+
+    // Scene management helpers
+    bool SaveScene(const std::filesystem::path& path);
+    bool LoadScene(const std::filesystem::path& path);
 
     // Unity-like helpers
     void FrameSelection();
@@ -126,4 +131,8 @@ private:
     Trident::ECS::Entity m_BoundRuntimeCameraEntity = std::numeric_limits<Trident::ECS::Entity>::max(); ///< Tracks the last entity routed into the runtime viewport.
     std::unordered_map<std::string, Trident::Animation::Skeleton> m_ImportedSkeletonAssets; ///< Retains skeletons keyed by their normalized asset path for future animation lookups.
     std::unordered_map<std::string, std::vector<Trident::Animation::AnimationClip>> m_ImportedAnimationLibraries; ///< Stores imported clip libraries alongside their asset identifiers for later runtime use.
+
+    std::filesystem::path m_CurrentScenePath; ///< Tracks the most recent location used to save or load the active scene.
+    std::string m_SceneIoTooltip; ///< Holds the most recent scene I/O status message for display in the toolbar.
+    bool m_LastSceneIoFailed = false; ///< Flags whether the last scene I/O operation reported a failure so the UI can highlight it.
 };
