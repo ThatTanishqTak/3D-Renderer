@@ -155,6 +155,12 @@ namespace Trident
         return Startup::GetRenderer().GetClearColor();
     }
 
+    Renderer::FrameTimingStats RenderCommand::GetFrameTimingStats()
+    {
+        // Surface the aggregated frame timing data so overlays can present FPS and frame times succinctly.
+        return Startup::GetRenderer().GetFrameTimingStats();
+    }
+
     size_t RenderCommand::GetModelCount()
     {
         return Startup::GetRenderer().GetModelCount();

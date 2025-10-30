@@ -15,7 +15,7 @@ layout(push_constant) uniform TextPushConstants
 void main()
 {
     vec2 l_Normalised = inPosition / PC.uViewportSize;
-    vec2 l_Ndc = vec2(l_Normalised.x * 2.0 - 1.0, 1.0 - l_Normalised.y * 2.0);
+    vec2 l_Ndc = vec2(l_Normalised.x * 2.0 - 1.0, l_Normalised.y * 2.0 - 1.0);
     gl_Position = vec4(l_Ndc, 0.0, 1.0);
     vUV = inUV;
     vColor = inColor;

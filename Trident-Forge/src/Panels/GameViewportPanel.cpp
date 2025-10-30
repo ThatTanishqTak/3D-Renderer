@@ -89,7 +89,13 @@ void GameViewportPanel::Render()
         {
             // Draw the runtime scene output. The renderer now routes gameplay through the dedicated runtime camera.
             ImGui::Image(reinterpret_cast<ImTextureID>(l_Descriptor), l_ContentRegion, ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f));
-            // TODO: Add HUD overlays (stats, gizmos) when a runtime camera is active and validated.
+            const Trident::Renderer::FrameTimingStats l_FrameTimingStats = Trident::RenderCommand::GetFrameTimingStats();
+            const std::string l_FrameOverlayText = std::format("FPS: {:.1f}", l_FrameTimingStats.AverageFPS);
+            // Draw a lightweight HUD overlay so designers can monitor runtime performance at a glance.
+            const glm::vec4 l_FrameOverlayColor{ 0.95f, 0.95f, 0.2f, 1.0f };
+            const glm::vec2 l_FrameOverlayAnchor{ 5.0f, 25.0f };
+            Trident::RenderCommand::SubmitText(m_ViewportID, l_FrameOverlayAnchor, l_FrameOverlayColor, l_FrameOverlayText);
+            // TODO: Centralize overlay styling and localisation so themes and translations can be updated without code edits
 
             if (m_OnViewportContextMenu)
             {
