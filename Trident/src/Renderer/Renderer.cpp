@@ -1702,8 +1702,9 @@ namespace Trident
         l_PoolSizes[2].descriptorCount = l_ImageCount; // Bone palette buffer updated once per swapchain image.
         l_PoolSizes[3].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         // Each swapchain image consumes an array of material textures plus a cubemap sampler in the main set and a cubemap
-        // sampler in the dedicated skybox set.
-        l_PoolSizes[3].descriptorCount = l_ImageCount * (Pipeline::s_MaxMaterialTextures + 2);
+        // sampler in the dedicated skybox set. The text renderer also binds a combined image sampler once per frame, so reserve
+        // an additional descriptor for that path.
+        l_PoolSizes[3].descriptorCount = l_ImageCount * (Pipeline::s_MaxMaterialTextures + 3);
 
         VkDescriptorPoolCreateInfo l_PoolInfo{};
         l_PoolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -1711,7 +1712,8 @@ namespace Trident
         l_PoolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
         l_PoolInfo.poolSizeCount = static_cast<uint32_t>(std::size(l_PoolSizes));
         l_PoolInfo.pPoolSizes = l_PoolSizes;
-        l_PoolInfo.maxSets = l_ImageCount * 2; // Main render pipeline + dedicated skybox descriptors.
+        // Main render pipeline + dedicated skybox descriptors + per-frame text descriptor sets.
+        l_PoolInfo.maxSets = l_ImageCount * 3;
 
         if (vkCreateDescriptorPool(Startup::GetDevice(), &l_PoolInfo, nullptr, &m_DescriptorPool) != VK_SUCCESS)
         {
