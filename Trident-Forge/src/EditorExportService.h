@@ -38,6 +38,7 @@ private:
     bool CopyRuntimeOutputs(const std::filesystem::path& destination, const std::string& configuration, std::string& outMessage) const;
     bool WriteRuntimeCameraFile(const std::filesystem::path& contentDirectory, const Trident::RuntimeCamera& runtimeCamera, std::string& outMessage) const;
     std::filesystem::path ResolveRuntimeProjectFile() const;
+    std::filesystem::path ResolveRuntimeBuildDirectory() const;
     std::filesystem::path ResolveRuntimeBinaryDirectory(const std::string& configuration) const;
     std::filesystem::path ResolveRuntimeAssetsDirectory() const;
 
