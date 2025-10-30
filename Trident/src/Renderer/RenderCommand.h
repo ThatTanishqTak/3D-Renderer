@@ -2,6 +2,8 @@
 
 #include "Renderer.h"
 
+#include <string_view>
+
 #include "ECS/Components/TransformComponent.h"
 
 namespace Trident
@@ -26,6 +28,7 @@ namespace Trident
         static void SetRuntimeCameraReady(bool cameraReady);
         static void SetActiveRegistry(ECS::Registry* registry);
         static void SetViewportCamera(ECS::Entity entity);
+        static void SubmitText(uint32_t viewportId, const glm::vec2& position, const glm::vec4& color, std::string_view text);
         static bool HasRuntimeCamera();
 
         // Allow tooling to query whether a capture session is currently active for status displays.

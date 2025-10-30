@@ -30,6 +30,7 @@
 #include <cctype>
 #include <cassert>
 #include <iterator>
+#include <utility>
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/matrix_inverse.hpp>
@@ -183,6 +184,10 @@ namespace Trident
         CreateDefaultSkybox();
         CreateDescriptorSets();
 
+
+        const uint32_t l_FrameCount = static_cast<uint32_t>(m_Swapchain.GetImageCount());
+        m_TextRenderer.Init(m_Buffers, m_Commands, m_DescriptorPool, m_Pipeline.GetRenderPass(), l_FrameCount);
+
         // Prepare shared quad geometry so every sprite draw can reference the same GPU buffers.
         BuildSpriteGeometry();
 
@@ -210,6 +215,7 @@ namespace Trident
         TR_CORE_TRACE("Shutting Down Renderer");
 
         m_Commands.Cleanup();
+        m_TextRenderer.Shutdown();
 
         // Tear down any editor viewport resources before the core pipeline disappears.
         DestroyAllOffscreenResources();
@@ -292,6 +298,7 @@ namespace Trident
         if (m_Pipeline.ReloadIfNeeded(m_Swapchain))
         {
             TR_CORE_INFO("Graphics pipeline reloaded after shader edit");
+            m_TextRenderer.RecreatePipeline(m_Pipeline.GetRenderPass());
         }
 
         VkFence l_InFlightFence = m_Commands.GetInFlightFence(m_Commands.CurrentFrame());
@@ -1648,6 +1655,8 @@ namespace Trident
             // Recreate the descriptor pool before allocating descriptor sets so the pool matches the new swapchain image count.
             CreateDescriptorPool();
             CreateDescriptorSets();
+            m_TextRenderer.RecreateDescriptors(m_DescriptorPool, static_cast<uint32_t>(m_Swapchain.GetImageCount()));
+            m_TextRenderer.RecreatePipeline(m_Pipeline.GetRenderPass());
 
             TR_CORE_TRACE("Descriptor resources recreated (SwapchainImages = {}, GlobalUBOs = {}, MaterialBuffers = {}, CombinedSamplers = {}, DescriptorSets = {})",
                 l_ImageCount, m_GlobalUniformBuffers.size(), m_MaterialBuffers.size(), l_ImageCount, m_DescriptorSets.size());
@@ -1674,6 +1683,7 @@ namespace Trident
         {
             DestroyOffscreenResources(m_ActiveViewportId);
         }
+        m_TextRenderer.RecreatePipeline(m_Pipeline.GetRenderPass());
     }
 
     //------------------------------------------------------------------------------------------------------------------------------------------------------//
@@ -3186,6 +3196,18 @@ namespace Trident
         // Collect sprite draw requests up front so the render pass can submit them without additional ECS lookups.
         GatherSpriteDraws();
 
+        m_TextRenderer.BeginFrame();
+        for (const auto& a_ViewportEntry : m_TextSubmissionQueue)
+        {
+            const uint32_t l_ViewportId = a_ViewportEntry.first;
+            const std::vector<TextSubmission>& l_Submissions = a_ViewportEntry.second;
+            for (const TextSubmission& l_Submission : l_Submissions)
+            {
+                m_TextRenderer.QueueText(l_ViewportId, l_Submission.m_Position, l_Submission.m_Color, l_Submission.m_Text);
+            }
+        }
+        m_TextSubmissionQueue.clear();
+
         VkCommandBuffer l_CommandBuffer = m_Commands.GetCommandBuffer(imageIndex);
 
         VkCommandBufferBeginInfo l_BeginInfo{ VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
@@ -3420,6 +3442,8 @@ namespace Trident
                 {
                     DrawSprites(l_CommandBuffer, imageIndex);
                 }
+
+                m_TextRenderer.RecordViewport(l_CommandBuffer, imageIndex, context.m_Info.ViewportID, l_Target.m_Extent);
 
                 vkCmdEndRenderPass(l_CommandBuffer);
 
@@ -4216,6 +4240,22 @@ namespace Trident
     {
         // Cache which ECS camera currently drives the viewport so overlays can highlight it.
         m_ViewportCamera = entity;
+    }
+
+    void Renderer::SubmitText(uint32_t viewportId, const glm::vec2& position, const glm::vec4& color, std::string_view text)
+    {
+        if (text.empty())
+        {
+            return;
+        }
+
+        TextSubmission l_Submission{};
+        l_Submission.m_ViewportId = viewportId;
+        l_Submission.m_Position = position;
+        l_Submission.m_Color = color;
+        l_Submission.m_Text.assign(text.begin(), text.end());
+        // TODO: Surface localization-aware font selection once the editor exposes language packs.
+        m_TextSubmissionQueue[viewportId].emplace_back(std::move(l_Submission));
     }
 
     void Renderer::SetTransform(const Transform& props)

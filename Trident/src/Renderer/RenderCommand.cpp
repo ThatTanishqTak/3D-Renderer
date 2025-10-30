@@ -81,6 +81,12 @@ namespace Trident
         Startup::GetRenderer().SetViewportCamera(entity);
     }
 
+    void RenderCommand::SubmitText(uint32_t viewportId, const glm::vec2& position, const glm::vec4& color, std::string_view text)
+    {
+        // Forward overlay submissions so runtime/editor panels can schedule screen-space labels.
+        Startup::GetRenderer().SubmitText(viewportId, position, color, text);
+    }
+
     bool RenderCommand::HasRuntimeCamera()
     {
         // Expose whether a valid, ready runtime camera is bound so panels can surface helpful overlays or fallbacks.

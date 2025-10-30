@@ -11,6 +11,7 @@
 #include "Renderer/Buffers.h"
 #include "Renderer/Commands.h"
 #include "Renderer/Skybox.h"
+#include "Renderer/TextRenderer.h"
 
 #include "Geometry/Mesh.h"
 #include "Geometry/Material.h"
@@ -36,6 +37,7 @@
 #include <unordered_map>
 #include <limits>
 #include <string>
+#include <string_view>
 
 namespace Trident
 {
@@ -150,6 +152,8 @@ namespace Trident
         void SetSelectedEntity(ECS::Entity entity);
         // Track which ECS camera currently drives the viewport so overlays can highlight it for designers.
         void SetViewportCamera(ECS::Entity entity);
+        // Allow callers to submit screen-space text that will be composited after the main scene pass.
+        void SubmitText(uint32_t viewportId, const glm::vec2& position, const glm::vec4& color, std::string_view text);
 
         Transform GetTransform() const;
         ViewportInfo GetViewport() const;
@@ -204,6 +208,14 @@ namespace Trident
             const SpriteComponent* m_Component = nullptr; ///< Pointer into ECS storage for sprite properties.
             const TextureComponent* m_TextureComponent = nullptr; ///< Optional texture binding supplied by the entity.
             ECS::Entity m_Entity = 0;               ///< Owning entity for debugging and future sorting.
+        };
+
+        struct TextSubmission
+        {
+            uint32_t m_ViewportId = 0; ///< Target viewport that should receive the overlay text.
+            glm::vec2 m_Position{ 0.0f }; ///< Top-left text anchor in viewport pixels.
+            glm::vec4 m_Color{ 1.0f };   ///< RGBA tint applied to every glyph.
+            std::string m_Text;          ///< UTF-8 encoded message queued for rendering.
         };
 
         void GatherMeshDraws();
@@ -307,6 +319,9 @@ namespace Trident
         ECS::Entity m_ViewportCamera = std::numeric_limits<ECS::Entity>::max();
 
         Buffers m_Buffers;
+
+        TextRenderer m_TextRenderer;
+        std::unordered_map<uint32_t, std::vector<TextSubmission>> m_TextSubmissionQueue; ///< Per-viewport text queued this frame.
 
         size_t m_MaxVertexCount = 0;
         size_t m_MaxIndexCount = 0;
