@@ -1,4 +1,5 @@
 #include "Animation/AnimationPose.h"
+#include "Animation/AnimationRemap.h"
 
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtc/matrix_transform.hpp>
@@ -174,12 +175,13 @@ namespace Trident
 
             for (const TransformChannel& it_Channel : clip.m_Channels)
             {
-                if (it_Channel.m_BoneIndex < 0)
+                const int l_EffectiveIndex = ResolveChannelBoneIndex(it_Channel, skeleton, clip.m_Name);
+                if (l_EffectiveIndex < 0)
                 {
                     continue;
                 }
 
-                const size_t l_BoneIndex = static_cast<size_t>(it_Channel.m_BoneIndex);
+                const size_t l_BoneIndex = static_cast<size_t>(l_EffectiveIndex);
                 if (l_BoneIndex >= l_BoneCount)
                 {
                     continue;

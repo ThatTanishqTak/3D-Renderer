@@ -16,6 +16,35 @@ namespace Trident
             {
                 TR_CORE_WARN("Animation asset '{}' could not be loaded. Falling back to identity pose.", assetId.c_str());
             }
+
+            void PopulateChannelMetadata(Skeleton& skeleton, std::vector<AnimationClip>& clips)
+            {
+                const size_t l_BoneCount = skeleton.m_Bones.size();
+                for (AnimationClip& it_Clip : clips)
+                {
+                    for (TransformChannel& it_Channel : it_Clip.m_Channels)
+                    {
+                        if (!it_Channel.m_SourceBoneName.empty())
+                        {
+                            continue;
+                        }
+
+                        if (it_Channel.m_BoneIndex < 0)
+                        {
+                            continue;
+                        }
+
+                        const size_t l_Index = static_cast<size_t>(it_Channel.m_BoneIndex);
+                        if (l_Index >= l_BoneCount)
+                        {
+                            continue;
+                        }
+
+                        const Bone& l_Bone = skeleton.m_Bones[l_Index];
+                        it_Channel.m_SourceBoneName = !l_Bone.m_SourceName.empty() ? l_Bone.m_SourceName : l_Bone.m_Name;
+                    }
+                }
+            }
         }
 
         AnimationAssetService& AnimationAssetService::Get()
@@ -149,6 +178,8 @@ namespace Trident
                 return nullptr;
             }
 
+            PopulateChannelMetadata(l_ModelData.m_Skeleton, l_ModelData.m_AnimationClips);
+
             size_t l_Handle = m_NextHandle++;
             AssetRecord l_Record{};
             l_Record.m_AssetId = assetId;
@@ -170,6 +201,53 @@ namespace Trident
 
             m_IdToHandle[assetId] = l_Handle;
             return &a_InsertResult.first->second;
+        }
+
+        size_t AnimationAssetService::RegisterRuntimeAsset(const std::string& assetId, Skeleton skeleton, std::vector<AnimationClip> clips)
+        {
+            if (assetId.empty())
+            {
+                return s_InvalidHandle;
+            }
+
+            PopulateChannelMetadata(skeleton, clips);
+
+            size_t l_Handle = s_InvalidHandle;
+            auto a_Existing = m_IdToHandle.find(assetId);
+            if (a_Existing != m_IdToHandle.end())
+            {
+                l_Handle = a_Existing->second;
+                AssetRecord& l_Record = m_Assets[l_Handle];
+                l_Record.m_AssetId = assetId;
+                l_Record.m_Skeleton = std::move(skeleton);
+                l_Record.m_Clips = std::move(clips);
+                l_Record.m_ClipLookup.clear();
+                for (size_t it_Index = 0; it_Index < l_Record.m_Clips.size(); ++it_Index)
+                {
+                    l_Record.m_ClipLookup.emplace(l_Record.m_Clips[it_Index].m_Name, it_Index);
+                }
+                return l_Handle;
+            }
+
+            l_Handle = m_NextHandle++;
+            AssetRecord l_Record{};
+            l_Record.m_AssetId = assetId;
+            l_Record.m_Handle = l_Handle;
+            l_Record.m_Skeleton = std::move(skeleton);
+            l_Record.m_Clips = std::move(clips);
+            for (size_t it_Index = 0; it_Index < l_Record.m_Clips.size(); ++it_Index)
+            {
+                l_Record.m_ClipLookup.emplace(l_Record.m_Clips[it_Index].m_Name, it_Index);
+            }
+
+            auto a_InsertResult = m_Assets.emplace(l_Handle, std::move(l_Record));
+            if (!a_InsertResult.second)
+            {
+                return s_InvalidHandle;
+            }
+
+            m_IdToHandle[assetId] = l_Handle;
+            return l_Handle;
         }
     }
 }

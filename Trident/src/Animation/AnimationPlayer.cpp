@@ -1,4 +1,5 @@
 #include "Animation/AnimationPlayer.h"
+#include "Animation/AnimationRemap.h"
 
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/common.hpp>
@@ -178,12 +179,13 @@ namespace Trident
             {
                 for (const TransformChannel& it_Channel : l_Clip->m_Channels)
                 {
-                    if (it_Channel.m_BoneIndex < 0)
+                    const int l_EffectiveIndex = ResolveChannelBoneIndex(it_Channel, *l_Skeleton, l_Clip->m_Name);
+                    if (l_EffectiveIndex < 0)
                     {
                         continue;
                     }
 
-                    const size_t l_BoneIndex = static_cast<size_t>(it_Channel.m_BoneIndex);
+                    const size_t l_BoneIndex = static_cast<size_t>(l_EffectiveIndex);
                     if (l_BoneIndex >= l_BoneCount)
                     {
                         continue;

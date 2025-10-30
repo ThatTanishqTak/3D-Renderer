@@ -283,6 +283,56 @@ void ViewportPanel::Render()
                             l_Tint = IM_COL32(100, 181, 246, 255);
                         }
 
+                        if (it_Overlay.m_HasFrustum)
+                        {
+                            // Derive a semi-transparent line colour from the icon tint so overlays remain cohesive.
+                            ImVec4 l_LineColorFloat = ImGui::ColorConvertU32ToFloat4(l_Tint);
+                            l_LineColorFloat.w *= 0.6f;
+                            const ImU32 l_LineColor = ImGui::ColorConvertFloat4ToU32(l_LineColorFloat);
+                            constexpr float s_LineThickness = 1.5f;
+
+                            // Draw the pyramid edges connecting the camera position to the projected frustum corners.
+                            for (size_t it_Corner = 0; it_Corner < it_Overlay.m_FrustumCorners.size(); ++it_Corner)
+                            {
+                                if (!it_Overlay.m_FrustumCornerVisible[it_Corner])
+                                {
+                                    continue;
+                                }
+
+                                const ImVec2 l_Corner{
+                                    l_ViewportPos.x + it_Overlay.m_FrustumCorners[it_Corner].x,
+                                    l_ViewportPos.y + it_Overlay.m_FrustumCorners[it_Corner].y };
+                                l_DrawList->AddLine(l_Center, l_Corner, l_LineColor, s_LineThickness);
+                            }
+
+                            // Outline the preview plane so the frustum footprint is easy to read.
+                            constexpr std::array<std::pair<size_t, size_t>, 4> s_Edges
+                            {
+                                std::pair<size_t, size_t>{ 0, 1 },
+                                std::pair<size_t, size_t>{ 1, 2 },
+                                std::pair<size_t, size_t>{ 2, 3 },
+                                std::pair<size_t, size_t>{ 3, 0 }
+                            };
+
+                            for (const std::pair<size_t, size_t>& it_Edge : s_Edges)
+                            {
+                                const bool l_StartVisible = it_Overlay.m_FrustumCornerVisible[it_Edge.first];
+                                const bool l_EndVisible = it_Overlay.m_FrustumCornerVisible[it_Edge.second];
+                                if (!(l_StartVisible && l_EndVisible))
+                                {
+                                    continue;
+                                }
+
+                                const ImVec2 l_Start{
+                                    l_ViewportPos.x + it_Overlay.m_FrustumCorners[it_Edge.first].x,
+                                    l_ViewportPos.y + it_Overlay.m_FrustumCorners[it_Edge.first].y };
+                                const ImVec2 l_End{
+                                    l_ViewportPos.x + it_Overlay.m_FrustumCorners[it_Edge.second].x,
+                                    l_ViewportPos.y + it_Overlay.m_FrustumCorners[it_Edge.second].y };
+                                l_DrawList->AddLine(l_Start, l_End, l_LineColor, s_LineThickness);
+                            }
+                        }
+
                         // Draw a faint rounded backdrop so the icon remains visible over varied scene colours.
                         const ImU32 l_BackdropColor = IM_COL32(0, 0, 0, 96);
                         l_DrawList->AddRectFilled(ImVec2(l_Min.x - 2.0f, l_Min.y - 2.0f), ImVec2(l_Max.x + 2.0f, l_Max.y + 2.0f), l_BackdropColor, 4.0f);

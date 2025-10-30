@@ -51,6 +51,85 @@ namespace
         return l_Mat;
     }
 
+    glm::mat3 BuildRotationMatrix(const Trident::Transform& transform)
+    {
+        // Compose the camera orientation without translation/scale so we can transform local frustum points.
+        glm::mat4 l_Rotation{ 1.0f };
+        l_Rotation = glm::rotate(l_Rotation, glm::radians(transform.Rotation.x), glm::vec3{ 1.0f, 0.0f, 0.0f });
+        l_Rotation = glm::rotate(l_Rotation, glm::radians(transform.Rotation.y), glm::vec3{ 0.0f, 1.0f, 0.0f });
+        l_Rotation = glm::rotate(l_Rotation, glm::radians(transform.Rotation.z), glm::vec3{ 0.0f, 0.0f, 1.0f });
+
+        return glm::mat3(l_Rotation);
+    }
+
+    bool BuildFrustumPreview(const Trident::Transform& transform, const Trident::CameraComponent& cameraComponent,
+        const glm::vec2& viewportSize, std::array<glm::vec3, 4>& outWorldCorners)
+    {
+        // Ensure the viewport has a sensible aspect ratio before attempting calculations.
+        if (viewportSize.x <= std::numeric_limits<float>::epsilon() || viewportSize.y <= std::numeric_limits<float>::epsilon())
+        {
+            return false;
+        }
+
+        const float l_ViewportAspect = viewportSize.x / viewportSize.y;
+        const bool l_UseFixedAspect = cameraComponent.m_FixedAspectRatio && cameraComponent.m_AspectRatio > std::numeric_limits<float>::epsilon();
+        const float l_AspectRatio = l_UseFixedAspect ? cameraComponent.m_AspectRatio : l_ViewportAspect;
+        if (l_AspectRatio <= std::numeric_limits<float>::epsilon())
+        {
+            return false;
+        }
+
+        const float l_MinClip = 0.001f;
+        const float l_NearClip = std::max(cameraComponent.m_NearClip, l_MinClip);
+        const float l_FarClip = std::max(cameraComponent.m_FarClip, l_NearClip + l_MinClip);
+
+        // Limit the overlay depth so the preview remains legible regardless of far clip distance.
+        constexpr float s_MaxPreviewDepth = 5.0f;
+        const float l_PreviewDepth = std::min(l_NearClip + s_MaxPreviewDepth, l_FarClip);
+        if (l_PreviewDepth <= l_MinClip)
+        {
+            return false;
+        }
+
+        const glm::mat3 l_RotationMatrix = BuildRotationMatrix(transform);
+        const glm::vec3 l_Position = transform.Position;
+
+        std::array<glm::vec3, 4> l_LocalCorners{};
+        if (cameraComponent.m_ProjectionType == Trident::Camera::ProjectionType::Perspective)
+        {
+            const float l_FieldOfView = glm::radians(std::clamp(cameraComponent.m_FieldOfView, 1.0f, 179.0f));
+            const float l_HalfHeight = std::tan(l_FieldOfView * 0.5f) * l_PreviewDepth;
+            const float l_HalfWidth = l_HalfHeight * l_AspectRatio;
+
+            l_LocalCorners[0] = { -l_HalfWidth, l_HalfHeight, -l_PreviewDepth };
+            l_LocalCorners[1] = { l_HalfWidth, l_HalfHeight, -l_PreviewDepth };
+            l_LocalCorners[2] = { l_HalfWidth, -l_HalfHeight, -l_PreviewDepth };
+            l_LocalCorners[3] = { -l_HalfWidth, -l_HalfHeight, -l_PreviewDepth };
+        }
+        else if (cameraComponent.m_ProjectionType == Trident::Camera::ProjectionType::Orthographic)
+        {
+            const float l_HalfHeight = std::max(cameraComponent.m_OrthographicSize * 0.5f, 0.01f);
+            const float l_HalfWidth = l_HalfHeight * l_AspectRatio;
+
+            l_LocalCorners[0] = { -l_HalfWidth, l_HalfHeight, -l_PreviewDepth };
+            l_LocalCorners[1] = { l_HalfWidth, l_HalfHeight, -l_PreviewDepth };
+            l_LocalCorners[2] = { l_HalfWidth, -l_HalfHeight, -l_PreviewDepth };
+            l_LocalCorners[3] = { -l_HalfWidth, -l_HalfHeight, -l_PreviewDepth };
+        }
+        else
+        {
+            return false;
+        }
+
+        for (size_t it_Index = 0; it_Index < l_LocalCorners.size(); ++it_Index)
+        {
+            const glm::vec3 l_WorldCorner = l_Position + l_RotationMatrix * l_LocalCorners[it_Index];
+            outWorldCorners[it_Index] = l_WorldCorner;
+        }
+
+        return true;
+    }
+
     std::tm ToLocalTime(std::time_t time)
     {
         std::tm l_LocalTime{};
@@ -959,6 +1038,41 @@ namespace Trident
             const CameraComponent& l_CameraComponent = m_Registry->GetComponent<CameraComponent>(it_Entity);
             l_Instance.m_IsPrimary = l_CameraComponent.m_Primary;
             l_Instance.m_IsViewportCamera = (it_Entity == m_ViewportCamera);
+
+            // Default to a hidden frustum so callers can rely on deterministic state before projection succeeds.
+            l_Instance.m_HasFrustum = false;
+            l_Instance.m_FrustumCorners.fill(glm::vec2{ 0.0f, 0.0f });
+            l_Instance.m_FrustumCornerVisible.fill(false);
+
+            std::array<glm::vec3, 4> l_WorldCorners{};
+            if (BuildFrustumPreview(l_Transform, l_CameraComponent, l_ViewportSize, l_WorldCorners))
+            {
+                size_t l_VisibleCornerCount = 0;
+                for (size_t it_Corner = 0; it_Corner < l_WorldCorners.size(); ++it_Corner)
+                {
+                    const glm::vec4 l_CornerClip = l_ViewProjection * glm::vec4(l_WorldCorners[it_Corner], 1.0f);
+                    if (std::abs(l_CornerClip.w) <= std::numeric_limits<float>::epsilon())
+                    {
+                        continue;
+                    }
+
+                    const glm::vec3 l_CornerNdc = glm::vec3(l_CornerClip) / l_CornerClip.w;
+                    const bool l_DepthVisible = (l_CornerNdc.z >= 0.0f) && (l_CornerNdc.z <= 1.0f);
+                    const bool l_InBounds = (std::abs(l_CornerNdc.x) <= 1.0f) && (std::abs(l_CornerNdc.y) <= 1.0f);
+                    if (!(l_DepthVisible && l_InBounds))
+                    {
+                        continue;
+                    }
+
+                    l_Instance.m_FrustumCorners[it_Corner].x = (l_CornerNdc.x * 0.5f + 0.5f) * l_ViewportSize.x;
+                    l_Instance.m_FrustumCorners[it_Corner].y = (1.0f - (l_CornerNdc.y * 0.5f + 0.5f)) * l_ViewportSize.y;
+                    l_Instance.m_FrustumCornerVisible[it_Corner] = true;
+                    ++l_VisibleCornerCount;
+                }
+
+                // Only flag the frustum as visible when at least two corners remain on-screen to avoid stray lines.
+                l_Instance.m_HasFrustum = (l_VisibleCornerCount >= 2);
+            }
         }
 
         std::sort(l_Instances.begin(), l_Instances.end(), [](const CameraOverlayInstance& lhs, const CameraOverlayInstance& rhs)

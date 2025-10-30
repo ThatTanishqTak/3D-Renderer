@@ -531,6 +531,7 @@ namespace Trident
 
                     Animation::TransformChannel l_Channel{};
                     l_Channel.m_BoneIndex = l_BoneIndex;
+                    l_Channel.m_SourceBoneName = l_ChannelBoneName; // Keep the authored name so non-normalised rigs remain traceable even after Mixamo prefix removal.
 
                     l_Channel.m_TranslationKeys.reserve(static_cast<size_t>(l_AssimpChannel->mNumPositionKeys));
                     for (unsigned int it_Key = 0; it_Key < l_AssimpChannel->mNumPositionKeys; ++it_Key)

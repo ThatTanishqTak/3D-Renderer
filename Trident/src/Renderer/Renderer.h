@@ -62,6 +62,9 @@ namespace Trident
         float m_Depth = 1.0f;                                         ///< Normalised device depth used for front-to-back sorting.
         bool m_IsPrimary = false;                                     ///< True when the camera component is flagged as primary.
         bool m_IsViewportCamera = false;                              ///< True when the camera currently drives the viewport.
+        std::array<glm::vec2, 4> m_FrustumCorners{};                  ///< Screen-space quad describing the preview frustum.
+        std::array<bool, 4> m_FrustumCornerVisible{};                 ///< Flags indicating which projected corners remain onscreen.
+        bool m_HasFrustum = false;                                    ///< Cached visibility state for overlay rendering code.
     };
 
     class Renderer

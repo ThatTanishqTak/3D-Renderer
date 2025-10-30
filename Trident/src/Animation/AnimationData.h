@@ -35,6 +35,7 @@ namespace Trident
         struct TransformChannel
         {
             int m_BoneIndex = -1;                               //!< Index into the owning skeleton's bone array.
+            std::string m_SourceBoneName;                       //!< Preserve the authored bone name so non-Mixamo rigs retain metadata alongside the normalised index.
             std::vector<VectorKeyframe> m_TranslationKeys{};    //!< Translation keyframes sampled in seconds.
             std::vector<QuaternionKeyframe> m_RotationKeys{};   //!< Rotation keyframes sampled in seconds.
             std::vector<VectorKeyframe> m_ScaleKeys{};          //!< Scale keyframes sampled in seconds.

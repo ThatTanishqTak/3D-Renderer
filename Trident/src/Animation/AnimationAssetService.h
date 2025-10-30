@@ -48,6 +48,9 @@ namespace Trident
             /// @brief Resolve a single clip pointer from a handle/index pair.
             const AnimationClip* GetClip(size_t animationHandle, size_t clipIndex) const;
 
+            /// @brief Inject a pre-baked skeleton/clip pair, primarily used by regression harnesses.
+            size_t RegisterRuntimeAsset(const std::string& assetId, Skeleton skeleton, std::vector<AnimationClip> clips);
+
         private:
             AnimationAssetService() = default;
 
