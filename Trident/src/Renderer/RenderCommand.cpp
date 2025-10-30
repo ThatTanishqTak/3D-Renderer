@@ -7,6 +7,7 @@ namespace Trident
     void RenderCommand::Init()
     {
         Startup::GetRenderer().Init();
+        Startup::Get().ApplyPackagedRuntimeState();
     }
 
     void RenderCommand::Shutdown()

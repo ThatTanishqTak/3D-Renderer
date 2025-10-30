@@ -15,6 +15,7 @@
 #include "Panels/AnimationGraphPanel.h"
 #include "ECS/Scene.h"
 #include "Animation/AnimationData.h"
+#include "EditorExportService.h"
 
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
@@ -24,6 +25,7 @@
 #include <memory>
 #include <unordered_map>
 #include <filesystem>
+#include <array>
 
 class ApplicationLayer : public Trident::Layer
 {
@@ -141,4 +143,12 @@ private:
     bool m_LastSceneIoFailed = false; ///< Flags whether the last scene I/O operation reported a failure so the UI can highlight it.
     bool m_OpenSaveSceneAsPopup = false; ///< Requests the save-as dialog to open on the next render tick.
     bool m_OpenLoadScenePopup = false; ///< Requests the load dialog to open on the next render tick.
+    bool m_OpenExportPopup = false; ///< Requests the export dialog to open on the next render tick.
+    bool m_OpenExportDirectoryDialog = false; ///< Requests a directory selector for the export destination.
+    std::array<char, 512> m_ExportDirectoryBuffer{}; ///< Stores the user-selected export directory for the ImGui input field.
+    int m_SelectedExportConfiguration = 1; ///< Index of the currently selected build configuration preset.
+    std::string m_LastExportStatus; ///< Holds the latest export result for display inside the export dialog.
+    bool m_LastExportFailed = false; ///< Tracks whether the last export failed so the status text can change colour.
+    std::filesystem::path m_LastExportDirectory; ///< Remembers the most recent export location for convenience.
+    EditorExportService m_ExportService; ///< Coordinates scene serialisation, builds, and file staging for packaged output.
 };

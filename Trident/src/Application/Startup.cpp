@@ -2,14 +2,42 @@
 
 #include "Core/Utilities.h"
 #include "Window/Window.h"
+#include "Renderer/RenderCommand.h"
+#include "ECS/Scene.h"
 
 #include <set>
 #include <stdexcept>
+#include <filesystem>
+#include <fstream>
+#include <array>
+
 #include <GLFW/glfw3.h>
+
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 namespace Trident
 {
     Startup* Startup::s_Instance = nullptr;
+
+    namespace
+    {
+        std::filesystem::path DetermineExecutableDirectory()
+        {
+#ifdef _WIN32
+            std::array<wchar_t, MAX_PATH> l_Buffer{};
+            const DWORD l_Length = GetModuleFileNameW(nullptr, l_Buffer.data(), static_cast<DWORD>(l_Buffer.size()));
+            if (l_Length > 0)
+            {
+                return std::filesystem::path(l_Buffer.data()).parent_path();
+            }
+#endif
+
+            // Non-Windows builds fall back to the current working directory until platform-specific helpers are added.
+            return std::filesystem::current_path();
+        }
+    }
 
     Startup::Startup(Window& window) : m_Window(window)
     {
@@ -45,6 +73,9 @@ namespace Trident
         CreateSurface();
         PickPhysicalDevice();
         CreateLogicalDevice();
+
+        // Locate packaged content (scenes, camera descriptors, etc.) so the runtime can bootstrap without editor tooling.
+        DiscoverPackagedContent();
 
         TR_CORE_INFO("-------VULKAN INITIALIZED-------");
     }
@@ -87,6 +118,166 @@ namespace Trident
         }
 
         TR_CORE_TRACE("Vulkan Shutdown Complete");
+    }
+
+    void Startup::DiscoverPackagedContent()
+    {
+        m_PackagedContentDirectory.clear();
+        m_PackagedScenePath.clear();
+        m_PackagedScene.reset();
+        m_PackagedCameraPosition.reset();
+        m_PackagedCameraRotation.reset();
+        m_HasAppliedPackagedState = false;
+
+        const std::filesystem::path l_BaseDirectory = DetermineExecutableDirectory();
+        const std::filesystem::path l_ContentDirectory = l_BaseDirectory / "Content";
+
+        std::error_code l_ContentError{};
+        if (!std::filesystem::exists(l_ContentDirectory, l_ContentError) || !std::filesystem::is_directory(l_ContentDirectory, l_ContentError))
+        {
+            if (l_ContentError)
+            {
+                TR_CORE_INFO("Exported content directory '{}' unavailable ({}). Runtime will await streamed assets.", l_ContentDirectory.string(), l_ContentError.message());
+            }
+            else
+            {
+                TR_CORE_INFO("Exported content directory '{}' not found. Runtime will await streamed assets.", l_ContentDirectory.string());
+            }
+
+            return;
+        }
+
+        m_PackagedContentDirectory = l_ContentDirectory;
+
+        const auto FindSceneFile = [](const std::filesystem::path& directory) -> std::filesystem::path
+            {
+                std::error_code l_SearchError{};
+                for (const std::filesystem::directory_entry& it_Entry : std::filesystem::directory_iterator(directory, l_SearchError))
+                {
+                    if (it_Entry.is_regular_file() && it_Entry.path().extension() == ".trident")
+                    {
+                        return it_Entry.path();
+                    }
+                }
+
+                if (l_SearchError)
+                {
+                    TR_CORE_WARN("Failed to enumerate '{}' while searching for packaged scenes: {}", directory.string(), l_SearchError.message());
+                }
+
+                return {};
+            };
+
+        m_PackagedScenePath = FindSceneFile(l_ContentDirectory);
+        if (m_PackagedScenePath.empty())
+        {
+            m_PackagedScenePath = FindSceneFile(l_ContentDirectory / "Scenes");
+        }
+
+        if (!m_PackagedScenePath.empty())
+        {
+            m_PackagedScene = std::make_unique<Scene>(m_Registry);
+            if (m_PackagedScene->Load(m_PackagedScenePath.string()))
+            {
+                TR_CORE_INFO("Packaged scene '{}' loaded into runtime registry.", m_PackagedScenePath.string());
+            }
+            else
+            {
+                TR_CORE_ERROR("Failed to load packaged scene '{}'. Runtime will start empty.", m_PackagedScenePath.string());
+                m_PackagedScene.reset();
+            }
+        }
+        else
+        {
+            TR_CORE_INFO("No packaged scene discovered under '{}'.", l_ContentDirectory.string());
+        }
+
+        LoadPackagedCameraTransform();
+
+        // TODO: Extend the discovery logic for macOS/Linux bundle layouts once the exporter targets multiple platforms.
+    }
+
+    void Startup::LoadPackagedCameraTransform()
+    {
+        if (m_PackagedContentDirectory.empty())
+        {
+            return;
+        }
+
+        const std::filesystem::path l_CameraDescriptor = m_PackagedContentDirectory / "runtime_camera.txt";
+        std::ifstream l_Stream(l_CameraDescriptor);
+        if (!l_Stream.is_open())
+        {
+            TR_CORE_INFO("Runtime camera descriptor '{}' not found. Using default camera transform.", l_CameraDescriptor.string());
+            return;
+        }
+
+        std::string l_Label;
+        glm::vec3 l_Position{ 0.0f };
+        glm::vec3 l_Rotation{ 0.0f };
+        bool l_ReadPosition = false;
+        bool l_ReadRotation = false;
+
+        while (l_Stream >> l_Label)
+        {
+            if (l_Label == "Position")
+            {
+                l_Stream >> l_Position.x >> l_Position.y >> l_Position.z;
+                l_ReadPosition = true;
+            }
+            else if (l_Label == "Rotation")
+            {
+                l_Stream >> l_Rotation.x >> l_Rotation.y >> l_Rotation.z;
+                l_ReadRotation = true;
+            }
+        }
+
+        if (l_ReadPosition)
+        {
+            m_PackagedCameraPosition = l_Position;
+        }
+
+        if (l_ReadRotation)
+        {
+            m_PackagedCameraRotation = l_Rotation;
+        }
+
+        if (l_ReadPosition || l_ReadRotation)
+        {
+            TR_CORE_INFO("Runtime camera transform loaded from '{}'.", l_CameraDescriptor.string());
+        }
+    }
+
+    void Startup::ApplyPackagedRuntimeState()
+    {
+        if (m_HasAppliedPackagedState)
+        {
+            return;
+        }
+
+        if (m_PackagedScene)
+        {
+            TR_CORE_INFO("Applying packaged scene '{}' to runtime state.", m_PackagedScenePath.string());
+        }
+
+        if (m_PackagedCameraPosition.has_value())
+        {
+            m_PackagedRuntimeCamera.SetPosition(*m_PackagedCameraPosition);
+        }
+
+        if (m_PackagedCameraRotation.has_value())
+        {
+            m_PackagedRuntimeCamera.SetRotation(*m_PackagedCameraRotation);
+        }
+
+        m_PackagedRuntimeCamera.Invalidate();
+        RenderCommand::SetRuntimeCamera(&m_PackagedRuntimeCamera);
+        RenderCommand::SetRuntimeCameraReady(true);
+
+        // Highlight future work so the build pipeline can avoid redundant msbuild invocations when nothing changed.
+        TR_CORE_INFO("Runtime camera primed from packaged data. Future work: cache build artefacts between exports for faster iteration.");
+
+        m_HasAppliedPackagedState = true;
     }
 
     //------------------------------------------------------------------------------------------------------------------------------------------------------//

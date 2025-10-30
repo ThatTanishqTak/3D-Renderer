@@ -23,6 +23,7 @@
 #include <iterator>
 #include <limits>
 #include <system_error>
+#include <cstdio>
 
 #include <glm/vec2.hpp>
 #include <glm/gtx/norm.hpp>
@@ -38,6 +39,9 @@ void ApplicationLayer::Initialize()
     // Wire up the gizmo state so the viewport and inspector remain in sync.
     m_ViewportPanel.SetGizmoState(&m_GizmoState);
     m_InspectorPanel.SetGizmoState(&m_GizmoState);
+
+    // Prime the export service with the current working directory so it can locate the runtime project.
+    m_ExportService.SetProjectRoot(std::filesystem::current_path());
 
     // Ensure the console mirrors Unity-style defaults by surfacing info/warning/error output immediately.
     m_ConsolePanel.SetLevelVisibility(spdlog::level::trace, false);
@@ -223,6 +227,12 @@ void ApplicationLayer::RenderMainMenuBar()
         if (ImGui::MenuItem("Open...", "Ctrl+O", false, l_HasScene))
         {
             m_OpenLoadScenePopup = true;
+        }
+
+        if (ImGui::MenuItem("Export...", nullptr, false, l_HasScene))
+        {
+            // Launch the export modal so the user can select a destination and build configuration.
+            m_OpenExportPopup = true;
         }
 
         ImGui::Separator();
@@ -412,6 +422,24 @@ void ApplicationLayer::HandleSceneFileDialogs()
         m_OpenLoadScenePopup = false;
     }
 
+    if (m_OpenExportPopup)
+    {
+        // Prefill the export directory with the last used location or the current scene folder for convenience.
+        if (m_ExportDirectoryBuffer[0] == '\0')
+        {
+            const std::filesystem::path l_DefaultDirectory = !m_LastExportDirectory.empty()
+                ? m_LastExportDirectory
+                : (m_CurrentScenePath.empty() ? std::filesystem::current_path() : m_CurrentScenePath.parent_path());
+            const std::string l_DefaultString = l_DefaultDirectory.string();
+            std::snprintf(m_ExportDirectoryBuffer.data(), m_ExportDirectoryBuffer.size(), "%s", l_DefaultString.c_str());
+        }
+
+        m_LastExportStatus.clear();
+        m_LastExportFailed = false;
+        ImGui::OpenPopup("Export Scene");
+        m_OpenExportPopup = false;
+    }
+
     std::string l_SavePath = m_CurrentScenePath.empty() ? std::string{} : m_CurrentScenePath.string();
     if (Trident::UI::FileDialog::Save("Save Scene As", l_SavePath, ".trident"))
     {
@@ -422,6 +450,99 @@ void ApplicationLayer::HandleSceneFileDialogs()
     if (Trident::UI::FileDialog::Open("Load Scene", l_LoadPath, ".trident"))
     {
         LoadScene(l_LoadPath);
+    }
+
+    if (m_OpenExportDirectoryDialog)
+    {
+        ImGui::OpenPopup("Select Export Directory");
+        m_OpenExportDirectoryDialog = false;
+    }
+
+    std::string l_ExportPath = std::string(m_ExportDirectoryBuffer.data());
+    if (Trident::UI::FileDialog::SelectDirectory("Select Export Directory", l_ExportPath))
+    {
+        std::snprintf(m_ExportDirectoryBuffer.data(), m_ExportDirectoryBuffer.size(), "%s", l_ExportPath.c_str());
+    }
+
+    const bool l_HasScene = m_ActiveScene != nullptr;
+    if (ImGui::BeginPopupModal("Export Scene", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+    {
+        const char* l_Configurations[] = { "Debug", "Release", "RelWithDebInfo" };
+        const int l_ConfigurationCount = static_cast<int>(std::size(l_Configurations));
+        if (m_SelectedExportConfiguration < 0 || m_SelectedExportConfiguration >= l_ConfigurationCount)
+        {
+            m_SelectedExportConfiguration = std::clamp(m_SelectedExportConfiguration, 0, l_ConfigurationCount - 1);
+        }
+
+        if (!l_HasScene)
+        {
+            ImGui::TextWrapped("No active scene is available. Load or create a scene before exporting.");
+        }
+        else
+        {
+            ImGui::TextWrapped("Export packages the active scene, captures the runtime camera transform, and builds the Trident launcher using MSVC.");
+            ImGui::Separator();
+
+            ImGui::Text("Destination Folder");
+            ImGui::InputText("##ExportDirectory", m_ExportDirectoryBuffer.data(), m_ExportDirectoryBuffer.size());
+            ImGui::SameLine();
+            if (ImGui::Button("Browse..."))
+            {
+                // Delegate to the shared directory picker so authors can navigate comfortably.
+                m_OpenExportDirectoryDialog = true;
+            }
+
+            ImGui::Combo("Build Configuration", &m_SelectedExportConfiguration, l_Configurations, l_ConfigurationCount);
+
+            if (!m_LastExportStatus.empty())
+            {
+                const ImVec4 l_StatusColour = m_LastExportFailed ? ImVec4(0.85f, 0.35f, 0.35f, 1.0f) : ImVec4(0.35f, 0.85f, 0.45f, 1.0f);
+                ImGui::PushStyleColor(ImGuiCol_Text, l_StatusColour);
+                ImGui::TextWrapped("%s", m_LastExportStatus.c_str());
+                ImGui::PopStyleColor();
+            }
+
+            if (ImGui::Button("Export", ImVec2(140.0f, 0.0f)))
+            {
+                const std::string l_OutputDirectory = std::string(m_ExportDirectoryBuffer.data());
+                if (l_OutputDirectory.empty())
+                {
+                    m_LastExportStatus = "Please choose an output directory.";
+                    m_LastExportFailed = true;
+                }
+                else
+                {
+                    EditorExportService::ExportOptions l_Options{};
+                    l_Options.m_OutputDirectory = l_OutputDirectory;
+                    l_Options.m_BuildConfiguration = l_Configurations[m_SelectedExportConfiguration];
+
+                    const EditorExportService::ExportResult l_ExportResult = m_ExportService.ExportScene(*m_ActiveScene, m_RuntimeCamera, m_CurrentScenePath, l_Options);
+                    m_LastExportStatus = l_ExportResult.m_Message.empty() ? "Export finished." : l_ExportResult.m_Message;
+                    m_LastExportFailed = !l_ExportResult.m_Succeeded;
+
+                    if (l_ExportResult.m_Succeeded)
+                    {
+                        m_LastExportDirectory = l_Options.m_OutputDirectory;
+                    }
+                }
+            }
+
+            ImGui::SameLine();
+            if (ImGui::Button("Close", ImVec2(140.0f, 0.0f)))
+            {
+                ImGui::CloseCurrentPopup();
+            }
+
+            ImGui::Separator();
+            ImGui::TextWrapped("Future improvements: support platform-specific exports and cache build outputs between runs to speed iteration.");
+        }
+
+        if (!l_HasScene && ImGui::Button("Close"))
+        {
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
     }
 }
 

@@ -25,6 +25,7 @@ namespace Trident
         namespace
         {
             fs::path s_CurrentDirectory = fs::current_path();
+            fs::path s_SelectedDirectory{}; ///< Tracks the highlighted directory for the picker dialog.
             std::array<char, 256> s_FileNameBuffer{}; ///< Shared buffer used by the save dialog to capture a filename entry.
 
             void ToLowerInPlace(std::string& value)
@@ -318,6 +319,152 @@ namespace Trident
             }
 
             return l_FileChosen;
+        }
+
+        bool FileDialog::SelectDirectory(const char* id, std::string& path)
+        {
+            bool l_DirectoryChosen = false;
+            bool l_Open = true;
+            if (ImGui::BeginPopupModal(id, &l_Open, ImGuiWindowFlags_AlwaysAutoResize))
+            {
+                IconLibrary& l_IconLibrary = GetIconLibrary();
+
+                if (ImGui::IsWindowAppearing())
+                {
+                    if (!path.empty())
+                    {
+                        fs::path l_InitialPath = path;
+                        if (fs::is_directory(l_InitialPath))
+                        {
+                            s_CurrentDirectory = l_InitialPath;
+                            s_SelectedDirectory = l_InitialPath;
+                        }
+                        else if (l_InitialPath.has_parent_path())
+                        {
+                            s_CurrentDirectory = l_InitialPath.parent_path();
+                            s_SelectedDirectory = s_CurrentDirectory;
+                        }
+                        else
+                        {
+                            s_SelectedDirectory = s_CurrentDirectory;
+                        }
+                    }
+                    else
+                    {
+                        s_SelectedDirectory = s_CurrentDirectory;
+                    }
+                }
+
+                ImGui::TextUnformatted(s_CurrentDirectory.string().c_str());
+                if (ImGui::Button(".."))
+                {
+                    if (s_CurrentDirectory.has_parent_path())
+                    {
+                        s_CurrentDirectory = s_CurrentDirectory.parent_path();
+                    }
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Choose Current Folder"))
+                {
+                    path = s_CurrentDirectory.string();
+                    l_DirectoryChosen = true;
+                    ImGui::CloseCurrentPopup();
+                }
+
+                ImGui::BeginChild("##directory_browser", ImVec2(480.0f, 260.0f), true);
+
+                std::vector<fs::directory_entry> l_Entries;
+                std::error_code l_IteratorError{};
+                for (fs::directory_iterator it_Entry{ s_CurrentDirectory, l_IteratorError }; it_Entry != fs::directory_iterator{}; ++it_Entry)
+                {
+                    l_Entries.push_back(*it_Entry);
+                }
+
+                std::sort(l_Entries.begin(), l_Entries.end(), [](const fs::directory_entry& a, const fs::directory_entry& b)
+                    {
+                        if (a.is_directory() != b.is_directory())
+                        {
+                            return a.is_directory() > b.is_directory();
+                        }
+
+                        return a.path().filename().string() < b.path().filename().string();
+                    });
+
+                if (ImGui::BeginTable("##DirectoryTable", 2, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_ScrollY))
+                {
+                    ImGui::TableSetupColumn("Icon", ImGuiTableColumnFlags_WidthFixed, 28.0f);
+                    ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
+
+                    for (const auto& it_Entry : l_Entries)
+                    {
+                        if (!it_Entry.is_directory())
+                        {
+                            continue;
+                        }
+
+                        const fs::directory_entry& l_Entry = it_Entry;
+                        const std::string l_Name = l_Entry.path().filename().string();
+                        ImGui::PushID(l_Name.c_str());
+
+                        ImGui::TableNextRow();
+                        ImGui::TableSetColumnIndex(0);
+
+                        const IconLibrary::Icon l_Icon = l_IconLibrary.GetIconForEntry(l_Entry);
+                        const ImVec2 l_IconSize = l_Icon.IsValid() ? l_Icon.m_Size : ImVec2(18.0f, 18.0f);
+
+                        if (l_Icon.IsValid())
+                        {
+                            ImGui::Image(l_Icon.m_TextureId, l_IconSize);
+                        }
+                        else
+                        {
+                            ImGui::Dummy(l_IconSize);
+                        }
+
+                        ImGui::TableSetColumnIndex(1);
+
+                        const bool l_IsSelected = (s_SelectedDirectory == l_Entry.path());
+                        const ImGuiSelectableFlags l_SelectFlags = ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowDoubleClick;
+                        const std::string l_DisplayName = l_Name + "/";
+
+                        if (ImGui::Selectable(l_DisplayName.c_str(), l_IsSelected, l_SelectFlags))
+                        {
+                            s_SelectedDirectory = l_Entry.path();
+
+                            if (ImGui::IsMouseDoubleClicked(Trident::Mouse::ButtonLeft))
+                            {
+                                s_CurrentDirectory = l_Entry.path();
+                            }
+                        }
+
+                        ImGui::PopID();
+                    }
+
+                    ImGui::EndTable();
+                }
+
+                ImGui::EndChild();
+
+                const bool l_HasSelection = !s_SelectedDirectory.empty();
+                ImGui::BeginDisabled(!l_HasSelection);
+                if (ImGui::Button("Choose Selected Folder"))
+                {
+                    path = s_SelectedDirectory.string();
+                    l_DirectoryChosen = true;
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::EndDisabled();
+
+                ImGui::SameLine();
+                if (ImGui::Button("Cancel"))
+                {
+                    ImGui::CloseCurrentPopup();
+                }
+
+                ImGui::EndPopup();
+            }
+
+            return l_DirectoryChosen;
         }
 
         bool FileDialog::Save(const char* id, std::string& path, const char* extension)

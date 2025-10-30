@@ -2,14 +2,20 @@
 
 #include "Vulkan/Vulkan.h"
 #include "Renderer/Renderer.h"
+#include "Renderer/Camera/RuntimeCamera.h"
 #include "ECS/Registry.h"
+
+#include <glm/vec3.hpp>
 
 #include <optional>
 #include <vector>
+#include <memory>
+#include <filesystem>
 
 namespace Trident
 {
     class Window;
+    class Scene;
 
     struct QueueFamilyIndices
     {
@@ -42,10 +48,17 @@ namespace Trident
         }
         static ECS::Registry& GetRegistry() { return Get().m_Registry; }
         static bool HasInstance() { return s_Instance != nullptr; }
+        static const std::filesystem::path& GetPackagedScenePath() { return Get().m_PackagedScenePath; }
+        static const std::filesystem::path& GetPackagedContentDirectory() { return Get().m_PackagedContentDirectory; }
+
+        void ApplyPackagedRuntimeState();
 
     private:
         void Initialize();
         void Shutdown();
+
+        void DiscoverPackagedContent();
+        void LoadPackagedCameraTransform();
 
         void CreateInstance();
         void SetupDebugMessenger();
@@ -64,6 +77,14 @@ namespace Trident
         Window& m_Window;
         Renderer m_Renderer;
         ECS::Registry m_Registry;
+
+        std::filesystem::path m_PackagedContentDirectory;
+        std::filesystem::path m_PackagedScenePath;
+        std::unique_ptr<Scene> m_PackagedScene;
+        std::optional<glm::vec3> m_PackagedCameraPosition;
+        std::optional<glm::vec3> m_PackagedCameraRotation;
+        Trident::RuntimeCamera m_PackagedRuntimeCamera;
+        bool m_HasAppliedPackagedState = false;
 
         VkInstance m_Instance = VK_NULL_HANDLE;
         VkDebugUtilsMessengerEXT m_DebugMessenger = VK_NULL_HANDLE;

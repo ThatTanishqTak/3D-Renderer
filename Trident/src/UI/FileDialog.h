@@ -11,6 +11,7 @@ namespace Trident
         public:
             static bool Open(const char* id, std::string& path, const char* extension = nullptr);
             static bool Save(const char* id, std::string& path, const char* extension = nullptr);
+            static bool SelectDirectory(const char* id, std::string& path);
         };
     }
 }
