@@ -13,6 +13,7 @@
 #include <cctype>
 #include <filesystem>
 #include <functional>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -141,6 +142,13 @@ namespace Trident
                     return -1;
                 }
 
+                std::string l_CanonicalName = NormalizeBoneName(sourceName); // Mirror Mixamo trimming for every importer so duplicate prefixes collapse; extend prefixes here if needed later.
+                auto a_CanonicalIt = boneLookup.find(l_CanonicalName);
+                if (a_CanonicalIt != boneLookup.end())
+                {
+                    return a_CanonicalIt->second;
+                }
+
                 auto a_Existing = boneLookup.find(sourceName);
                 if (a_Existing != boneLookup.end())
                 {
@@ -149,7 +157,7 @@ namespace Trident
 
                 Animation::Bone l_Bone{};
                 l_Bone.m_SourceName = sourceName;
-                l_Bone.m_Name = NormalizeBoneName(sourceName);
+                l_Bone.m_Name = l_CanonicalName;
                 l_Bone.m_LocalBindTransform = glm::mat4(1.0f);
                 l_Bone.m_InverseBindMatrix = glm::mat4(1.0f);
 
@@ -160,11 +168,53 @@ namespace Trident
 
                 const int l_NewIndex = static_cast<int>(skeleton.m_Bones.size());
                 skeleton.m_Bones.push_back(l_Bone);
-                skeleton.m_NameToIndex[l_Bone.m_Name] = l_NewIndex;
+                if (skeleton.m_NameToIndex.find(l_Bone.m_Name) == skeleton.m_NameToIndex.end())
+                {
+                    skeleton.m_NameToIndex.emplace(l_Bone.m_Name, l_NewIndex);
+                }
+
                 skeleton.m_SourceNameToIndex[l_Bone.m_SourceName] = l_NewIndex;
-                boneLookup.emplace(sourceName, l_NewIndex);
+                if (l_Bone.m_SourceName != l_CanonicalName)
+                {
+                    skeleton.m_SourceNameToIndex[l_CanonicalName] = l_NewIndex;
+                }
+
+                boneLookup.emplace(l_CanonicalName, l_NewIndex);
+                if (l_CanonicalName != sourceName)
+                {
+                    boneLookup.emplace(sourceName, l_NewIndex);
+                }
+
                 return l_NewIndex;
             }
+
+#ifdef TRIDENT_ENABLE_LOADER_REGRESSION_CHECKS
+            namespace
+            {
+                [[maybe_unused]] const bool s_EnsureBoneExistsRegression = []()
+                    {
+                        // Validate that prefixed Mixamo bone names and their canonical counterparts collapse into a single bone entry.
+                        Animation::Skeleton l_Skeleton{};
+                        std::unordered_map<std::string, const aiNode*> l_NodeLookup{};
+                        std::unordered_map<std::string, int> l_BoneLookup{};
+
+                        const int l_PrefixedIndex = EnsureBoneExists(" mixamorig:Hips ", l_Skeleton, l_NodeLookup, l_BoneLookup);
+                        const int l_UnprefixedIndex = EnsureBoneExists("Hips", l_Skeleton, l_NodeLookup, l_BoneLookup);
+
+                        const bool l_HasSingleBone = l_Skeleton.m_Bones.size() == 1;
+                        const bool l_IndicesMatch = l_PrefixedIndex == l_UnprefixedIndex && l_PrefixedIndex == 0;
+                        const bool l_PrefixedMapped = l_Skeleton.m_SourceNameToIndex.count(" mixamorig:Hips ") == 1;
+                        const bool l_CanonicalMapped = l_Skeleton.m_SourceNameToIndex.count("Hips") == 1;
+
+                        if (!(l_HasSingleBone && l_IndicesMatch && l_PrefixedMapped && l_CanonicalMapped))
+                        {
+                            throw std::runtime_error("EnsureBoneExists regression: canonical bone deduplication failed.");
+                        }
+
+                        return true;
+                    }();
+            }
+#endif
 
             int ResolveTextureIndex(const aiMaterial* material, aiTextureType type, const std::filesystem::path& modelDirectory, std::vector<std::string>& textures,
                 std::unordered_map<std::string, int>& textureLookup)
