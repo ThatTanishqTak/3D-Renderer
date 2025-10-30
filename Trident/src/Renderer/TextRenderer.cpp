@@ -6,6 +6,8 @@
 #include "Application/Startup.h"
 #include "Core/Utilities.h"
 
+#define STBTT_STATIC
+#define STB_TRUETYPE_IMPLEMENTATION
 #include <stb_truetype.h>
 
 #include <algorithm>
