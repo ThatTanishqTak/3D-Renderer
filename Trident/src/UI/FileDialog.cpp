@@ -27,6 +27,30 @@ namespace Trident
             fs::path s_CurrentDirectory = fs::current_path();
             std::array<char, 256> s_FileNameBuffer{}; ///< Shared buffer used by the save dialog to capture a filename entry.
 
+            void ToLowerInPlace(std::string& value)
+            {
+                for (char& it_Character : value)
+                {
+                    it_Character = static_cast<char>(std::tolower(static_cast<unsigned char>(it_Character)));
+                }
+            }
+
+            std::string GetNormalisedExtension(const fs::path& a_Path)
+            {
+                std::string l_Extension = a_Path.extension().string();
+                ToLowerInPlace(l_Extension);
+
+                return l_Extension;
+            }
+
+            std::string GetNormalisedExtension(const char* extension)
+            {
+                std::string l_Extension = (extension != nullptr) ? extension : std::string{};
+                ToLowerInPlace(l_Extension);
+
+                return l_Extension;
+            }
+
             class IconLibrary
             {
             public:
@@ -125,14 +149,6 @@ namespace Trident
                     }
 
                     return l_Icon;
-                }
-
-                static void ToLowerInPlace(std::string& value)
-                {
-                    for (char& l_Character : value)
-                    {
-                        l_Character = static_cast<char>(std::tolower(static_cast<unsigned char>(l_Character)));
-                    }
                 }
 
                 static bool IsDirectoryEmpty(const fs::path& directory)
@@ -270,7 +286,9 @@ namespace Trident
                                 bool l_Matches = true;
                                 if (extension != nullptr && *extension != '\0')
                                 {
-                                    l_Matches = l_Entry.path().extension() == extension;
+                                    const std::string l_EntryExtension = GetNormalisedExtension(l_Entry.path());
+                                    const std::string l_TargetExtension = GetNormalisedExtension(extension);
+                                    l_Matches = l_EntryExtension == l_TargetExtension;
                                 }
 
                                 // TODO: Route this double-click handling through a shared helper once the input module provides one.
@@ -413,15 +431,24 @@ namespace Trident
                                 bool l_Matches = true;
                                 if (extension != nullptr && *extension != '\0')
                                 {
-                                    l_Matches = l_Entry.path().extension() == extension;
+                                    const std::string l_EntryExtension = GetNormalisedExtension(l_Entry.path());
+                                    const std::string l_TargetExtension = GetNormalisedExtension(extension);
+                                    l_Matches = l_EntryExtension == l_TargetExtension;
                                 }
 
                                 if (l_Matches && ImGui::IsMouseDoubleClicked(Trident::Mouse::ButtonLeft))
                                 {
                                     fs::path l_ResultPath = s_CurrentDirectory / l_Name;
-                                    if (extension != nullptr && *extension != '\0' && l_ResultPath.extension() != extension)
+                                    if (extension != nullptr && *extension != '\0')
                                     {
-                                        l_ResultPath.replace_extension(extension);
+                                        const std::string l_ResultExtension = GetNormalisedExtension(l_ResultPath);
+                                        const std::string l_TargetExtension = GetNormalisedExtension(extension);
+                                        if (l_ResultExtension != l_TargetExtension)
+                                        {
+                                            // Aligns the save dialog with the rest of the engine's case-insensitive extension handling.
+                                            // Additional formats can be routed through this normalisation step as they are added.
+                                            l_ResultPath.replace_extension(extension);
+                                        }
                                     }
 
                                     path = l_ResultPath.string();
@@ -452,8 +479,12 @@ namespace Trident
                         fs::path l_ResultPath = s_CurrentDirectory / l_FileNameInput;
                         if (extension != nullptr && *extension != '\0')
                         {
-                            if (!l_ResultPath.has_extension() || l_ResultPath.extension() != extension)
+                            const std::string l_ResultExtension = GetNormalisedExtension(l_ResultPath);
+                            const std::string l_TargetExtension = GetNormalisedExtension(extension);
+                            if (!l_ResultPath.has_extension() || l_ResultExtension != l_TargetExtension)
                             {
+                                // Aligns the save dialog with the rest of the engine's case-insensitive extension handling.
+                                // Additional formats can be routed through this normalisation step as they are added.
                                 l_ResultPath.replace_extension(extension);
                             }
                         }
