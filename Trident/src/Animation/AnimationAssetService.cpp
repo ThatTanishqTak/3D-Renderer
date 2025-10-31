@@ -1,4 +1,5 @@
 #include "Animation/AnimationAssetService.h"
+#include "Animation/AnimationSourceRegistry.h"
 
 #include "Core/Utilities.h"
 #include "Loader/ModelLoader.h"
@@ -180,6 +181,18 @@ namespace Trident
 
             PopulateChannelMetadata(l_ModelData.m_Skeleton, l_ModelData.m_AnimationClips);
 
+            if (l_ModelData.m_Skeleton.m_SourceAssetId.empty())
+            {
+                // Fall back to the logical asset identifier when the importer did not provide explicit provenance.
+                l_ModelData.m_Skeleton.m_SourceAssetId = assetId;
+            }
+
+            if (l_ModelData.m_Skeleton.m_SourceProfile.empty())
+            {
+                // Resolve the active naming profile so runtime remapping mirrors the loader's behaviour.
+                l_ModelData.m_Skeleton.m_SourceProfile = AnimationSourceRegistry::Get().ResolveProfileName(l_ModelData.m_Skeleton.m_SourceAssetId);
+            }
+
             size_t l_Handle = m_NextHandle++;
             AssetRecord l_Record{};
             l_Record.m_AssetId = assetId;
@@ -211,6 +224,18 @@ namespace Trident
             }
 
             PopulateChannelMetadata(skeleton, clips);
+
+            if (skeleton.m_SourceAssetId.empty())
+            {
+                // Runtime authored skeletons adopt the identifier supplied by the caller.
+                skeleton.m_SourceAssetId = assetId;
+            }
+
+            if (skeleton.m_SourceProfile.empty())
+            {
+                // Keep remapping consistent even for procedurally generated skeletons.
+                skeleton.m_SourceProfile = AnimationSourceRegistry::Get().ResolveProfileName(skeleton.m_SourceAssetId);
+            }
 
             size_t l_Handle = s_InvalidHandle;
             auto a_Existing = m_IdToHandle.find(assetId);

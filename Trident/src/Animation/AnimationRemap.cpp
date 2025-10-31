@@ -1,9 +1,8 @@
 #include "Animation/AnimationRemap.h"
 
+#include "Animation/AnimationSourceRegistry.h"
 #include "Core/Utilities.h"
 
-#include <algorithm>
-#include <cctype>
 #include <string>
 #include <string_view>
 
@@ -11,35 +10,6 @@ namespace Trident
 {
     namespace Animation
     {
-        namespace
-        {
-            std::string NormaliseSourceName(std::string name)
-            {
-                // Keep behaviour aligned with the loader: trim whitespace and drop the Mixamo prefix when present.
-                auto a_IsSpace = [](unsigned char character)
-                    {
-                        return std::isspace(character) != 0;
-                    };
-
-                name.erase(name.begin(), std::find_if(name.begin(), name.end(), [a_IsSpace](unsigned char character)
-                    {
-                        return !a_IsSpace(character);
-                    }));
-                name.erase(std::find_if(name.rbegin(), name.rend(), [a_IsSpace](unsigned char character)
-                    {
-                        return !a_IsSpace(character);
-                    }).base(), name.end());
-
-                constexpr std::string_view s_MixamoPrefix = "mixamorig:";
-                if (name.size() > s_MixamoPrefix.size() && name.compare(0, s_MixamoPrefix.size(), s_MixamoPrefix) == 0)
-                {
-                    name.erase(0, s_MixamoPrefix.size());
-                }
-
-                return name;
-            }
-        }
-
         int ResolveChannelBoneIndex(const TransformChannel& channel, const Skeleton& skeleton, std::string_view clipName)
         {
             const size_t l_BoneCount = skeleton.m_Bones.size();
@@ -64,18 +34,27 @@ namespace Trident
             int l_RemappedIndex = -1;
             if (!l_SourceName.empty())
             {
-                auto a_SourceIt = skeleton.m_SourceNameToIndex.find(l_SourceName);
-                if (a_SourceIt != skeleton.m_SourceNameToIndex.end())
+                // First attempt a direct lookup – rigs authored with canonical names already normalised will hit this fast path.
+                auto a_DirectIt = skeleton.m_NameToIndex.find(l_SourceName);
+                if (a_DirectIt != skeleton.m_NameToIndex.end())
                 {
-                    l_RemappedIndex = a_SourceIt->second;
+                    l_RemappedIndex = a_DirectIt->second;
                 }
                 else
                 {
-                    const std::string l_Normalised = NormaliseSourceName(l_SourceName);
-                    auto a_NormalisedIt = skeleton.m_NameToIndex.find(l_Normalised);
-                    if (a_NormalisedIt != skeleton.m_NameToIndex.end())
+                    // Fall back to the global registry so every channel is canonicalised using the assigned source profile.
+                    const AnimationSourceRegistry& l_Registry = AnimationSourceRegistry::Get();
+                    const std::string l_Normalised = !skeleton.m_SourceAssetId.empty()
+                        ? l_Registry.NormaliseBoneName(l_SourceName, skeleton.m_SourceAssetId)
+                        : l_Registry.NormaliseBoneNameWithProfile(l_SourceName, skeleton.m_SourceProfile);
+
+                    if (!l_Normalised.empty())
                     {
-                        l_RemappedIndex = a_NormalisedIt->second;
+                        auto a_NormalisedIt = skeleton.m_NameToIndex.find(l_Normalised);
+                        if (a_NormalisedIt != skeleton.m_NameToIndex.end())
+                        {
+                            l_RemappedIndex = a_NormalisedIt->second;
+                        }
                     }
                 }
             }
@@ -84,6 +63,7 @@ namespace Trident
             {
                 const std::string l_ClipLabel = clipName.empty() ? std::string("<unnamed>") : std::string(clipName);
                 TR_CORE_WARN("Failed to map animation channel targeting '{}' while sampling clip '{}' (stale index {}).", l_SourceName.c_str(), l_ClipLabel.c_str(), l_OriginalIndex);
+
                 return -1;
             }
 

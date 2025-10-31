@@ -1,5 +1,6 @@
 #include "Loader/ModelLoader.h"
 
+#include "Animation/AnimationSourceRegistry.h"
 #include "Core/Utilities.h"
 
 #include <assimp/Importer.hpp>
@@ -51,31 +52,6 @@ namespace Trident
             glm::vec4 ConvertColor(const aiColor4D& color)
             {
                 return { color.r, color.g, color.b, color.a };
-            }
-
-            std::string NormalizeBoneName(std::string name)
-            {
-                auto a_IsSpace = [](unsigned char character)
-                    {
-                        return std::isspace(character) != 0;
-                    };
-
-                name.erase(name.begin(), std::find_if(name.begin(), name.end(), [a_IsSpace](unsigned char character)
-                    {
-                        return !a_IsSpace(character);
-                    }));
-                name.erase(std::find_if(name.rbegin(), name.rend(), [a_IsSpace](unsigned char character)
-                    {
-                        return !a_IsSpace(character);
-                    }).base(), name.end());
-
-                constexpr std::string_view s_MixamoPrefix = "mixamorig:";
-                if (name.size() > s_MixamoPrefix.size() && name.compare(0, s_MixamoPrefix.size(), s_MixamoPrefix) == 0)
-                {
-                    name.erase(0, s_MixamoPrefix.size());
-                }
-
-                return name;
             }
 
             const aiNode* FindNode(const std::unordered_map<std::string, const aiNode*>& nodeLookup, const std::string& name)
@@ -134,15 +110,16 @@ namespace Trident
                 }
             }
 
-            int EnsureBoneExists(const std::string& sourceName, Animation::Skeleton& skeleton, const std::unordered_map<std::string, const aiNode*>& nodeLookup,
-                std::unordered_map<std::string, int>& boneLookup)
+            int EnsureBoneExists(const std::string& sourceName, const std::string& assetKey, Animation::Skeleton& skeleton, const std::unordered_map<std::string, 
+                const aiNode*>& nodeLookup, std::unordered_map<std::string, int>& boneLookup)
             {
                 if (sourceName.empty())
                 {
                     return -1;
                 }
 
-                std::string l_CanonicalName = NormalizeBoneName(sourceName); // Mirror Mixamo trimming for every importer so duplicate prefixes collapse; extend prefixes here if needed later.
+                // Ask the shared registry to canonicalise the bone name so rigs authored in different tools converge.
+                const std::string l_CanonicalName = Animation::AnimationSourceRegistry::Get().NormaliseBoneName(sourceName, assetKey);
                 auto a_CanonicalIt = boneLookup.find(l_CanonicalName);
                 if (a_CanonicalIt != boneLookup.end())
                 {
@@ -173,12 +150,6 @@ namespace Trident
                     skeleton.m_NameToIndex.emplace(l_Bone.m_Name, l_NewIndex);
                 }
 
-                skeleton.m_SourceNameToIndex[l_Bone.m_SourceName] = l_NewIndex;
-                if (l_Bone.m_SourceName != l_CanonicalName)
-                {
-                    skeleton.m_SourceNameToIndex[l_CanonicalName] = l_NewIndex;
-                }
-
                 boneLookup.emplace(l_CanonicalName, l_NewIndex);
                 if (l_CanonicalName != sourceName)
                 {
@@ -193,20 +164,20 @@ namespace Trident
             {
                 [[maybe_unused]] const bool s_EnsureBoneExistsRegression = []()
                     {
-                        // Validate that prefixed Mixamo bone names and their canonical counterparts collapse into a single bone entry.
+                        // Validate that prefixed Mixamo bone names and their canonical counterparts collapse into a single bone
+                        // entry now that the canonical map is the single source of truth.
                         Animation::Skeleton l_Skeleton{};
                         std::unordered_map<std::string, const aiNode*> l_NodeLookup{};
                         std::unordered_map<std::string, int> l_BoneLookup{};
 
-                        const int l_PrefixedIndex = EnsureBoneExists(" mixamorig:Hips ", l_Skeleton, l_NodeLookup, l_BoneLookup);
-                        const int l_UnprefixedIndex = EnsureBoneExists("Hips", l_Skeleton, l_NodeLookup, l_BoneLookup);
+                        const int l_PrefixedIndex = EnsureBoneExists(" mixamorig:Hips ", std::string{}, l_Skeleton, l_NodeLookup, l_BoneLookup);
+                        const int l_UnprefixedIndex = EnsureBoneExists("Hips", std::string{}, l_Skeleton, l_NodeLookup, l_BoneLookup);
 
                         const bool l_HasSingleBone = l_Skeleton.m_Bones.size() == 1;
                         const bool l_IndicesMatch = l_PrefixedIndex == l_UnprefixedIndex && l_PrefixedIndex == 0;
-                        const bool l_PrefixedMapped = l_Skeleton.m_SourceNameToIndex.count(" mixamorig:Hips ") == 1;
-                        const bool l_CanonicalMapped = l_Skeleton.m_SourceNameToIndex.count("Hips") == 1;
+                        const bool l_CanonicalMapped = l_Skeleton.m_NameToIndex.count("hips") == 1;
 
-                        if (!(l_HasSingleBone && l_IndicesMatch && l_PrefixedMapped && l_CanonicalMapped))
+                        if (!(l_HasSingleBone && l_IndicesMatch && l_CanonicalMapped))
                         {
                             throw std::runtime_error("EnsureBoneExists regression: canonical bone deduplication failed.");
                         }
@@ -324,6 +295,9 @@ namespace Trident
                 TR_CORE_ERROR("Model file not found: {}", l_NormalisedPath.c_str());
                 return l_ModelData;
             }
+
+            // Cache the normalised asset identifier so the naming profile remains stable across the import pipeline.
+            const std::string l_AssetKey = l_NormalisedPath;
 
             std::filesystem::path l_ModelDirectory = l_ModelPath.parent_path();
 
@@ -469,7 +443,7 @@ namespace Trident
                         }
 
                         const std::string l_BoneName = l_AssimpBone->mName.C_Str();
-                        const int l_BoneIndex = EnsureBoneExists(l_BoneName, l_ModelData.m_Skeleton, l_NodeLookup, l_BoneLookup);
+                        const int l_BoneIndex = EnsureBoneExists(l_BoneName, l_AssetKey, l_ModelData.m_Skeleton, l_NodeLookup, l_BoneLookup);
                         if (l_BoneIndex < 0)
                         {
                             continue;
@@ -573,7 +547,7 @@ namespace Trident
                     }
 
                     const std::string l_ChannelBoneName = l_AssimpChannel->mNodeName.C_Str();
-                    const int l_BoneIndex = EnsureBoneExists(l_ChannelBoneName, l_ModelData.m_Skeleton, l_NodeLookup, l_BoneLookup);
+                    const int l_BoneIndex = EnsureBoneExists(l_ChannelBoneName, l_AssetKey, l_ModelData.m_Skeleton, l_NodeLookup, l_BoneLookup);
                     if (l_BoneIndex < 0)
                     {
                         continue;
@@ -621,6 +595,10 @@ namespace Trident
             }
 
             FinaliseSkeletonHierarchy(l_ModelData.m_Skeleton, l_NodeLookup, l_BoneLookup);
+
+            // Preserve provenance information so runtime remapping knows which naming profile to reuse.
+            l_ModelData.m_Skeleton.m_SourceAssetId = l_AssetKey;
+            l_ModelData.m_Skeleton.m_SourceProfile = Animation::AnimationSourceRegistry::Get().ResolveProfileName(l_AssetKey);
 
             if (l_ModelData.m_Skeleton.m_RootBoneIndex < 0 && !l_ModelData.m_Skeleton.m_Bones.empty())
             {

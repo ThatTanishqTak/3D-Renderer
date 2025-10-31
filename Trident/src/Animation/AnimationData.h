@@ -35,7 +35,7 @@ namespace Trident
         struct TransformChannel
         {
             int m_BoneIndex = -1;                               //!< Index into the owning skeleton's bone array.
-            std::string m_SourceBoneName;                       //!< Preserve the authored bone name so non-Mixamo rigs retain metadata alongside the normalised index.
+            std::string m_SourceBoneName;                       //!< Preserve the authored bone name so tooling can surface the original rig terminology.
             std::vector<VectorKeyframe> m_TranslationKeys{};    //!< Translation keyframes sampled in seconds.
             std::vector<QuaternionKeyframe> m_RotationKeys{};   //!< Rotation keyframes sampled in seconds.
             std::vector<VectorKeyframe> m_ScaleKeys{};          //!< Scale keyframes sampled in seconds.
@@ -57,7 +57,7 @@ namespace Trident
          */
         struct Bone
         {
-            std::string m_Name;                                 //!< Normalised bone name (Mixamo prefixes removed, canonicalised).
+            std::string m_Name;                                 //!< Normalised bone name generated via the active source profile.
             std::string m_SourceName;                           //!< Original bone name as authored in the asset.
             int m_ParentIndex = -1;                             //!< Parent bone index (-1 when the bone is the root).
             std::vector<int> m_Children{};                      //!< Child bone indices for hierarchical traversal.
@@ -73,7 +73,8 @@ namespace Trident
             int m_RootBoneIndex = -1;                                           //!< Root bone for the hierarchy (-1 when unset).
             std::vector<Bone> m_Bones{};                                        //!< Linear storage of bones for GPU-friendly access.
             std::unordered_map<std::string, int> m_NameToIndex{};               //!< Lookup table from normalised name to bone index.
-            std::unordered_map<std::string, int> m_SourceNameToIndex{};         //!< Lookup table from source name to bone index.
+            std::string m_SourceAssetId{};                                      //!< Identifier for the asset the skeleton originated from.
+            std::string m_SourceProfile{};                                      //!< Name of the normalisation profile applied when baking the skeleton.
         };
     }
 }
