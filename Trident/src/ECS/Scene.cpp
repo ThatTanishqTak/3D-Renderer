@@ -20,13 +20,105 @@
 #include <iomanip>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 #include <memory>
 #include <limits>
+#include <optional>
+#include <filesystem>
+#include <system_error>
 
 #include <glm/gtc/type_ptr.hpp>
 
 namespace Trident
 {
+    namespace
+    {
+        /**
+         * @brief Resolves a mesh component's stored asset path against the current workspace.
+         *
+         * Scene files historically persisted absolute paths when meshes were imported. Moving a
+         * project between machines invalidates those paths, causing the renderer to rebuild with
+         * zero geometry. This helper attempts a series of fallbacks so legacy scenes can still
+         * locate their assets when the working directory changes:
+         *   - Use the stored path directly when it already exists.
+         *   - Treat relative paths as relative to the current working directory.
+         *   - Recover the substring beginning with "Assets/" from historic absolute paths and
+         *     resolve it relative to the workspace root.
+         *
+         * Returning std::nullopt signals that the asset could not be located.
+         */
+        std::optional<std::string> ResolveMeshAssetPath(const std::string& storedPath)
+        {
+            if (storedPath.empty())
+            {
+                return std::nullopt;
+            }
+
+            namespace fs = std::filesystem;
+
+            const std::string l_NormalizedStored = Utilities::FileManagement::NormalizePath(storedPath);
+            const fs::path l_StoredPath = fs::path(l_NormalizedStored);
+
+            const auto a_Normalize = [](const fs::path& a_Path) -> std::string
+                {
+                    return Utilities::FileManagement::NormalizePath(a_Path.generic_string());
+                };
+
+            const fs::path l_WorkingDirectory = fs::current_path();
+            const auto a_TryRelativize = [&](const fs::path& a_Path) -> std::string
+                {
+                    std::error_code l_Error{};
+                    fs::path l_Relative = fs::relative(a_Path, l_WorkingDirectory, l_Error);
+                    if (!l_Error && !l_Relative.empty())
+                    {
+                        const std::string l_NormalizedRelative = a_Normalize(l_Relative);
+                        if (l_NormalizedRelative.rfind("..", 0) != 0)
+                        {
+                            return l_NormalizedRelative;
+                        }
+                    }
+
+                    return a_Normalize(a_Path);
+                };
+
+            if (fs::exists(l_StoredPath))
+            {
+                return a_TryRelativize(l_StoredPath);
+            }
+
+            if (l_StoredPath.is_relative())
+            {
+                const fs::path l_RelativeCandidate = l_WorkingDirectory / l_StoredPath;
+                if (fs::exists(l_RelativeCandidate))
+                {
+                    return a_TryRelativize(l_RelativeCandidate);
+                }
+            }
+            else
+            {
+                const std::string l_AssetsMarker = "Assets/";
+                const size_t l_AssetsPos = l_NormalizedStored.find(l_AssetsMarker);
+                if (l_AssetsPos != std::string::npos)
+                {
+                    const fs::path l_SubPath = fs::path(l_NormalizedStored.substr(l_AssetsPos));
+                    const fs::path l_Candidate = l_WorkingDirectory / l_SubPath;
+                    if (fs::exists(l_Candidate))
+                    {
+                        return a_TryRelativize(l_Candidate);
+                    }
+                }
+            }
+
+            const fs::path l_FallbackCandidate = l_WorkingDirectory / l_StoredPath;
+            if (fs::exists(l_FallbackCandidate))
+            {
+                return a_TryRelativize(l_FallbackCandidate);
+            }
+
+            return std::nullopt;
+        }
+    }
+
     Scene::Scene(ECS::Registry& registry) : m_Registry(&registry), m_EditorRegistry(&registry)
     {
         // Mirror the editor registry pointer up-front so play mode can swap without expensive lookups.
@@ -954,6 +1046,7 @@ namespace Trident
         };
 
         std::unordered_map<std::string, std::vector<MeshBinding>> l_AssetBindings{};
+        std::unordered_set<std::string> l_UnresolvedAssets{};
         bool l_WarnedMissingMetadata = false;
 
         for (ECS::Entity it_Entity : l_Entities)
@@ -966,10 +1059,27 @@ namespace Trident
             MeshComponent& l_Component = l_Registry.GetComponent<MeshComponent>(it_Entity);
             if (!l_Component.m_SourceAssetPath.empty())
             {
+                const std::optional<std::string> l_ResolvedPath = ResolveMeshAssetPath(l_Component.m_SourceAssetPath);
+                if (!l_ResolvedPath)
+                {
+                    l_Component.m_MeshIndex = std::numeric_limits<size_t>::max();
+                    if (l_UnresolvedAssets.insert(l_Component.m_SourceAssetPath).second)
+                    {
+                        TR_CORE_WARN("Mesh component referenced missing asset '{}'; geometry skipped during reload", l_Component.m_SourceAssetPath.c_str());
+                    }
+                    continue;
+                }
+
+                if (l_Component.m_SourceAssetPath != *l_ResolvedPath)
+                {
+                    // Record the resolved path so subsequent serialisation persists a workspace-relative location.
+                    l_Component.m_SourceAssetPath = *l_ResolvedPath;
+                }
+
                 MeshBinding l_Binding{};
                 l_Binding.m_Component = &l_Component;
                 l_Binding.m_LocalMeshIndex = l_Component.m_SourceMeshIndex;
-                l_AssetBindings[l_Component.m_SourceAssetPath].push_back(l_Binding);
+                l_AssetBindings[*l_ResolvedPath].push_back(l_Binding);
             }
             else if (l_Component.m_Primitive == MeshComponent::PrimitiveType::None)
             {
