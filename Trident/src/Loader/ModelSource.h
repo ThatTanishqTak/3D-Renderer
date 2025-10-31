@@ -4,10 +4,7 @@
 #include <memory>
 #include <string>
 
-namespace Assimp
-{
-    class IOSystem;
-}
+#include <assimp/IOSystem.hpp>
 
 namespace Trident
 {
