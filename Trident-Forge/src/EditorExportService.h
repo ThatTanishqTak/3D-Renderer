@@ -43,5 +43,12 @@ private:
     std::filesystem::path ResolveRuntimeAssetsDirectory() const;
 
 private:
-    std::filesystem::path m_ProjectRoot; ///< Root of the repository; used to locate the runtime project and assets.
+    void InvalidateRuntimeCache();
+
+private:
+    std::filesystem::path m_ProjectRoot;                 ///< Root of the repository; used to locate the runtime project and assets.
+    mutable bool m_HasCachedBuildDirectory = false;      ///< Tracks whether a build directory probe succeeded previously.
+    mutable std::filesystem::path m_CachedBuildDirectory;///< Stores the last known runtime build directory.
+    mutable bool m_HasCachedProjectFile = false;         ///< Indicates whether we probed for the runtime project file already.
+    mutable std::filesystem::path m_CachedProjectFile;   ///< Stores the last known runtime project file path.
 };

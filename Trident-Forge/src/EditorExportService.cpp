@@ -220,6 +220,15 @@ void EditorExportService::SetProjectRoot(const std::filesystem::path& projectRoo
     m_ProjectRoot = NormalisePath(l_Root);
 }
 
+void EditorExportService::InvalidateRuntimeCache()
+{
+    // Clear memoised paths so future exports re-discover the runtime build artefacts if the root changes.
+    m_HasCachedBuildDirectory = false;
+    m_CachedBuildDirectory.clear();
+    m_HasCachedProjectFile = false;
+    m_CachedProjectFile.clear();
+}
+
 EditorExportService::ExportResult EditorExportService::ExportScene(const Trident::Scene& scene,
     const Trident::RuntimeCamera& runtimeCamera,
     const std::filesystem::path& currentScenePath,
@@ -524,28 +533,72 @@ bool EditorExportService::WriteRuntimeCameraFile(const std::filesystem::path& co
 
 std::filesystem::path EditorExportService::ResolveRuntimeBuildDirectory() const
 {
+    // Reuse the last successful probe if the directory still looks valid.
+    if (m_HasCachedBuildDirectory)
+    {
+        if (m_CachedBuildDirectory.empty())
+        {
+            return {};
+        }
+
+        std::error_code l_Error{};
+        if (std::filesystem::exists(m_CachedBuildDirectory, l_Error) && !l_Error && DirectoryLooksLikeBuildTree(m_CachedBuildDirectory))
+        {
+            return m_CachedBuildDirectory;
+        }
+
+        // The cached directory disappeared or is no longer valid; fall back to probing the filesystem again.
+        m_HasCachedBuildDirectory = false;
+        m_CachedBuildDirectory.clear();
+    }
+
     // Walk through the candidates and return the first directory that exposes build artefacts.
     const std::vector<std::filesystem::path> l_Candidates = GatherCandidateBuildDirectories(m_ProjectRoot);
     for (const std::filesystem::path& l_CandidateRoot : l_Candidates)
     {
         if (DirectoryLooksLikeBuildTree(l_CandidateRoot))
         {
-            return l_CandidateRoot;
+            m_CachedBuildDirectory = NormalisePath(l_CandidateRoot);
+            m_HasCachedBuildDirectory = true;
+
+            return m_CachedBuildDirectory;
         }
 
         const std::filesystem::path l_TridentSubdirectory = l_CandidateRoot / "Trident";
         if (DirectoryLooksLikeBuildTree(l_TridentSubdirectory))
         {
-            return l_TridentSubdirectory;
+            m_CachedBuildDirectory = NormalisePath(l_TridentSubdirectory);
+            m_HasCachedBuildDirectory = true;
+
+            return m_CachedBuildDirectory;
         }
     }
 
-    // TODO: cache the resolved directory per session to avoid repeated filesystem probes once exports are frequent.
+    // Leave the cache invalidated so we can pick up a new build directory if the developer configures one later.
     return {};
 }
 
 std::filesystem::path EditorExportService::ResolveRuntimeProjectFile() const
 {
+    // Return the previously discovered project file if it is still present on disk.
+    if (m_HasCachedProjectFile)
+    {
+        if (m_CachedProjectFile.empty())
+        {
+            return {};
+        }
+
+        std::error_code l_Error{};
+        if (std::filesystem::exists(m_CachedProjectFile, l_Error) && !l_Error)
+        {
+            return m_CachedProjectFile;
+        }
+
+        // Reset the cache so the discovery logic can locate a refreshed build tree.
+        m_HasCachedProjectFile = false;
+        m_CachedProjectFile.clear();
+    }
+
     const std::filesystem::path l_BuildDirectory = ResolveRuntimeBuildDirectory();
     std::error_code l_Error{};
     if (!l_BuildDirectory.empty())
@@ -563,7 +616,10 @@ std::filesystem::path EditorExportService::ResolveRuntimeProjectFile() const
         {
             if (std::filesystem::exists(l_Candidate, l_Error))
             {
-                return l_Candidate;
+                m_CachedProjectFile = NormalisePath(l_Candidate);
+                m_HasCachedProjectFile = true;
+
+                return m_CachedProjectFile;
             }
 
             l_Error.clear();
@@ -574,14 +630,20 @@ std::filesystem::path EditorExportService::ResolveRuntimeProjectFile() const
     const std::filesystem::path l_Solution = m_ProjectRoot / "Trident" / "Trident.sln";
     if (std::filesystem::exists(l_Solution, l_Error))
     {
-        return l_Solution;
+        m_CachedProjectFile = NormalisePath(l_Solution);
+        m_HasCachedProjectFile = true;
+
+        return m_CachedProjectFile;
     }
 
     l_Error.clear();
     const std::filesystem::path l_Project = m_ProjectRoot / "Trident" / "Trident.vcxproj";
     if (std::filesystem::exists(l_Project, l_Error))
     {
-        return l_Project;
+        m_CachedProjectFile = NormalisePath(l_Project);
+        m_HasCachedProjectFile = true;
+
+        return m_CachedProjectFile;
     }
 
     return {};
