@@ -226,6 +226,9 @@ namespace Trident
         void EnsureSkinningBufferCapacity(size_t requiredMatrices);
         void RefreshBonePaletteDescriptors();
         void PrepareBonePaletteBuffer(uint32_t imageIndex);
+        void BuildPrimitiveGeometry();
+        void DestroyPrimitiveGeometry();
+        size_t ResolvePrimitiveMeshIndex(MeshComponent::PrimitiveType primitive) const;
 
         // Swapchain
         Swapchain m_Swapchain;
@@ -329,6 +332,16 @@ namespace Trident
         std::unique_ptr<uint32_t[]> m_StagingIndices;
         std::vector<Geometry::Material> m_Materials; // CPU copy of the material table used during shading
         std::vector<SpriteDrawCommand> m_SpriteDrawList;    ///< Cached list of sprites visible for the current frame.
+
+        struct PrimitiveCacheEntry
+        {
+            std::vector<Vertex> m_Vertices;          ///< CPU-side vertex data for the procedural primitive.
+            std::vector<uint32_t> m_Indices;         ///< CPU-side index data for the procedural primitive.
+            MeshDrawInfo m_DrawInfo{};               ///< Cached draw parameters resolved after GPU upload.
+            size_t m_DrawInfoIndex = std::numeric_limits<size_t>::max(); ///< Index into m_MeshDrawInfo once uploaded.
+        };
+
+        std::array<PrimitiveCacheEntry, static_cast<size_t>(MeshComponent::PrimitiveType::Quad) + 1> m_PrimitiveCache{}; ///< Primitives baked on demand for editor spawning.
 
         ECS::Entity m_Entity = 0;
         ECS::Registry* m_Registry = nullptr;

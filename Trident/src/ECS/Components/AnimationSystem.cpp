@@ -11,9 +11,9 @@ namespace Trident
 {
     namespace ECS
     {
-        AnimationSystem::AnimationSystem()
-            : m_Player(Animation::AnimationAssetService::Get())
+        AnimationSystem::AnimationSystem() : m_Player(Animation::AnimationAssetService::Get())
         {
+
         }
 
         void AnimationSystem::RefreshCachedHandles(AnimationComponent& component, Animation::AnimationAssetService& service)

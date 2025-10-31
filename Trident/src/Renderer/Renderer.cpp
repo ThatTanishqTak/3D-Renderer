@@ -34,11 +34,238 @@
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/matrix_inverse.hpp>
+#include <glm/gtc/constants.hpp>
+#include <glm/gtx/norm.hpp>
 #include <imgui_impl_vulkan.h>
 
 namespace
 {
     constexpr const char* kDefaultTextureKey = "renderer://default-white";
+
+    struct PrimitiveGeometryData
+    {
+        std::vector<Vertex> m_Vertices;
+        std::vector<uint32_t> m_Indices;
+    };
+
+    PrimitiveGeometryData CreateCubePrimitive()
+    {
+        PrimitiveGeometryData l_Result{};
+        constexpr float l_HalfExtent = 0.5f;
+        const std::array<glm::vec2, 4> l_Uvs{
+            glm::vec2{ 0.0f, 0.0f },
+            glm::vec2{ 1.0f, 0.0f },
+            glm::vec2{ 1.0f, 1.0f },
+            glm::vec2{ 0.0f, 1.0f }
+        };
+
+        const auto l_AddFace = [&](const std::array<glm::vec3, 4>& a_Positions)
+            {
+                const size_t l_BaseIndex = l_Result.m_Vertices.size();
+                const glm::vec3 l_Tangent = glm::normalize(a_Positions[1] - a_Positions[0]);
+                const glm::vec3 l_Bitangent = glm::normalize(a_Positions[3] - a_Positions[0]);
+                const glm::vec3 l_Normal = glm::normalize(glm::cross(l_Tangent, l_Bitangent));
+
+                for (size_t it_Vertex = 0; it_Vertex < a_Positions.size(); ++it_Vertex)
+                {
+                    Vertex l_Vertex{};
+                    l_Vertex.Position = a_Positions[it_Vertex];
+                    l_Vertex.Normal = l_Normal;
+                    l_Vertex.Tangent = l_Tangent;
+                    l_Vertex.Bitangent = l_Bitangent;
+                    l_Vertex.Color = glm::vec3{ 1.0f, 1.0f, 1.0f };
+                    l_Vertex.TexCoord = l_Uvs[it_Vertex];
+                    l_Result.m_Vertices.push_back(l_Vertex);
+                }
+
+                l_Result.m_Indices.push_back(static_cast<uint32_t>(l_BaseIndex + 0));
+                l_Result.m_Indices.push_back(static_cast<uint32_t>(l_BaseIndex + 1));
+                l_Result.m_Indices.push_back(static_cast<uint32_t>(l_BaseIndex + 2));
+                l_Result.m_Indices.push_back(static_cast<uint32_t>(l_BaseIndex + 0));
+                l_Result.m_Indices.push_back(static_cast<uint32_t>(l_BaseIndex + 2));
+                l_Result.m_Indices.push_back(static_cast<uint32_t>(l_BaseIndex + 3));
+            };
+
+        const std::array<std::array<glm::vec3, 4>, 6> l_Faces{
+            std::array<glm::vec3, 4>{
+                glm::vec3{ -l_HalfExtent, -l_HalfExtent,  l_HalfExtent },
+                glm::vec3{  l_HalfExtent, -l_HalfExtent,  l_HalfExtent },
+                glm::vec3{  l_HalfExtent,  l_HalfExtent,  l_HalfExtent },
+                glm::vec3{ -l_HalfExtent,  l_HalfExtent,  l_HalfExtent }
+            },
+            std::array<glm::vec3, 4>{
+                glm::vec3{  l_HalfExtent, -l_HalfExtent, -l_HalfExtent },
+                glm::vec3{ -l_HalfExtent, -l_HalfExtent, -l_HalfExtent },
+                glm::vec3{ -l_HalfExtent,  l_HalfExtent, -l_HalfExtent },
+                glm::vec3{  l_HalfExtent,  l_HalfExtent, -l_HalfExtent }
+            },
+            std::array<glm::vec3, 4>{
+                glm::vec3{  l_HalfExtent, -l_HalfExtent,  l_HalfExtent },
+                glm::vec3{  l_HalfExtent, -l_HalfExtent, -l_HalfExtent },
+                glm::vec3{  l_HalfExtent,  l_HalfExtent, -l_HalfExtent },
+                glm::vec3{  l_HalfExtent,  l_HalfExtent,  l_HalfExtent }
+            },
+            std::array<glm::vec3, 4>{
+                glm::vec3{ -l_HalfExtent, -l_HalfExtent, -l_HalfExtent },
+                glm::vec3{ -l_HalfExtent, -l_HalfExtent,  l_HalfExtent },
+                glm::vec3{ -l_HalfExtent,  l_HalfExtent,  l_HalfExtent },
+                glm::vec3{ -l_HalfExtent,  l_HalfExtent, -l_HalfExtent }
+            },
+            std::array<glm::vec3, 4>{
+                glm::vec3{ -l_HalfExtent,  l_HalfExtent,  l_HalfExtent },
+                glm::vec3{  l_HalfExtent,  l_HalfExtent,  l_HalfExtent },
+                glm::vec3{  l_HalfExtent,  l_HalfExtent, -l_HalfExtent },
+                glm::vec3{ -l_HalfExtent,  l_HalfExtent, -l_HalfExtent }
+            },
+            std::array<glm::vec3, 4>{
+                glm::vec3{ -l_HalfExtent, -l_HalfExtent, -l_HalfExtent },
+                glm::vec3{  l_HalfExtent, -l_HalfExtent, -l_HalfExtent },
+                glm::vec3{  l_HalfExtent, -l_HalfExtent,  l_HalfExtent },
+                glm::vec3{ -l_HalfExtent, -l_HalfExtent,  l_HalfExtent }
+            }
+        };
+
+        for (const auto& it_Face : l_Faces)
+        {
+            l_AddFace(it_Face);
+        }
+
+        return l_Result;
+    }
+
+    PrimitiveGeometryData CreateQuadPrimitive()
+    {
+        PrimitiveGeometryData l_Result{};
+        constexpr float l_HalfExtent = 0.5f;
+
+        const std::array<glm::vec3, 4> l_Positions{
+            glm::vec3{ -l_HalfExtent, -l_HalfExtent, 0.0f },
+            glm::vec3{  l_HalfExtent, -l_HalfExtent, 0.0f },
+            glm::vec3{  l_HalfExtent,  l_HalfExtent, 0.0f },
+            glm::vec3{ -l_HalfExtent,  l_HalfExtent, 0.0f }
+        };
+        const std::array<glm::vec2, 4> l_Uvs{
+            glm::vec2{ 0.0f, 0.0f },
+            glm::vec2{ 1.0f, 0.0f },
+            glm::vec2{ 1.0f, 1.0f },
+            glm::vec2{ 0.0f, 1.0f }
+        };
+
+        const glm::vec3 l_Tangent = glm::normalize(l_Positions[1] - l_Positions[0]);
+        const glm::vec3 l_Bitangent = glm::normalize(l_Positions[3] - l_Positions[0]);
+        const glm::vec3 l_Normal = glm::normalize(glm::cross(l_Tangent, l_Bitangent));
+
+        for (size_t it_Vertex = 0; it_Vertex < l_Positions.size(); ++it_Vertex)
+        {
+            Vertex l_Vertex{};
+            l_Vertex.Position = l_Positions[it_Vertex];
+            l_Vertex.Normal = l_Normal;
+            l_Vertex.Tangent = l_Tangent;
+            l_Vertex.Bitangent = l_Bitangent;
+            l_Vertex.Color = glm::vec3{ 1.0f, 1.0f, 1.0f };
+            l_Vertex.TexCoord = l_Uvs[it_Vertex];
+            l_Result.m_Vertices.push_back(l_Vertex);
+        }
+
+        const std::array<uint32_t, 6> l_Indices{ 0, 1, 2, 0, 2, 3 };
+        l_Result.m_Indices.insert(l_Result.m_Indices.end(), l_Indices.begin(), l_Indices.end());
+
+        return l_Result;
+    }
+
+    PrimitiveGeometryData CreateSpherePrimitive()
+    {
+        PrimitiveGeometryData l_Result{};
+        constexpr uint32_t l_SliceCount = 32;
+        constexpr uint32_t l_StackCount = 16;
+        constexpr float l_Radius = 0.5f;
+
+        for (uint32_t l_Stack = 0; l_Stack <= l_StackCount; ++l_Stack)
+        {
+            const float l_V = static_cast<float>(l_Stack) / static_cast<float>(l_StackCount);
+            const float l_Theta = l_V * glm::pi<float>();
+            const float l_SinTheta = std::sin(l_Theta);
+            const float l_CosTheta = std::cos(l_Theta);
+
+            for (uint32_t l_Slice = 0; l_Slice <= l_SliceCount; ++l_Slice)
+            {
+                const float l_U = static_cast<float>(l_Slice) / static_cast<float>(l_SliceCount);
+                const float l_Phi = l_U * glm::two_pi<float>();
+                const float l_SinPhi = std::sin(l_Phi);
+                const float l_CosPhi = std::cos(l_Phi);
+
+                glm::vec3 l_Position{
+                    l_Radius * l_SinTheta * l_CosPhi,
+                    l_Radius * l_CosTheta,
+                    l_Radius * l_SinTheta * l_SinPhi
+                };
+                glm::vec3 l_Normal = glm::normalize(l_Position);
+                if (!std::isfinite(l_Normal.x) || !std::isfinite(l_Normal.y) || !std::isfinite(l_Normal.z))
+                {
+                    l_Normal = glm::vec3{ 0.0f, 1.0f, 0.0f };
+                }
+
+                glm::vec3 l_Tangent{
+                    -l_SinTheta * l_SinPhi,
+                    0.0f,
+                    l_SinTheta * l_CosPhi
+                };
+                if (glm::length2(l_Tangent) <= std::numeric_limits<float>::epsilon())
+                {
+                    l_Tangent = glm::vec3{ 1.0f, 0.0f, 0.0f };
+                }
+                else
+                {
+                    l_Tangent = glm::normalize(l_Tangent);
+                }
+
+                glm::vec3 l_Bitangent = glm::cross(l_Normal, l_Tangent);
+                if (glm::length2(l_Bitangent) <= std::numeric_limits<float>::epsilon())
+                {
+                    l_Bitangent = glm::vec3{ 0.0f, 1.0f, 0.0f };
+                }
+                else
+                {
+                    l_Bitangent = glm::normalize(l_Bitangent);
+                }
+
+                Vertex l_Vertex{};
+                l_Vertex.Position = l_Position;
+                l_Vertex.Normal = l_Normal;
+                l_Vertex.Tangent = l_Tangent;
+                l_Vertex.Bitangent = l_Bitangent;
+                l_Vertex.Color = glm::vec3{ 1.0f, 1.0f, 1.0f };
+                l_Vertex.TexCoord = glm::vec2{ l_U, 1.0f - l_V };
+                l_Result.m_Vertices.push_back(l_Vertex);
+            }
+        }
+
+        const uint32_t l_RingVertexCount = l_SliceCount + 1;
+        for (uint32_t l_Stack = 0; l_Stack < l_StackCount; ++l_Stack)
+        {
+            for (uint32_t l_Slice = 0; l_Slice < l_SliceCount; ++l_Slice)
+            {
+                const uint32_t l_First = l_Stack * l_RingVertexCount + l_Slice;
+                const uint32_t l_Second = l_First + l_RingVertexCount;
+
+                if (l_Stack != 0)
+                {
+                    l_Result.m_Indices.push_back(l_First);
+                    l_Result.m_Indices.push_back(l_Second);
+                    l_Result.m_Indices.push_back(l_First + 1);
+                }
+
+                if (l_Stack != (l_StackCount - 1))
+                {
+                    l_Result.m_Indices.push_back(l_Second);
+                    l_Result.m_Indices.push_back(l_Second + 1);
+                    l_Result.m_Indices.push_back(l_First + 1);
+                }
+            }
+        }
+
+        return l_Result;
+    }
 
     glm::mat4 ComposeTransform(const Trident::Transform& transform)
     {
@@ -190,6 +417,8 @@ namespace Trident
 
         // Prepare shared quad geometry so every sprite draw can reference the same GPU buffers.
         BuildSpriteGeometry();
+        // Bake procedural primitives so editor-spawned meshes immediately resolve geometry.
+        BuildPrimitiveGeometry();
 
         m_ViewportContexts.clear();
         m_ActiveViewportId = 0;
@@ -207,6 +436,9 @@ namespace Trident
             TR_CORE_CRITICAL("Failed to create resource fence");
         }
 
+        // Upload the procedural primitives immediately so new scenes can render cubes, spheres, and quads without requiring an imported mesh.
+        UploadMeshFromCache();
+
         TR_CORE_INFO("-------RENDERER INITIALIZED-------");
     }
 
@@ -223,6 +455,7 @@ namespace Trident
 
         // Release shared sprite geometry before the buffer allocator clears tracked allocations.
         DestroySpriteGeometry();
+        DestroyPrimitiveGeometry();
 
         for (size_t it_Index = 0; it_Index < m_BonePaletteBuffers.size(); ++it_Index)
         {
@@ -417,42 +650,113 @@ namespace Trident
 
         const auto& l_Meshes = m_GeometryCache;
 
-        size_t l_VertexCount = 0;
-        size_t l_IndexCount = 0;
+        size_t l_StaticVertexCount = 0;
+        size_t l_StaticIndexCount = 0;
         for (const auto& it_Mesh : l_Meshes)
         {
-            l_VertexCount += it_Mesh.Vertices.size();
-            l_IndexCount += it_Mesh.Indices.size();
+            l_StaticVertexCount += it_Mesh.Vertices.size();
+            l_StaticIndexCount += it_Mesh.Indices.size();
         }
 
-        if (l_VertexCount > m_MaxVertexCount)
+        size_t l_PrimitiveVertexCount = 0;
+        size_t l_PrimitiveIndexCount = 0;
+        size_t l_PrimitiveActiveCount = 0;
+        for (size_t it_Primitive = 0; it_Primitive < m_PrimitiveCache.size(); ++it_Primitive)
         {
-            m_MaxVertexCount = l_VertexCount;
-            m_StagingVertices.reset(new Vertex[m_MaxVertexCount]);
+            if (it_Primitive == static_cast<size_t>(MeshComponent::PrimitiveType::None))
+            {
+                continue;
+            }
+
+            const PrimitiveCacheEntry& l_Primitive = m_PrimitiveCache[it_Primitive];
+            if (l_Primitive.m_Vertices.empty() || l_Primitive.m_Indices.empty())
+            {
+                continue;
+            }
+
+            l_PrimitiveVertexCount += l_Primitive.m_Vertices.size();
+            l_PrimitiveIndexCount += l_Primitive.m_Indices.size();
+            ++l_PrimitiveActiveCount;
         }
-        if (l_IndexCount > m_MaxIndexCount)
+
+        const size_t l_TotalVertexCount = l_StaticVertexCount + l_PrimitiveVertexCount;
+        const size_t l_TotalIndexCount = l_StaticIndexCount + l_PrimitiveIndexCount;
+
+        if (l_TotalVertexCount > m_MaxVertexCount)
         {
-            m_MaxIndexCount = l_IndexCount;
-            m_StagingIndices.reset(new uint32_t[m_MaxIndexCount]);
+            m_MaxVertexCount = l_TotalVertexCount;
+            if (m_MaxVertexCount > 0)
+            {
+                m_StagingVertices.reset(new Vertex[m_MaxVertexCount]);
+            }
+            else
+            {
+                m_StagingVertices.reset();
+            }
+        }
+        if (l_TotalIndexCount > m_MaxIndexCount)
+        {
+            m_MaxIndexCount = l_TotalIndexCount;
+            if (m_MaxIndexCount > 0)
+            {
+                m_StagingIndices.reset(new uint32_t[m_MaxIndexCount]);
+            }
+            else
+            {
+                m_StagingIndices.reset();
+            }
         }
 
         size_t l_VertOffset = 0;
         size_t l_IndexOffset = 0;
-        for (const auto& it_Mesh : l_Meshes)
+        if (l_TotalVertexCount > 0 && m_StagingVertices)
         {
-            std::copy(it_Mesh.Vertices.begin(), it_Mesh.Vertices.end(), m_StagingVertices.get() + l_VertOffset);
-            for (auto index : it_Mesh.Indices)
+            for (const auto& it_Mesh : l_Meshes)
             {
-                // Preserve the mesh-local indices and rely on the base vertex during draw submission.
-                // Offsetting the index here as well as supplying a base vertex later would double-apply
-                // the vertex offset and corrupt geometry once multiple meshes share the combined buffers.
-                m_StagingIndices[l_IndexOffset++] = index;
+                std::copy(it_Mesh.Vertices.begin(), it_Mesh.Vertices.end(), m_StagingVertices.get() + l_VertOffset);
+                for (uint32_t it_Index : it_Mesh.Indices)
+                {
+                    // Preserve the mesh-local indices and rely on the base vertex during draw submission.
+                    // Offsetting the index here as well as supplying a base vertex later would double-apply
+                    // the vertex offset and corrupt geometry once multiple meshes share the combined buffers.
+                    m_StagingIndices[l_IndexOffset++] = it_Index;
+                }
+                l_VertOffset += it_Mesh.Vertices.size();
             }
-            l_VertOffset += it_Mesh.Vertices.size();
+
+            // Append procedural primitives after imported meshes so both share the same GPU buffers.
+            for (size_t it_Primitive = 0; it_Primitive < m_PrimitiveCache.size(); ++it_Primitive)
+            {
+                if (it_Primitive == static_cast<size_t>(MeshComponent::PrimitiveType::None))
+                {
+                    continue;
+                }
+
+                const PrimitiveCacheEntry& l_Primitive = m_PrimitiveCache[it_Primitive];
+                if (l_Primitive.m_Vertices.empty() || l_Primitive.m_Indices.empty())
+                {
+                    continue;
+                }
+
+                std::copy(l_Primitive.m_Vertices.begin(), l_Primitive.m_Vertices.end(), m_StagingVertices.get() + l_VertOffset);
+                for (uint32_t it_Index : l_Primitive.m_Indices)
+                {
+                    m_StagingIndices[l_IndexOffset++] = it_Index;
+                }
+                l_VertOffset += l_Primitive.m_Vertices.size();
+            }
         }
 
-        std::vector<Vertex> l_AllVertices(m_StagingVertices.get(), m_StagingVertices.get() + l_VertexCount);
-        std::vector<uint32_t> l_AllIndices(m_StagingIndices.get(), m_StagingIndices.get() + l_IndexCount);
+        std::vector<Vertex> l_AllVertices;
+        std::vector<uint32_t> l_AllIndices;
+        if (l_TotalVertexCount > 0 && m_StagingVertices)
+        {
+            l_AllVertices.assign(m_StagingVertices.get(), m_StagingVertices.get() + l_TotalVertexCount);
+        }
+        if (l_TotalIndexCount > 0 && m_StagingIndices)
+        {
+            l_AllIndices.assign(m_StagingIndices.get(), m_StagingIndices.get() + l_TotalIndexCount);
+        }
 
         // Upload the combined geometry once per load so every mesh can share the same GPU buffers.
         if (!l_AllVertices.empty())
@@ -465,11 +769,17 @@ namespace Trident
         }
 
         // Record the uploaded index count so the command buffer draw guard can validate pending draws.
-        m_IndexCount = static_cast<uint32_t>(l_IndexCount);
+        m_IndexCount = static_cast<uint32_t>(l_TotalIndexCount);
 
         // Cache draw metadata for each mesh so render submissions can address shared buffers safely.
         m_MeshDrawInfo.clear();
-        m_MeshDrawInfo.reserve(l_Meshes.size());
+        m_MeshDrawInfo.reserve(l_Meshes.size() + l_PrimitiveActiveCount);
+
+        for (PrimitiveCacheEntry& it_Primitive : m_PrimitiveCache)
+        {
+            it_Primitive.m_DrawInfo = {};
+            it_Primitive.m_DrawInfoIndex = std::numeric_limits<size_t>::max();
+        }
 
         uint32_t l_FirstIndexCursor = 0;
         int32_t l_BaseVertexCursor = 0;
@@ -488,6 +798,34 @@ namespace Trident
             l_BaseVertexCursor += static_cast<int32_t>(it_Mesh.Vertices.size());
         }
 
+        // Append per-primitive draw metadata so components referencing them can reuse the cached geometry.
+        for (size_t it_Primitive = 0; it_Primitive < m_PrimitiveCache.size(); ++it_Primitive)
+        {
+            if (it_Primitive == static_cast<size_t>(MeshComponent::PrimitiveType::None))
+            {
+                continue;
+            }
+
+            PrimitiveCacheEntry& l_Primitive = m_PrimitiveCache[it_Primitive];
+            if (l_Primitive.m_Vertices.empty() || l_Primitive.m_Indices.empty())
+            {
+                continue;
+            }
+
+            MeshDrawInfo l_DrawInfo{};
+            l_DrawInfo.m_FirstIndex = l_FirstIndexCursor;
+            l_DrawInfo.m_IndexCount = static_cast<uint32_t>(l_Primitive.m_Indices.size());
+            l_DrawInfo.m_BaseVertex = l_BaseVertexCursor;
+            l_DrawInfo.m_MaterialIndex = -1;
+
+            l_Primitive.m_DrawInfo = l_DrawInfo;
+            l_Primitive.m_DrawInfoIndex = m_MeshDrawInfo.size();
+            m_MeshDrawInfo.push_back(l_DrawInfo);
+
+            l_FirstIndexCursor += l_DrawInfo.m_IndexCount;
+            l_BaseVertexCursor += static_cast<int32_t>(l_Primitive.m_Vertices.size());
+        }
+
         // Clear any cached draw list so the next frame rebuilds commands using the fresh offsets.
         m_MeshDrawCommands.clear();
 
@@ -502,18 +840,25 @@ namespace Trident
                 }
 
                 MeshComponent& l_Component = m_Registry->GetComponent<MeshComponent>(it_Entity);
-                if (l_Component.m_Primitive != MeshComponent::PrimitiveType::None && l_Component.m_MeshIndex == std::numeric_limits<size_t>::max())
+                size_t l_MeshIndex = l_Component.m_MeshIndex;
+                if (l_Component.m_Primitive != MeshComponent::PrimitiveType::None)
                 {
-                    // TODO: Generate renderer-side draw info when procedural primitives acquire baked geometry.
+                    const size_t l_PrimitiveIndex = ResolvePrimitiveMeshIndex(l_Component.m_Primitive);
+                    if (l_PrimitiveIndex == std::numeric_limits<size_t>::max())
+                    {
+                        continue;
+                    }
+
+                    l_MeshIndex = l_PrimitiveIndex;
+                    l_Component.m_MeshIndex = l_PrimitiveIndex;
+                }
+
+                if (l_MeshIndex >= m_MeshDrawInfo.size())
+                {
                     continue;
                 }
 
-                if (l_Component.m_MeshIndex >= m_MeshDrawInfo.size())
-                {
-                    continue;
-                }
-
-                const MeshDrawInfo& l_DrawInfo = m_MeshDrawInfo[l_Component.m_MeshIndex];
+                const MeshDrawInfo& l_DrawInfo = m_MeshDrawInfo[l_MeshIndex];
                 l_Component.m_FirstIndex = l_DrawInfo.m_FirstIndex;
                 l_Component.m_IndexCount = l_DrawInfo.m_IndexCount;
                 l_Component.m_BaseVertex = l_DrawInfo.m_BaseVertex;
@@ -521,8 +866,8 @@ namespace Trident
             }
         }
 
-        m_ModelCount = l_Meshes.size();
-        m_TriangleCount = l_IndexCount / 3;
+        m_ModelCount = l_Meshes.size() + l_PrimitiveActiveCount;
+        m_TriangleCount = l_TotalIndexCount / 3;
 
         TR_CORE_INFO("Scene info - Models: {} Triangles: {} Materials: {}", m_ModelCount, m_TriangleCount, m_Materials.size());
     }
@@ -1240,6 +1585,64 @@ namespace Trident
         }
     }
 
+    void Renderer::BuildPrimitiveGeometry()
+    {
+        // Ensure any previous data is reset so we can rebuild the cached buffers from scratch.
+        DestroyPrimitiveGeometry();
+
+        const auto l_AssignPrimitive = [&](MeshComponent::PrimitiveType a_Type, PrimitiveGeometryData&& a_Data)
+            {
+                const size_t l_Index = static_cast<size_t>(a_Type);
+                if (l_Index >= m_PrimitiveCache.size())
+                {
+                    return;
+                }
+
+                PrimitiveCacheEntry& l_Entry = m_PrimitiveCache[l_Index];
+                l_Entry.m_Vertices = std::move(a_Data.m_Vertices);
+                l_Entry.m_Indices = std::move(a_Data.m_Indices);
+                l_Entry.m_DrawInfo = {};
+                l_Entry.m_DrawInfoIndex = std::numeric_limits<size_t>::max();
+            };
+
+        l_AssignPrimitive(MeshComponent::PrimitiveType::Cube, CreateCubePrimitive());
+        l_AssignPrimitive(MeshComponent::PrimitiveType::Sphere, CreateSpherePrimitive());
+        l_AssignPrimitive(MeshComponent::PrimitiveType::Quad, CreateQuadPrimitive());
+    }
+
+    void Renderer::DestroyPrimitiveGeometry()
+    {
+        for (PrimitiveCacheEntry& it_Primitive : m_PrimitiveCache)
+        {
+            it_Primitive.m_Vertices.clear();
+            it_Primitive.m_Indices.clear();
+            it_Primitive.m_DrawInfo = {};
+            it_Primitive.m_DrawInfoIndex = std::numeric_limits<size_t>::max();
+        }
+    }
+
+    size_t Renderer::ResolvePrimitiveMeshIndex(MeshComponent::PrimitiveType primitive) const
+    {
+        if (primitive == MeshComponent::PrimitiveType::None)
+        {
+            return std::numeric_limits<size_t>::max();
+        }
+
+        const size_t l_Index = static_cast<size_t>(primitive);
+        if (l_Index >= m_PrimitiveCache.size())
+        {
+            return std::numeric_limits<size_t>::max();
+        }
+
+        const PrimitiveCacheEntry& l_Entry = m_PrimitiveCache[l_Index];
+        if (l_Entry.m_Vertices.empty() || l_Entry.m_Indices.empty())
+        {
+            return std::numeric_limits<size_t>::max();
+        }
+
+        return l_Entry.m_DrawInfoIndex;
+    }
+
     void Renderer::GatherMeshDraws()
     {
         m_MeshDrawCommands.clear();
@@ -1266,20 +1669,28 @@ namespace Trident
                 continue;
             }
 
-            if (l_MeshComponent.m_Primitive != MeshComponent::PrimitiveType::None && l_MeshComponent.m_MeshIndex == std::numeric_limits<size_t>::max())
+            // Resolve procedural primitives to their generated draw info so they render like imported meshes.
+            size_t l_MeshIndex = l_MeshComponent.m_MeshIndex;
+            if (l_MeshComponent.m_Primitive != MeshComponent::PrimitiveType::None)
             {
-                // TODO: Once primitives upload procedural vertex/index buffers, enqueue them here.
-                continue;
+                const size_t l_PrimitiveIndex = ResolvePrimitiveMeshIndex(l_MeshComponent.m_Primitive);
+                if (l_PrimitiveIndex == std::numeric_limits<size_t>::max())
+                {
+                    continue;
+                }
+
+                l_MeshIndex = l_PrimitiveIndex;
+                l_MeshComponent.m_MeshIndex = l_PrimitiveIndex;
             }
 
-            if (l_MeshComponent.m_MeshIndex >= m_MeshDrawInfo.size())
+            if (l_MeshIndex >= m_MeshDrawInfo.size())
             {
                 // The component references geometry that has not been uploaded yet. Future streaming
                 // work can patch this once asynchronous loading lands.
                 continue;
             }
 
-            const MeshDrawInfo& l_DrawInfo = m_MeshDrawInfo[l_MeshComponent.m_MeshIndex];
+            const MeshDrawInfo& l_DrawInfo = m_MeshDrawInfo[l_MeshIndex];
             if (l_DrawInfo.m_IndexCount == 0)
             {
                 continue;
