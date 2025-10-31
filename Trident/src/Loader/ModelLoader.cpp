@@ -1,4 +1,5 @@
 #include "Loader/ModelLoader.h"
+#include "Loader/ModelSource.h"
 
 #include "Animation/AnimationSourceRegistry.h"
 #include "Core/Utilities.h"
@@ -14,6 +15,7 @@
 #include <cctype>
 #include <filesystem>
 #include <functional>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -187,7 +189,7 @@ namespace Trident
             }
 #endif
 
-            int ResolveTextureIndex(const aiMaterial* material, aiTextureType type, const std::filesystem::path& modelDirectory, std::vector<std::string>& textures,
+            int ResolveTextureIndex(const aiMaterial* material, aiTextureType type, const ModelSource::TextureResolver& textureResolver, std::vector<std::string>& textures,
                 std::unordered_map<std::string, int>& textureLookup)
             {
                 aiString l_Path{};
@@ -201,19 +203,23 @@ namespace Trident
                     return -1;
                 }
 
-                std::filesystem::path l_TexturePath{ l_Path.C_Str() };
-                if (l_TexturePath.empty() || l_TexturePath.string().front() == '*')
+                std::string l_RawTexturePath = l_Path.C_Str();
+                if (l_RawTexturePath.empty() || l_RawTexturePath.front() == '*')
                 {
                     TR_CORE_WARN("Embedded textures are not supported ({}).", l_Path.C_Str());
                     return -1;
                 }
 
-                if (!l_TexturePath.is_absolute())
+                std::string l_Normalised;
+                if (textureResolver)
                 {
-                    l_TexturePath = modelDirectory / l_TexturePath;
+                    l_Normalised = textureResolver(l_RawTexturePath);
+                }
+                else
+                {
+                    l_Normalised = Utilities::FileManagement::NormalizePath(l_RawTexturePath);
                 }
 
-                std::string l_Normalised = Utilities::FileManagement::NormalizePath(l_TexturePath.string());
                 if (l_Normalised.empty())
                 {
                     return -1;
@@ -273,39 +279,71 @@ namespace Trident
             }
         }
 
-        ModelData ModelLoader::Load(const std::string& filePath)
+        ModelData ModelLoader::Load(const ModelSource& source)
         {
             ModelData l_ModelData{};
-            if (filePath.empty())
+            if (!source.HasFilePath() && !source.HasCustomIo())
             {
-                TR_CORE_WARN("ModelLoader::Load received an empty file path.");
+                TR_CORE_WARN("ModelLoader::Load received an invalid model source description.");
                 return l_ModelData;
             }
 
-            std::string l_NormalisedPath = Utilities::FileManagement::NormalizePath(filePath);
-            if (l_NormalisedPath.empty())
+            std::string l_NormalisedPath;
+            std::filesystem::path l_ModelDirectory;
+            if (source.HasFilePath())
             {
-                TR_CORE_ERROR("Failed to normalise model path: {}", filePath.c_str());
-                return l_ModelData;
+                l_NormalisedPath = Utilities::FileManagement::NormalizePath(source.m_FilePath);
+                if (l_NormalisedPath.empty())
+                {
+                    TR_CORE_ERROR("Failed to normalise model path: {}", source.m_FilePath.c_str());
+                    return l_ModelData;
+                }
+
+                std::filesystem::path l_ModelPath{ l_NormalisedPath };
+                if (!std::filesystem::exists(l_ModelPath))
+                {
+                    TR_CORE_ERROR("Model file not found: {}", l_NormalisedPath.c_str());
+                    return l_ModelData;
+                }
+
+                l_ModelDirectory = l_ModelPath.parent_path();
             }
 
-            std::filesystem::path l_ModelPath{ l_NormalisedPath };
-            if (!std::filesystem::exists(l_ModelPath))
+            std::string l_AssetKey = source.m_AssetIdentifier;
+            if (l_AssetKey.empty())
             {
-                TR_CORE_ERROR("Model file not found: {}", l_NormalisedPath.c_str());
-                return l_ModelData;
+                l_AssetKey = !l_NormalisedPath.empty() ? l_NormalisedPath : source.m_VirtualPath;
+                if (l_AssetKey.empty())
+                {
+                    TR_CORE_WARN("ModelLoader::Load missing asset identifier for source '{}'.", source.Describe().c_str());
+                    l_AssetKey = "UnnamedModel";
+                }
             }
 
-            // Cache the normalised asset identifier so the naming profile remains stable across the import pipeline.
-            const std::string l_AssetKey = l_NormalisedPath;
-
-            std::filesystem::path l_ModelDirectory = l_ModelPath.parent_path();
+            std::string l_ImportTarget = !source.m_VirtualPath.empty() ? source.m_VirtualPath : l_NormalisedPath;
+            if (l_ImportTarget.empty())
+            {
+                TR_CORE_ERROR("ModelLoader::Load unable to determine import path for source '{}'.", source.Describe().c_str());
+                return l_ModelData;
+            }
 
             Assimp::Importer l_Importer{};
-            const aiScene* l_Scene = l_Importer.ReadFile(l_NormalisedPath, s_AssimpFlags);
+            std::unique_ptr<Assimp::IOSystem> l_CustomIo = source.HasCustomIo() ? source.m_CreateIoSystem() : nullptr;
+            if (source.HasCustomIo())
+            {
+                if (!l_CustomIo)
+                {
+                    TR_CORE_ERROR("ModelLoader::Load failed to create IO handler for source '{}'.", source.Describe().c_str());
+                    return l_ModelData;
+                }
+
+                l_Importer.SetIOHandler(l_CustomIo.release());
+            }
+
+            const aiScene* l_Scene = l_Importer.ReadFile(l_ImportTarget, s_AssimpFlags);
             if (l_Scene == nullptr || (l_Scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE) != 0)
             {
-                TR_CORE_ERROR("Assimp failed to import '{}': {}", l_NormalisedPath.c_str(), l_Importer.GetErrorString());
+                TR_CORE_ERROR("Assimp failed to import '{}': {}", l_ImportTarget.c_str(), l_Importer.GetErrorString());
                 return l_ModelData;
             }
 
@@ -328,6 +366,26 @@ namespace Trident
             std::unordered_map<std::string, int> l_BoneLookup{};
 
             std::unordered_map<std::string, int> l_TextureLookup{};
+            ModelSource::TextureResolver l_TextureResolver = source.m_TextureResolver;
+            if (!l_TextureResolver)
+            {
+                const std::filesystem::path l_CapturedDirectory = l_ModelDirectory;
+                l_TextureResolver = [l_CapturedDirectory](const std::string& rawTexturePath) -> std::string
+                    {
+                        if (rawTexturePath.empty())
+                        {
+                            return {};
+                        }
+
+                        std::filesystem::path l_TexturePath{ rawTexturePath };
+                        if (!l_TexturePath.is_absolute() && !l_CapturedDirectory.empty())
+                        {
+                            l_TexturePath = l_CapturedDirectory / l_TexturePath;
+                        }
+
+                        return Utilities::FileManagement::NormalizePath(l_TexturePath.string());
+                    };
+            }
             l_ModelData.m_Textures.reserve(static_cast<size_t>(l_Scene->mNumMaterials));
             l_ModelData.m_Materials.reserve(static_cast<size_t>(l_Scene->mNumMaterials));
 
@@ -355,20 +413,20 @@ namespace Trident
                 l_Material.MetallicFactor = l_Metallic;
                 l_Material.RoughnessFactor = l_Roughness;
 
-                l_Material.BaseColorTextureIndex = ResolveTextureIndex(l_AssimpMaterial, aiTextureType_BASE_COLOR, l_ModelDirectory, l_ModelData.m_Textures, l_TextureLookup);
+                l_Material.BaseColorTextureIndex = ResolveTextureIndex(l_AssimpMaterial, aiTextureType_BASE_COLOR, l_TextureResolver, l_ModelData.m_Textures, l_TextureLookup);
                 if (l_Material.BaseColorTextureIndex < 0)
                 {
-                    l_Material.BaseColorTextureIndex = ResolveTextureIndex(l_AssimpMaterial, aiTextureType_DIFFUSE, l_ModelDirectory, l_ModelData.m_Textures, l_TextureLookup);
+                    l_Material.BaseColorTextureIndex = ResolveTextureIndex(l_AssimpMaterial, aiTextureType_DIFFUSE, l_TextureResolver, l_ModelData.m_Textures, l_TextureLookup);
                 }
 
-                l_Material.MetallicRoughnessTextureIndex = ResolveTextureIndex(l_AssimpMaterial, aiTextureType_METALNESS, l_ModelDirectory, l_ModelData.m_Textures, l_TextureLookup);
+                l_Material.MetallicRoughnessTextureIndex = ResolveTextureIndex(l_AssimpMaterial, aiTextureType_METALNESS, l_TextureResolver, l_ModelData.m_Textures, l_TextureLookup);
                 if (l_Material.MetallicRoughnessTextureIndex < 0)
                 {
-                    l_Material.MetallicRoughnessTextureIndex = ResolveTextureIndex(l_AssimpMaterial, aiTextureType_DIFFUSE_ROUGHNESS, l_ModelDirectory, l_ModelData.m_Textures, 
+                    l_Material.MetallicRoughnessTextureIndex = ResolveTextureIndex(l_AssimpMaterial, aiTextureType_DIFFUSE_ROUGHNESS, l_TextureResolver, l_ModelData.m_Textures,
                         l_TextureLookup);
                 }
 
-                l_Material.NormalTextureIndex = ResolveTextureIndex(l_AssimpMaterial, aiTextureType_NORMALS, l_ModelDirectory, l_ModelData.m_Textures, l_TextureLookup);
+                l_Material.NormalTextureIndex = ResolveTextureIndex(l_AssimpMaterial, aiTextureType_NORMALS, l_TextureResolver, l_ModelData.m_Textures, l_TextureLookup);
 
                 l_ModelData.m_Materials.emplace_back(std::move(l_Material));
             }
@@ -606,6 +664,11 @@ namespace Trident
             }
 
             return l_ModelData;
+        }
+
+        ModelData ModelLoader::Load(const std::string& filePath)
+        {
+            return Load(ModelSource::FromFile(filePath));
         }
     }
 }

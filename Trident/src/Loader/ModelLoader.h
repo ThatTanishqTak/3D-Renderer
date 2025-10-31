@@ -3,6 +3,7 @@
 #include "Animation/AnimationData.h"
 #include "Geometry/Material.h"
 #include "Geometry/Mesh.h"
+#include "Loader/ModelSource.h"
 
 #include <glm/mat4x4.hpp>
 
@@ -46,6 +47,7 @@ namespace Trident
         class ModelLoader
         {
         public:
+            static ModelData Load(const ModelSource& source);
             static ModelData Load(const std::string& filePath);
         };
     }
