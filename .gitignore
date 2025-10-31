@@ -5,3 +5,5 @@
 /Build
 /.pdb
 *.spv
+*.fbx
+*.exr

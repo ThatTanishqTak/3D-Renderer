@@ -140,16 +140,84 @@ namespace
 
         return false;
     }
+    /**
+     * @brief Determine whether the provided directory is the repository root by probing for signature files.
+     */
+    bool DirectoryLooksLikeProjectRoot(const std::filesystem::path& directory)
+    {
+        std::error_code l_Error{};
+        if (directory.empty())
+        {
+            return false;
+        }
+
+        // Visual Studio 2022 + CMakePreset based workflows always place CMakePresets.json at the repository root.
+        if (std::filesystem::exists(directory / "CMakePresets.json", l_Error))
+        {
+            return true;
+        }
+
+        l_Error.clear();
+
+        // Fallback heuristic: both Trident and Trident-Forge source directories should be present next to one another.
+        const bool l_HasRuntime = std::filesystem::exists(directory / "Trident" / "CMakeLists.txt", l_Error);
+        if (l_Error)
+        {
+            return false;
+        }
+
+        const bool l_HasEditor = std::filesystem::exists(directory / "Trident-Forge" / "CMakeLists.txt", l_Error);
+        if (l_Error)
+        {
+            return false;
+        }
+
+        return l_HasRuntime && l_HasEditor;
+    }
+
+    /**
+     * @brief Walk up from the working directory until the repository root is found.
+     */
+    std::filesystem::path DetectProjectRoot(const std::filesystem::path& startingDirectory)
+    {
+        if (startingDirectory.empty())
+        {
+            return {};
+        }
+
+        std::filesystem::path l_Current = NormalisePath(startingDirectory);
+
+        while (!l_Current.empty())
+        {
+            if (DirectoryLooksLikeProjectRoot(l_Current))
+            {
+                return l_Current;
+            }
+
+            const std::filesystem::path l_Parent = l_Current.parent_path();
+            if (l_Parent == l_Current)
+            {
+                break;
+            }
+
+            l_Current = NormalisePath(l_Parent);
+        }
+
+        // Fallback to the provided directory so legacy behaviour is preserved if auto-detection fails.
+        return NormalisePath(startingDirectory);
+    }
 }
 
-EditorExportService::EditorExportService(std::filesystem::path projectRoot) : m_ProjectRoot(std::move(projectRoot))
+EditorExportService::EditorExportService(std::filesystem::path projectRoot)
 {
-    m_ProjectRoot = NormalisePath(m_ProjectRoot);
+    SetProjectRoot(projectRoot);
 }
 
 void EditorExportService::SetProjectRoot(const std::filesystem::path& projectRoot)
 {
-    m_ProjectRoot = NormalisePath(projectRoot);
+    // Auto-detect the repository root when the editor is launched from a nested build output directory.
+    const std::filesystem::path l_Root = DetectProjectRoot(projectRoot);
+    m_ProjectRoot = NormalisePath(l_Root);
 }
 
 EditorExportService::ExportResult EditorExportService::ExportScene(const Trident::Scene& scene,
@@ -334,7 +402,7 @@ bool EditorExportService::CopyRuntimeOutputs(const std::filesystem::path& destin
 
     if (l_AssetSource.empty() || !std::filesystem::exists(l_AssetSource))
     {
-        outMessage = "Runtime assets directory missing. Ensure Trident/Assets is available.";
+        outMessage = "Runtime assets directory missing. Ensure Trident-Forge/Assets is available.";
         TR_CORE_ERROR(outMessage);
         return false;
     }
@@ -589,5 +657,5 @@ std::filesystem::path EditorExportService::ResolveRuntimeBinaryDirectory(const s
 
 std::filesystem::path EditorExportService::ResolveRuntimeAssetsDirectory() const
 {
-    return m_ProjectRoot / "Trident" / "Assets";
+    return m_ProjectRoot / "Trident-Forge" / "Assets";
 }
