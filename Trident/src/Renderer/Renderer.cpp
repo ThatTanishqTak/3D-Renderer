@@ -267,16 +267,11 @@ namespace
         return l_Result;
     }
 
-    glm::mat4 ComposeTransform(const Trident::Transform& transform)
+    [[maybe_unused]] glm::mat4 ComposeTransform(const Trident::Transform& transform)
     {
-        glm::mat4 l_Mat{ 1.0f };
-        l_Mat = glm::translate(l_Mat, transform.Position);
-        l_Mat = glm::rotate(l_Mat, glm::radians(transform.Rotation.x), glm::vec3{ 1.0f, 0.0f, 0.0f });
-        l_Mat = glm::rotate(l_Mat, glm::radians(transform.Rotation.y), glm::vec3{ 0.0f, 1.0f, 0.0f });
-        l_Mat = glm::rotate(l_Mat, glm::radians(transform.Rotation.z), glm::vec3{ 0.0f, 0.0f, 1.0f });
-        l_Mat = glm::scale(l_Mat, transform.Scale);
-
-        return l_Mat;
+        // Renderer subsystems now rely on the registry's cached world matrix so every draw call
+        // honours the current hierarchy. Local composition remains available through the registry.
+        return transform.m_WorldMatrix;
     }
 
     glm::mat3 BuildRotationMatrix(const Trident::Transform& transform)
@@ -1652,6 +1647,9 @@ namespace Trident
             return;
         }
 
+        // Ensure hierarchical transforms are up to date before issuing draw commands.
+        m_Registry->UpdateWorldTransforms();
+
         const auto& l_Entities = m_Registry->GetEntities();
         // Reserve upfront so dynamic scenes with many meshes avoid repeated allocations.
         m_MeshDrawCommands.reserve(l_Entities.size());
@@ -1699,7 +1697,7 @@ namespace Trident
             glm::mat4 l_ModelMatrix{ 1.0f };
             if (m_Registry->HasComponent<Transform>(it_Entity))
             {
-                l_ModelMatrix = ComposeTransform(m_Registry->GetComponent<Transform>(it_Entity));
+                l_ModelMatrix = m_Registry->GetWorldTransform(it_Entity);
             }
 
             TextureComponent* l_TextureComponent = nullptr;
@@ -1743,6 +1741,9 @@ namespace Trident
             return;
         }
 
+        // Align sprite billboards with their resolved world-space transforms.
+        m_Registry->UpdateWorldTransforms();
+
         const auto& l_Entities = m_Registry->GetEntities();
         m_SpriteDrawList.reserve(l_Entities.size());
 
@@ -1773,7 +1774,7 @@ namespace Trident
             }
 
             SpriteDrawCommand l_Command{};
-            l_Command.m_ModelMatrix = ComposeTransform(m_Registry->GetComponent<Transform>(it_Entity));
+            l_Command.m_ModelMatrix = m_Registry->GetWorldTransform(it_Entity);
             l_Command.m_Component = &l_Sprite;
             l_Command.m_TextureComponent = l_TextureComponent;
             l_Command.m_Entity = it_Entity;

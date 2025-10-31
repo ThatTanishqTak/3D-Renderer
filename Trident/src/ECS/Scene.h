@@ -6,6 +6,8 @@
 #include <string>
 #include <iosfwd>
 #include <memory>
+#include <unordered_map>
+#include <vector>
 
 namespace Trident
 {
@@ -40,6 +42,7 @@ namespace Trident
     private:
         void SerializeEntity(std::ostream& stream, ECS::Entity entity) const;
         void DeserializeEntity(std::istream& stream, const std::string& headerLine);
+        void ResolvePendingRelationships();
 
         static std::string EscapeString(const std::string& value);
         static std::string UnescapeString(const std::string& value);
@@ -56,5 +59,7 @@ namespace Trident
         bool m_IsPlaying{ false };                      ///< Indicates whether the scene is currently in play mode.
         size_t m_LoadedEntityCount{ 0 };                ///< Helper counter used for logging during deserialisation.
         std::unique_ptr<ECS::AnimationSystem> m_AnimationSystem; ///< Drives skeletal animation playback during runtime.
+        std::unordered_map<ECS::Entity, ECS::Entity> m_PersistentToRuntimeEntity; ///< Maps serialized entity IDs to runtime IDs.
+        std::vector<std::pair<ECS::Entity, ECS::Entity>> m_PendingRelationships; ///< Child runtime entity + persisted parent ID.
     };
 }
