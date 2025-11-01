@@ -102,12 +102,18 @@ namespace Trident
 
             // Pass-through configuration helper so callers can toggle CUDA before loading the model.
             void EnableCUDA(bool enableCUDA);
-
             // Pass-through configuration helper so callers can keep the CPU fallback active for debugging.
             void EnableCPUFallback(bool enableCPUFallback);
-
             // Loads the requested model and primes any tensor buffers that rely on model metadata.
             bool LoadModel(const std::string& modelPath);
+            // Exposes whether the underlying runtime currently has a model bound for diagnostics.
+            bool IsModelLoaded() const;
+            // Reports whether the CUDA provider is active after the most recent configuration pass.
+            bool IsCUDAProviderActive() const;
+            // Reports whether the CPU fallback provider is active after the most recent configuration pass.
+            bool IsCPUProviderActive() const;
+            // Returns the path to the currently loaded model for status displays.
+            const std::string& GetLoadedModelPath() const;
 
             /**
              * @brief Enqueues a frame for asynchronous inference.

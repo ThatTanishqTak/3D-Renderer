@@ -21,12 +21,17 @@ namespace Trident
 
             // Toggle CUDA provider usage, keeping the GPU path as the primary accelerator when enabled.
             void EnableCUDA(bool enableCUDA);
-
             // Temporary compatibility shim so existing DirectML toggles route to the CUDA switch until callers migrate.
             void EnableDirectML(bool enableDirectML);
-
             // Toggle the CPU execution provider to act as a deterministic fallback when accelerators are unavailable.
             void EnableCPUFallback(bool enableCPUFallback);
+
+            bool IsCUDAEnabled() const noexcept { return m_EnableCUDA; }
+            bool IsCPUFallbackEnabled() const noexcept { return m_EnableCPUFallback; }
+            bool IsCUDAProviderActive() const noexcept { return m_IsCUDAActive; }
+            bool IsCPUProviderActive() const noexcept { return m_IsCPUActive; }
+            bool IsModelLoaded() const noexcept { return m_ModelLoaded; }
+            const std::string& GetLoadedModelPath() const noexcept { return m_LoadedModelPath; }
 
             bool LoadModel(const std::string& modelPath);
             std::vector<float> Run(const std::vector<float>& input, const std::vector<int64_t>& shape);
@@ -60,11 +65,13 @@ namespace Trident
             bool m_EnableCPUFallback; // Flag indicating whether the CPU provider must be appended for deterministic fallback.
             bool m_IsCUDAActive; // Tracks whether CUDA activation succeeded so telemetry can flag failures.
             bool m_IsCPUActive; // Tracks CPU provider activation to ensure at least one provider remains available.
+            bool m_ModelLoaded; // Mirrors whether the session currently has a model bound.
 
             Ort::Env m_Env;
             Ort::Session m_Session{ nullptr };
             Ort::SessionOptions m_SessionOptions;
             Ort::MemoryInfo m_CpuMemoryInfo; // Shared CPU memory descriptor for all tensors created by this runtime.
+            std::string m_LoadedModelPath; // Resolved path to the model last provided to LoadModel.
 
             std::vector<std::string> m_InputNames; // Cached input tensor names retrieved during model load to avoid repeated queries.
             std::vector<std::vector<int64_t>> m_InputShapes; // Cached input shapes to validate runtime tensors and detect dynamic dims.

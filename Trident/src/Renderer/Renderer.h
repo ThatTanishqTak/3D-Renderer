@@ -48,6 +48,25 @@ namespace Trident
     namespace ECS { class Registry; }
     namespace AI { struct FrameDescriptors; }
 
+    struct AIFrameGenerationSettings
+    {
+        bool m_EnableOnStartup = false; ///< Determines whether AI inference starts automatically after initialisation.
+        bool m_EnableCUDA = true; ///< Requests the CUDA execution provider when available.
+        bool m_EnableCPUFallback = true; ///< Keeps the CPU provider active when accelerators are unavailable.
+        std::string m_ModelPath; ///< Absolute or relative path to the configured ONNX model.
+    };
+
+    struct AIFrameGenerationStatus
+    {
+        bool m_Enabled = false; ///< Reflects the current runtime toggle for AI frame generation.
+        bool m_ModelLoaded = false; ///< Indicates whether the ONNX session successfully loaded the configured model.
+        bool m_CUDARequested = false; ///< Mirrors whether CUDA was requested via configuration.
+        bool m_CUDAAvailable = false; ///< Tracks CUDA provider availability after runtime negotiation.
+        bool m_CPUFallbackRequested = false; ///< Mirrors whether CPU fallback was requested via configuration.
+        bool m_CPUAvailable = false; ///< Tracks CPU provider availability after runtime negotiation.
+        std::string m_ModelPath; ///< Resolved model path currently applied to the AI runtime.
+    };
+
     struct ViewportInfo
     {
         uint32_t ViewportID = 0;
@@ -160,10 +179,14 @@ namespace Trident
         void SubmitText(uint32_t viewportId, const glm::vec2& position, const glm::vec4& color, std::string_view text);
         // Packages the latest offscreen readback buffers into an AI descriptor payload so inference systems can consume them.
         bool PopulateAIFrameDescriptors(uint32_t viewportId, AI::FrameDescriptors& outDescriptors) const;
+        // Apply configuration from the application layer so provider and model selection happens centrally.
+        void ApplyAISettings(const AIFrameGenerationSettings& settings);
         // Toggle the AI frame generator so applications can opt-in to asynchronous inference.
         void SetAIFrameGenerationEnabled(bool enabled);
         // Query whether the renderer is currently feeding frames to the AI system.
         bool IsAIFrameGenerationEnabled() const { return m_AIEnabled; }
+        // Surface the most recent provider and model status for diagnostics overlays.
+        AIFrameGenerationStatus GetAIFrameGenerationStatus() const { return m_AIStatus; }
         // Surface whether a finished AI frame is ready for sampling.
         bool HasAIResultTexture() const { return m_CompletedFrame.has_value(); }
         // Provide access to the latest AI colour descriptor so UI panels can draw previews.
@@ -172,6 +195,10 @@ namespace Trident
         bool IsAIFramePending() const { return m_PendingFrame.has_value() || m_StagedFrame.has_value(); }
         // Return the current latency budget so future tuning can trim or expand overlap between render and inference.
         double GetAIExpectedLatencyMilliseconds() const { return m_AIExpectedLatencyMilliseconds; }
+        // Provide access to the most recent inference duration for live diagnostics.
+        double GetAILastInferenceMilliseconds() const { return m_AILastInferenceMilliseconds; }
+        // Provide access to the most recent queue latency for live diagnostics.
+        double GetAIQueueLatencyMilliseconds() const { return m_AIQueueLatencyMilliseconds; }
 
         Transform GetTransform() const;
         ViewportInfo GetViewport() const;
@@ -394,6 +421,8 @@ namespace Trident
         std::vector<FrameTimingSample> m_PerformanceCaptureBuffer;
         std::chrono::system_clock::time_point m_PerformanceCaptureStartTime{};
         std::vector<VkImageLayout> m_SwapchainDepthLayouts;
+        AIFrameGenerationSettings m_AISettings{}; ///< Cached copy of the configuration requested by the application layer.
+        AIFrameGenerationStatus m_AIStatus{}; ///< Reflects runtime provider and model load state for diagnostics.
 
         AI::FrameGenerator m_FrameGenerator; ///< Background worker that runs inference alongside rendering.
         struct AIFramePayload
@@ -411,6 +440,8 @@ namespace Trident
         VkDescriptorImageInfo m_AIResultImage{}; ///< Descriptor mirroring the colour attachment presented by the AI system.
         VkExtent2D m_AIResultExtent{ 0, 0 }; ///< Resolution of the AI frame so UI widgets can scale appropriately.
         double m_AIExpectedLatencyMilliseconds = 33.0; ///< Approximate budget describing the overlap between render and inference (~2 frames at 60 Hz).
+        double m_AILastInferenceMilliseconds = 0.0; ///< Duration of the most recent inference dispatch in milliseconds.
+        double m_AIQueueLatencyMilliseconds = 0.0; ///< Latency between enqueue and execution start for the last frame in milliseconds.
 
     private:
         // Core setup

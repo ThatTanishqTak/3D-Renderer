@@ -1,0 +1,10 @@
+{
+  "ai": {
+    "enabled": false,
+    "modelPath": "Assets/AI/VS2022/frame_generator.onnx",
+    "providers": {
+      "preferCUDA": true,
+      "allowCPUFallback": true
+    }
+  }
+}

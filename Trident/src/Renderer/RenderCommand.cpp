@@ -185,6 +185,18 @@ namespace Trident
         return Startup::GetRenderer().IsAIFrameGenerationEnabled();
     }
 
+    void RenderCommand::ConfigureAIFrameGeneration(const AIFrameGenerationSettings& settings)
+    {
+        // Forward configuration down to the renderer so it can load models and choose providers.
+        Startup::GetRenderer().ApplyAISettings(settings);
+    }
+
+    AIFrameGenerationStatus RenderCommand::GetAIFrameGenerationStatus()
+    {
+        // Allow diagnostics widgets to inspect provider state without direct renderer dependencies.
+        return Startup::GetRenderer().GetAIFrameGenerationStatus();
+    }
+
     bool RenderCommand::HasAIResultTexture()
     {
         // Quickly report whether a finished AI frame is ready before fetching descriptor data.
@@ -207,5 +219,17 @@ namespace Trident
     {
         // Bubble up the measured latency budget so future tuning can keep presentation and inference aligned.
         return Startup::GetRenderer().GetAIExpectedLatencyMilliseconds();
+    }
+
+    double RenderCommand::GetAILastInferenceMilliseconds()
+    {
+        // Expose the most recent inference duration to help spot spikes in model execution.
+        return Startup::GetRenderer().GetAILastInferenceMilliseconds();
+    }
+
+    double RenderCommand::GetAIQueueLatencyMilliseconds()
+    {
+        // Provide queue latency so tooling can differentiate between scheduling and execution delays.
+        return Startup::GetRenderer().GetAIQueueLatencyMilliseconds();
     }
 }

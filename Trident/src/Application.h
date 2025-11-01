@@ -18,6 +18,9 @@ struct ApplicationSpecifications
 
 namespace Trident
 {
+    struct AIFrameGenerationSettings;
+    struct AIFrameGenerationStatus;
+
     class Application
     {
     public:
@@ -39,6 +42,8 @@ namespace Trident
     private:
         void Update();
         void Render();
+        void DrawAIFrameGenerationWindow();
+        AIFrameGenerationSettings LoadAIConfiguration();
 
     private:
         ApplicationSpecifications m_Specifications;
@@ -46,7 +51,9 @@ namespace Trident
         std::unique_ptr<Window> m_Window;
         std::unique_ptr<UI::ImGuiLayer> m_ImGuiLayer;
         std::unique_ptr<Layer> m_ActiveLayer;
+        AIFrameGenerationSettings m_AISettings;
         bool m_HasShutdown = false;
         bool m_IsRunning = true;
+        bool m_AISettingsLoaded = false;
     };
 }

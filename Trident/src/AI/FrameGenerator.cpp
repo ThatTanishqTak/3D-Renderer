@@ -39,6 +39,26 @@ namespace Trident
             return m_Runtime.LoadModel(modelPath);
         }
 
+        bool FrameGenerator::IsModelLoaded() const
+        {
+            return m_Runtime.IsModelLoaded();
+        }
+
+        bool FrameGenerator::IsCUDAProviderActive() const
+        {
+            return m_Runtime.IsCUDAProviderActive();
+        }
+
+        bool FrameGenerator::IsCPUProviderActive() const
+        {
+            return m_Runtime.IsCPUProviderActive();
+        }
+
+        const std::string& FrameGenerator::GetLoadedModelPath() const
+        {
+            return m_Runtime.GetLoadedModelPath();
+        }
+
         bool FrameGenerator::EnqueueFrame(const FrameDescriptors& descriptors, const FrameTimingMetadata& timing, std::span<const float> input, std::span<const int64_t> inputShape)
         {
             if (input.empty())

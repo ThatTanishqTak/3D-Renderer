@@ -234,6 +234,10 @@ namespace Trident
         m_AIInputScratch.clear();
         m_AIResultImage = {};
         m_AIResultExtent = { 0, 0 };
+        m_AISettings = {};
+        m_AIStatus = {};
+        m_AILastInferenceMilliseconds = 0.0;
+        m_AIQueueLatencyMilliseconds = 0.0;
 
         ViewportContext& l_DefaultContext = GetOrCreateViewportContext(m_ActiveViewportId);
         l_DefaultContext.m_Info.ViewportID = m_ActiveViewportId;
@@ -4592,14 +4596,80 @@ namespace Trident
         return true;
     }
 
+    void Renderer::ApplyAISettings(const AIFrameGenerationSettings& settings)
+    {
+        m_AISettings = settings;
+        m_AIStatus.m_ModelPath = settings.m_ModelPath;
+        m_AIStatus.m_CUDARequested = settings.m_EnableCUDA;
+        m_AIStatus.m_CPUFallbackRequested = settings.m_EnableCPUFallback;
+
+        TR_CORE_INFO("Renderer: Applying AI settings (model='{}', CUDA={}, CPU fallback={}, startup={}).", m_AISettings.m_ModelPath,
+            m_AISettings.m_EnableCUDA, m_AISettings.m_EnableCPUFallback, m_AISettings.m_EnableOnStartup);
+
+        m_FrameGenerator.EnableCUDA(m_AISettings.m_EnableCUDA);
+        m_FrameGenerator.EnableCPUFallback(m_AISettings.m_EnableCPUFallback);
+
+        bool l_ModelLoaded = false;
+        if (!m_AISettings.m_ModelPath.empty())
+        {
+            TR_CORE_INFO("Renderer: Loading AI model '{}'.", m_AISettings.m_ModelPath);
+            l_ModelLoaded = m_FrameGenerator.LoadModel(m_AISettings.m_ModelPath);
+            m_AIStatus.m_ModelLoaded = l_ModelLoaded;
+            if (l_ModelLoaded)
+            {
+                TR_CORE_INFO("Renderer: AI model '{}' loaded successfully.", m_AISettings.m_ModelPath);
+            }
+            else
+            {
+                TR_CORE_ERROR("Renderer: Failed to load AI model '{}'.", m_AISettings.m_ModelPath);
+            }
+        }
+        else
+        {
+            m_AIStatus.m_ModelLoaded = false;
+            TR_CORE_WARN("Renderer: No AI model configured; AI frame generation will remain disabled.");
+        }
+
+        m_AIStatus.m_CUDAAvailable = m_FrameGenerator.IsCUDAProviderActive();
+        m_AIStatus.m_CPUAvailable = m_FrameGenerator.IsCPUProviderActive();
+        TR_CORE_INFO("Renderer: AI providers active - CUDA={} CPU={}.", m_AIStatus.m_CUDAAvailable, m_AIStatus.m_CPUAvailable);
+
+        if (m_AISettings.m_EnableOnStartup && l_ModelLoaded)
+        {
+            TR_CORE_INFO("Renderer: Enabling AI frame generation as requested by configuration.");
+            SetAIFrameGenerationEnabled(true);
+        }
+        else
+        {
+            if (!m_AISettings.m_EnableOnStartup)
+            {
+                TR_CORE_INFO("Renderer: Leaving AI frame generation disabled because startup toggle is off.");
+            }
+            if (!l_ModelLoaded)
+            {
+                TR_CORE_WARN("Renderer: AI frame generation disabled because the model failed to load.");
+            }
+            SetAIFrameGenerationEnabled(false);
+        }
+
+        if (m_AIStatus.m_ModelLoaded)
+        {
+            m_AIStatus.m_ModelPath = m_FrameGenerator.GetLoadedModelPath();
+        }
+    }
+
     void Renderer::SetAIFrameGenerationEnabled(bool enabled)
     {
         if (enabled == m_AIEnabled)
         {
+            m_AIStatus.m_Enabled = m_AIEnabled;
+
             return;
         }
 
         m_AIEnabled = enabled;
+        m_AIStatus.m_Enabled = m_AIEnabled;
+        TR_CORE_INFO("Renderer: AI frame generation {}.", m_AIEnabled ? "enabled" : "disabled");
         if (!m_AIEnabled)
         {
             // Clearing the queue prevents stale descriptors from referencing destroyed Vulkan resources.
@@ -4703,6 +4773,18 @@ namespace Trident
                 const double l_QueueMs = std::chrono::duration<double, std::milli>(m_CompletedFrame->m_QueueLatency).count();
                 // Store the measured latency so tuning efforts know the current overlap budget.
                 m_AIExpectedLatencyMilliseconds = l_InferenceMs + l_QueueMs;
+                m_AILastInferenceMilliseconds = l_InferenceMs;
+                m_AIQueueLatencyMilliseconds = l_QueueMs;
+                m_AIStatus.m_ModelLoaded = m_FrameGenerator.IsModelLoaded();
+                m_AIStatus.m_CUDAAvailable = m_FrameGenerator.IsCUDAProviderActive();
+                m_AIStatus.m_CPUAvailable = m_FrameGenerator.IsCPUProviderActive();
+                if (m_AIStatus.m_ModelLoaded)
+                {
+                    m_AIStatus.m_ModelPath = m_FrameGenerator.GetLoadedModelPath();
+                }
+                TR_CORE_INFO("Renderer: AI inference completed in {:.2f} ms (queue {:.2f} ms).", m_AILastInferenceMilliseconds,
+                    m_AIQueueLatencyMilliseconds);
+                // TODO: Emit aggregated telemetry events once the performance monitoring service is connected.
             }
         }
     }

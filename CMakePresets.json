@@ -10,7 +10,8 @@
       "installDir": "${sourceDir}/out/install/${presetName}",
       "cacheVariables": {
         "CMAKE_C_COMPILER": "cl.exe",
-        "CMAKE_CXX_COMPILER": "cl.exe"
+        "CMAKE_CXX_COMPILER": "cl.exe",
+        "TRIDENT_AI_MODEL_PATH": "${sourceDir}/Trident/Config/AISettings.json"
       },
       "condition": {
         "type": "equals",

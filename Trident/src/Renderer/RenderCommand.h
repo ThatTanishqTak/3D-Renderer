@@ -56,6 +56,10 @@ namespace Trident
         static void SetAIFrameGenerationEnabled(bool enabled);
         // Report whether the renderer is currently feeding frames to the AI worker.
         static bool IsAIFrameGenerationEnabled();
+        // Configure AI runtime behaviour including model selection and provider preferences.
+        static void ConfigureAIFrameGeneration(const AIFrameGenerationSettings& settings);
+        // Surface runtime status so UI overlays can display provider health.
+        static AIFrameGenerationStatus GetAIFrameGenerationStatus();
         // Advertise whether a completed AI frame is ready for sampling.
         static bool HasAIResultTexture();
         // Provide the descriptor and extent for the latest AI frame so UI code can draw previews.
@@ -64,5 +68,9 @@ namespace Trident
         static bool IsAIFramePending();
         // Return the current end-to-end latency budget measured from the AI pipeline.
         static double GetAIExpectedLatencyMilliseconds();
+        // Report the last recorded inference duration to help identify model performance regressions.
+        static double GetAILastInferenceMilliseconds();
+        // Surface the latest queue delay so UI panels can highlight scheduling bottlenecks.
+        static double GetAIQueueLatencyMilliseconds();
     };
 }

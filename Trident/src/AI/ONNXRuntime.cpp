@@ -19,7 +19,7 @@ namespace Trident
 {
     namespace AI
     {
-        ONNXRuntime::ONNXRuntime() : m_EnableCUDA(true), m_EnableCPUFallback(true), m_IsCUDAActive(false), m_IsCPUActive(false),
+        ONNXRuntime::ONNXRuntime() : m_EnableCUDA(true), m_EnableCPUFallback(true), m_IsCUDAActive(false), m_IsCPUActive(false), m_ModelLoaded(false),
             m_Env(ORT_LOGGING_LEVEL_WARNING, "Trident"), m_Session(nullptr), m_SessionOptions(), m_CpuMemoryInfo(Ort::MemoryInfo::CreateCpu(OrtDeviceAllocator, OrtMemTypeCPU))
         {
             // Single threaded intra-op execution keeps behaviour predictable for the render thread owner.
@@ -50,6 +50,8 @@ namespace Trident
         {
             ConfigureExecutionProviders();
 
+            m_ModelLoaded = false;
+            m_LoadedModelPath.clear();
             if (!m_IsCUDAActive && !m_IsCPUActive)
             {
                 TR_CORE_ERROR("ONNX Runtime: No execution providers available after configuration.");
@@ -67,6 +69,8 @@ namespace Trident
 
                 CacheIOBindingMetadata();
 
+                m_ModelLoaded = true;
+                m_LoadedModelPath = modelPath;
                 TR_CORE_INFO("ONNX Runtime: Model '{}' loaded with CUDA={} CPUFallback={}", modelPath, m_IsCUDAActive, m_IsCPUActive);
 
                 return true;
@@ -74,6 +78,8 @@ namespace Trident
             catch (const Ort::Exception& e)
             {
                 TR_CORE_ERROR("ONNX Runtime error: {}", e.what());
+                m_ModelLoaded = false;
+                m_LoadedModelPath.clear();
 
                 return false;
             }
