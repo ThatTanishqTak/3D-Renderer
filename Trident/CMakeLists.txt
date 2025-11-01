@@ -113,6 +113,7 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
   tinyexr
   libktx
   assimp::assimp
+  onnxruntime::onnxruntime
 )
 
 option(TRIDENT_ENABLE_VALIDATION "Enable Vulkan Validation Layers" ON)
