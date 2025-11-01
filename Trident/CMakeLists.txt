@@ -58,6 +58,7 @@ else()
   )
 endif()
 
+include(GNUInstallDirs)
 include(FetchContent)
 
 set(ASSIMP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
@@ -132,18 +133,39 @@ endif()
 
 message(STATUS "Vulkan SDK Path: ${VULKAN_SDK_PATH}")
 
-set(ONNXRUNTIME_VERSION "1.17.0")
+# Bump the ONNX Runtime dependency to pull the refreshed 1.23.2 binaries.
+set(ONNXRUNTIME_VERSION "1.23.2")
 set(ONNXRUNTIME_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/vendor/onnxruntime")
+set(ONNXRUNTIME_VENDOR_VERSION_FILE "${ONNXRUNTIME_ROOT}/VERSION_NUMBER")
+set(ONNXRUNTIME_VENDOR_VERSION "")
 
 if(EXISTS "${ONNXRUNTIME_ROOT}/include" AND EXISTS "${ONNXRUNTIME_ROOT}/lib")
+    if(EXISTS "${ONNXRUNTIME_VENDOR_VERSION_FILE}")
+        # Read the vendor version file to ensure the bundled SDK matches the
+        # configured dependency. This guards against stale archives lingering
+        # between upgrades and documents the expectation for future bumps.
+        file(READ "${ONNXRUNTIME_VENDOR_VERSION_FILE}" ONNXRUNTIME_VENDOR_VERSION)
+        string(STRIP "${ONNXRUNTIME_VENDOR_VERSION}" ONNXRUNTIME_VENDOR_VERSION)
+    endif()
+endif()
+
+if(EXISTS "${ONNXRUNTIME_ROOT}/include" AND EXISTS "${ONNXRUNTIME_ROOT}/lib" AND ONNXRUNTIME_VENDOR_VERSION STREQUAL ONNXRUNTIME_VERSION)
     message(STATUS "Using ONNX Runtime from submodule: ${ONNXRUNTIME_ROOT}")
 else()
     include(FetchContent)
     if(WIN32)
-        set(ONNXRUNTIME_ARCHIVE "onnxruntime-win-x64-${ONNXRUNTIME_VERSION}.zip")
+        # The DirectML execution provider requires the DML-enabled archive so that the
+        # renderer can activate the GPU path on Windows while retaining the CPU fall-back.
+        # Windows consumes the GPU-enabled prebuilt package to keep feature parity with
+        # Visual Studio builds that relied on DirectML acceleration. Future updates could
+        # expose a toggle that lets non-GPU workflows fetch the lighter CPU archive.
+        set(ONNXRUNTIME_ARCHIVE "onnxruntime-win-x64-gpu-${ONNXRUNTIME_VERSION}.zip")
         FetchContent_Declare(
             onnxruntime_prebuilt
-            URL https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VERSION}/${ONNXRUNTIME_ARCHIVE}
+            # Linux falls back to the general x64 package; a future enhancement could gate
+            # GPU vs. CPU archives using explicit build options once we validate driver
+            # requirements across distributions.
+            URL https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VERSION}/onnxruntime-linux-x64-${ONNXRUNTIME_VERSION}.tgz
         )
     else()
         FetchContent_Declare(
@@ -163,8 +185,33 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 )
 
 if(WIN32)
+    # Confirm the DirectML provider landed in the expected location so the runtime can
+    # load the GPU execution path, and discover the import library shipped by the DML
+    # archive.  We retain the CPU provider automatically bundled with ONNX Runtime.
+    set(ONNXRUNTIME_DML_PROVIDER "${ONNXRUNTIME_ROOT}/lib/onnxruntime_providers_shared.dll")
+    if(NOT EXISTS "${ONNXRUNTIME_DML_PROVIDER}")
+        message(FATAL_ERROR "onnxruntime_providers_dml.dll missing from ${ONNXRUNTIME_ROOT}/lib; ensure the DirectML package is available.")
+    endif()
+
+    find_library(ONNXRUNTIME_IMPORT_LIBRARY
+        NAMES onnxruntime onnxruntime.lib
+        PATHS "${ONNXRUNTIME_ROOT}/lib"
+        NO_DEFAULT_PATH
+    )
+    if(NOT ONNXRUNTIME_IMPORT_LIBRARY)
+        message(FATAL_ERROR "Failed to locate the DirectML-enabled onnxruntime import library under ${ONNXRUNTIME_ROOT}/lib")
+    endif()
+
     target_link_libraries(${PROJECT_NAME} PUBLIC
-        ${ONNXRUNTIME_ROOT}/lib/onnxruntime.lib
+        ${ONNXRUNTIME_IMPORT_LIBRARY}
+    )
+
+    # Surface the provider DLL so executable targets (e.g., Trident-Forge) can copy it
+    # beside their runtime binaries for loader discovery.
+    set(TRIDENT_ONNXRUNTIME_DML_DLL "${ONNXRUNTIME_DML_PROVIDER}" CACHE FILEPATH "Path to the DirectML execution provider runtime" FORCE)
+
+    install(FILES "${ONNXRUNTIME_DML_PROVIDER}"
+        DESTINATION ${CMAKE_INSTALL_BINDIR}
     )
 else()
     target_link_libraries(${PROJECT_NAME} PUBLIC
