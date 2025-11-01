@@ -33,6 +33,7 @@
 #include <cassert>
 #include <iterator>
 #include <utility>
+#include <span>
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/matrix_inverse.hpp>
@@ -224,6 +225,16 @@ namespace Trident
         m_ViewportContexts.clear();
         m_ActiveViewportId = 0;
 
+        // Reset AI frame generation state so the background worker starts from a clean slate.
+        m_AIEnabled = false;
+        m_PendingFrame.reset();
+        m_StagedFrame.reset();
+        m_CompletedFrame.reset();
+        m_CurrentAITiming = {};
+        m_AIInputScratch.clear();
+        m_AIResultImage = {};
+        m_AIResultExtent = { 0, 0 };
+
         ViewportContext& l_DefaultContext = GetOrCreateViewportContext(m_ActiveViewportId);
         l_DefaultContext.m_Info.ViewportID = m_ActiveViewportId;
         l_DefaultContext.m_Info.Position = { 0.0f, 0.0f };
@@ -310,6 +321,15 @@ namespace Trident
             m_ResourceFence = VK_NULL_HANDLE;
         }
 
+        // Ensure the AI pipeline is idle before leaving so background work does not outlive Vulkan resources.
+        m_AIEnabled = false;
+        m_PendingFrame.reset();
+        m_StagedFrame.reset();
+        m_CompletedFrame.reset();
+        m_AIInputScratch.clear();
+        m_AIResultImage = {};
+        m_AIResultExtent = { 0, 0 };
+
         m_Shutdown = true;
 
         TR_CORE_TRACE("Renderer Shutdown Complete");
@@ -334,6 +354,8 @@ namespace Trident
         VkFence l_InFlightFence = m_Commands.GetInFlightFence(m_Commands.CurrentFrame());
         vkWaitForFences(Startup::GetDevice(), 1, &l_InFlightFence, VK_TRUE, UINT64_MAX);
 
+        PromoteAIFrame();
+
         uint32_t l_ImageIndex = 0;
         if (!AcquireNextImage(l_ImageIndex, l_InFlightFence))
         {
@@ -346,12 +368,18 @@ namespace Trident
 
         vkResetFences(Startup::GetDevice(), 1, &l_InFlightFence);
 
+        m_CurrentAITiming.m_RenderStart = l_FrameStartTime;
+
         if (!RecordCommandBuffer(l_ImageIndex))
         {
             TR_CORE_CRITICAL("Failed to record command buffer");
             
             return;
         }
+
+        m_CurrentAITiming.m_RenderEnd = std::chrono::steady_clock::now();
+        m_CurrentAITiming.m_RenderDeltaMilliseconds = std::chrono::duration<double, std::milli>(m_CurrentAITiming.m_RenderEnd - m_CurrentAITiming.m_RenderStart).count();
+        FinalizeAIFrameTiming();
 
         // Capture the extent actually used when recording commands so our metrics reflect the final render target dimensions.
         l_FrameExtent = m_Swapchain.GetExtent();
@@ -363,6 +391,8 @@ namespace Trident
             return;
         }
 
+        // Kick the AI pipeline after graphics submission so inference overlaps presentation rather than blocking the render loop.
+        TickAIFrameGenerator();
         PresentFrame(l_ImageIndex);
 
         m_Commands.CurrentFrame() = (m_Commands.CurrentFrame() + 1) % m_Commands.GetFrameCount();
@@ -3765,6 +3795,12 @@ namespace Trident
 
         const bool l_PrimaryViewportActive = l_PrimaryTarget != nullptr;
 
+        if (m_AIEnabled && l_PrimaryViewportActive && l_PrimaryContext)
+        {
+            // Stage descriptors for the next frame so the AI worker can begin once this frame's fence signals.
+            StageAIFrame(l_PrimaryContext->m_Info.ViewportID);
+        }
+
         VkImage l_SwapchainImage = m_Swapchain.GetImages()[imageIndex];
         VkImage l_SwapchainDepthImage = VK_NULL_HANDLE;
         const auto& l_DepthImages = m_Pipeline.GetDepthImages();
@@ -4552,6 +4588,209 @@ namespace Trident
         outDescriptors.m_DepthReadback.m_MappedMemory = l_Target.m_DepthStagingMapping;
 
         outDescriptors.m_MotionReadback = {};
+
+        return true;
+    }
+
+    void Renderer::SetAIFrameGenerationEnabled(bool enabled)
+    {
+        if (enabled == m_AIEnabled)
+        {
+            return;
+        }
+
+        m_AIEnabled = enabled;
+        if (!m_AIEnabled)
+        {
+            // Clearing the queue prevents stale descriptors from referencing destroyed Vulkan resources.
+            m_PendingFrame.reset();
+            m_StagedFrame.reset();
+            m_CompletedFrame.reset();
+            m_AIInputScratch.clear();
+            m_AIResultImage = {};
+            m_AIResultExtent = { 0, 0 };
+        }
+    }
+
+    bool Renderer::TryGetAIResultTexture(VkDescriptorImageInfo& outDescriptor, VkExtent2D& outExtent) const
+    {
+        if (!m_CompletedFrame.has_value())
+        {
+            return false;
+        }
+
+        outDescriptor = m_AIResultImage;
+        outExtent = m_AIResultExtent;
+
+        const bool l_ValidDescriptor = outDescriptor.imageView != VK_NULL_HANDLE && outDescriptor.sampler != VK_NULL_HANDLE;
+        const bool l_ValidExtent = outExtent.width > 0 && outExtent.height > 0;
+
+        return l_ValidDescriptor && l_ValidExtent;
+    }
+
+    void Renderer::PromoteAIFrame()
+    {
+        if (!m_AIEnabled)
+        {
+            m_PendingFrame.reset();
+            m_StagedFrame.reset();
+
+            return;
+        }
+
+        if (!m_PendingFrame.has_value() && m_StagedFrame.has_value())
+        {
+            // The GPU work for the staged frame is complete because the fence just signalled.
+            m_PendingFrame = std::move(m_StagedFrame);
+        }
+    }
+
+    void Renderer::FinalizeAIFrameTiming()
+    {
+        if (!m_AIEnabled || !m_StagedFrame.has_value())
+        {
+            return;
+        }
+
+        // Preserve render timing so tooling can correlate AI latency with frame time spikes.
+        m_StagedFrame->m_Timing = m_CurrentAITiming;
+    }
+
+    void Renderer::TickAIFrameGenerator()
+    {
+        if (!m_AIEnabled)
+        {
+            return;
+        }
+
+        if (m_PendingFrame.has_value())
+        {
+            std::array<int64_t, 4> l_InputShape{};
+            if (BuildAIInputTensor(m_PendingFrame->m_Descriptors, m_AIInputScratch, l_InputShape))
+            {
+                m_PendingFrame->m_Timing.m_EnqueueTime = std::chrono::steady_clock::now();
+                const std::span<const float> l_InputSpan{ m_AIInputScratch.data(), m_AIInputScratch.size() };
+                const std::span<const int64_t> l_ShapeSpan{ l_InputShape.data(), l_InputShape.size() };
+
+                if (m_FrameGenerator.EnqueueFrame(m_PendingFrame->m_Descriptors, m_PendingFrame->m_Timing, l_InputSpan, l_ShapeSpan))
+                {
+                    // Once the data is handed off to the worker we can reuse the payload slot for the next capture.
+                    m_PendingFrame.reset();
+                }
+                else
+                {
+                    TR_CORE_WARN("Renderer: Failed to enqueue AI frame; will retry next tick.");
+                }
+            }
+        }
+
+        std::optional<AI::FrameGenerator::FrameInferenceResult> l_Result = m_FrameGenerator.DequeueFrame();
+        if (l_Result.has_value())
+        {
+            m_AIResultImage = l_Result->m_Descriptors.m_Colour;
+            m_AIResultExtent = l_Result->m_Descriptors.m_ColourReadback.m_Extent;
+            m_CompletedFrame = std::move(l_Result);
+
+            if (m_AIResultImage.imageView == VK_NULL_HANDLE || m_AIResultImage.sampler == VK_NULL_HANDLE)
+            {
+                // Ensure callers do not sample stale handles when the AI pipeline has not produced GPU output yet.
+                m_AIResultExtent = { 0, 0 };
+            }
+
+            if (m_CompletedFrame->m_InferenceDuration.count() > 0)
+            {
+                const double l_InferenceMs = std::chrono::duration<double, std::milli>(m_CompletedFrame->m_InferenceDuration).count();
+                const double l_QueueMs = std::chrono::duration<double, std::milli>(m_CompletedFrame->m_QueueLatency).count();
+                // Store the measured latency so tuning efforts know the current overlap budget.
+                m_AIExpectedLatencyMilliseconds = l_InferenceMs + l_QueueMs;
+            }
+        }
+    }
+
+    void Renderer::StageAIFrame(uint32_t viewportId)
+    {
+        if (!m_AIEnabled)
+        {
+            return;
+        }
+
+        AIFramePayload l_Payload{};
+        l_Payload.m_ViewportId = viewportId;
+        if (!PopulateAIFrameDescriptors(viewportId, l_Payload.m_Descriptors))
+        {
+            // Clear the staged frame so the next successful capture does not inherit stale data.
+            m_StagedFrame.reset();
+
+            return;
+        }
+
+        l_Payload.m_Timing = m_CurrentAITiming;
+        m_StagedFrame = std::move(l_Payload);
+    }
+
+    bool Renderer::BuildAIInputTensor(const AI::FrameDescriptors& descriptors, std::vector<float>& outTensor, std::array<int64_t, 4>& outShape)
+    {
+        const AI::FrameDescriptors::CPUBufferView& l_Colour = descriptors.m_ColourReadback;
+        if (l_Colour.m_MappedMemory == nullptr || l_Colour.m_Extent.width == 0 || l_Colour.m_Extent.height == 0)
+        {
+            return false;
+        }
+
+        const uint32_t l_Width = l_Colour.m_Extent.width;
+        const uint32_t l_Height = l_Colour.m_Extent.height;
+        if (l_Width == 0 || l_Height == 0 || l_Colour.m_RowPitch == 0)
+        {
+            return false;
+        }
+
+        const uint32_t l_BytesPerPixel = l_Colour.m_RowPitch / l_Width;
+        if (l_BytesPerPixel == 0)
+        {
+            return false;
+        }
+
+        constexpr size_t l_ChannelCount = 4;
+        const size_t l_TotalPixels = static_cast<size_t>(l_Width) * static_cast<size_t>(l_Height);
+        outTensor.resize(l_TotalPixels * l_ChannelCount);
+
+        const uint8_t* l_SourceBase = static_cast<const uint8_t*>(l_Colour.m_MappedMemory);
+        for (uint32_t l_Y = 0; l_Y < l_Height; ++l_Y)
+        {
+            const uint8_t* l_Row = l_SourceBase + static_cast<size_t>(l_Y) * l_Colour.m_RowPitch;
+            for (uint32_t l_X = 0; l_X < l_Width; ++l_X)
+            {
+                const uint8_t* l_Pixel = l_Row + static_cast<size_t>(l_X) * l_BytesPerPixel;
+                const size_t l_OutputIndex = (static_cast<size_t>(l_Y) * l_Width + l_X) * l_ChannelCount;
+
+                if (l_BytesPerPixel >= 4)
+                {
+                    outTensor[l_OutputIndex + 0] = static_cast<float>(l_Pixel[0]) / 255.0f;
+                    outTensor[l_OutputIndex + 1] = static_cast<float>(l_Pixel[1]) / 255.0f;
+                    outTensor[l_OutputIndex + 2] = static_cast<float>(l_Pixel[2]) / 255.0f;
+                    outTensor[l_OutputIndex + 3] = static_cast<float>(l_Pixel[3]) / 255.0f;
+                }
+                else if (l_BytesPerPixel == 2)
+                {
+                    uint16_t l_Value = 0;
+                    std::memcpy(&l_Value, l_Pixel, sizeof(uint16_t));
+                    const float l_Normalised = static_cast<float>(l_Value) / 65535.0f;
+                    outTensor[l_OutputIndex + 0] = l_Normalised;
+                    outTensor[l_OutputIndex + 1] = l_Normalised;
+                    outTensor[l_OutputIndex + 2] = l_Normalised;
+                    outTensor[l_OutputIndex + 3] = 1.0f;
+                }
+                else
+                {
+                    const float l_Normalised = static_cast<float>(l_Pixel[0]) / 255.0f;
+                    outTensor[l_OutputIndex + 0] = l_Normalised;
+                    outTensor[l_OutputIndex + 1] = l_Normalised;
+                    outTensor[l_OutputIndex + 2] = l_Normalised;
+                    outTensor[l_OutputIndex + 3] = 1.0f;
+                }
+            }
+        }
+
+        outShape = { 1, static_cast<int64_t>(l_Height), static_cast<int64_t>(l_Width), static_cast<int64_t>(l_ChannelCount) };
 
         return true;
     }

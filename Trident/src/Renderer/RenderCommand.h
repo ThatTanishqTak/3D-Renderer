@@ -52,5 +52,17 @@ namespace Trident
         static size_t GetModelCount();
         // Allow editor tooling to resolve texture slots on demand when authors request explicit reloads.
         static int32_t ResolveTextureSlot(const std::string& texturePath);
+        // Enable or disable AI frame generation so the application can control when inference runs.
+        static void SetAIFrameGenerationEnabled(bool enabled);
+        // Report whether the renderer is currently feeding frames to the AI worker.
+        static bool IsAIFrameGenerationEnabled();
+        // Advertise whether a completed AI frame is ready for sampling.
+        static bool HasAIResultTexture();
+        // Provide the descriptor and extent for the latest AI frame so UI code can draw previews.
+        static bool TryGetAIResultTexture(VkDescriptorImageInfo& outDescriptor, VkExtent2D& outExtent);
+        // Expose whether any frame is waiting for inference so panels can explain latency.
+        static bool IsAIFramePending();
+        // Return the current end-to-end latency budget measured from the AI pipeline.
+        static double GetAIExpectedLatencyMilliseconds();
     };
 }

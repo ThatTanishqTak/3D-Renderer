@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Core/Utilities.h"
 
@@ -12,6 +12,8 @@
 #include "Renderer/Commands.h"
 #include "Renderer/Skybox.h"
 #include "Renderer/TextRenderer.h"
+
+#include "AI/FrameGenerator.h"
 
 #include "Geometry/Mesh.h"
 #include "Geometry/Material.h"
@@ -36,6 +38,7 @@
 #include <chrono>
 #include <unordered_map>
 #include <limits>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -157,6 +160,18 @@ namespace Trident
         void SubmitText(uint32_t viewportId, const glm::vec2& position, const glm::vec4& color, std::string_view text);
         // Packages the latest offscreen readback buffers into an AI descriptor payload so inference systems can consume them.
         bool PopulateAIFrameDescriptors(uint32_t viewportId, AI::FrameDescriptors& outDescriptors) const;
+        // Toggle the AI frame generator so applications can opt-in to asynchronous inference.
+        void SetAIFrameGenerationEnabled(bool enabled);
+        // Query whether the renderer is currently feeding frames to the AI system.
+        bool IsAIFrameGenerationEnabled() const { return m_AIEnabled; }
+        // Surface whether a finished AI frame is ready for sampling.
+        bool HasAIResultTexture() const { return m_CompletedFrame.has_value(); }
+        // Provide access to the latest AI colour descriptor so UI panels can draw previews.
+        bool TryGetAIResultTexture(VkDescriptorImageInfo& outDescriptor, VkExtent2D& outExtent) const;
+        // Report whether an AI submission is still winding through the pipeline.
+        bool IsAIFramePending() const { return m_PendingFrame.has_value() || m_StagedFrame.has_value(); }
+        // Return the current latency budget so future tuning can trim or expand overlap between render and inference.
+        double GetAIExpectedLatencyMilliseconds() const { return m_AIExpectedLatencyMilliseconds; }
 
         Transform GetTransform() const;
         ViewportInfo GetViewport() const;
@@ -380,6 +395,23 @@ namespace Trident
         std::chrono::system_clock::time_point m_PerformanceCaptureStartTime{};
         std::vector<VkImageLayout> m_SwapchainDepthLayouts;
 
+        AI::FrameGenerator m_FrameGenerator; ///< Background worker that runs inference alongside rendering.
+        struct AIFramePayload
+        {
+            uint32_t m_ViewportId = s_InvalidViewportId; ///< Viewport that produced the capture.
+            AI::FrameDescriptors m_Descriptors{}; ///< Descriptors shared with the AI system.
+            AI::FrameGenerator::FrameTimingMetadata m_Timing{}; ///< Timing metadata mirroring the render pass that produced the frame.
+        };
+        bool m_AIEnabled = false; ///< Allows callers to pause AI work during gameplay or profiling.
+        std::optional<AIFramePayload> m_PendingFrame; ///< Frame ready to enqueue on the generator once scheduling allows.
+        std::optional<AIFramePayload> m_StagedFrame; ///< Fresh capture staged this frame and promoted once the GPU fence signals.
+        std::optional<AI::FrameGenerator::FrameInferenceResult> m_CompletedFrame; ///< Most recent inference output ready for compositing.
+        AI::FrameGenerator::FrameTimingMetadata m_CurrentAITiming{}; ///< Timing scratch populated while recording the current frame.
+        std::vector<float> m_AIInputScratch; ///< Temporary buffer used to normalise pixels into a tensor payload.
+        VkDescriptorImageInfo m_AIResultImage{}; ///< Descriptor mirroring the colour attachment presented by the AI system.
+        VkExtent2D m_AIResultExtent{ 0, 0 }; ///< Resolution of the AI frame so UI widgets can scale appropriately.
+        double m_AIExpectedLatencyMilliseconds = 33.0; ///< Approximate budget describing the overlap between render and inference (~2 frames at 60 Hz).
+
     private:
         // Core setup
         void CreateDescriptorPool();
@@ -411,6 +443,12 @@ namespace Trident
         bool RecordCommandBuffer(uint32_t imageIndex);
         bool SubmitFrame(uint32_t imageIndex, VkFence inFlightFence);
         void PresentFrame(uint32_t imageIndex);
+
+        void PromoteAIFrame();
+        void FinalizeAIFrameTiming();
+        void TickAIFrameGenerator();
+        void StageAIFrame(uint32_t viewportId);
+        bool BuildAIInputTensor(const AI::FrameDescriptors& descriptors, std::vector<float>& outTensor, std::array<int64_t, 4>& outShape);
 
         bool IsValidViewport(const ViewportInfo& info) const { return info.Size.x > 0 && info.Size.y > 0; }
         void ProcessReloadEvents();

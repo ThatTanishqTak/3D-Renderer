@@ -172,4 +172,40 @@ namespace Trident
         // Forward the request to the renderer so tooling can trigger reloads after editing component properties.
         return Startup::GetRenderer().ResolveTextureSlot(texturePath);
     }
+
+    void RenderCommand::SetAIFrameGenerationEnabled(bool enabled)
+    {
+        // Allow the application layer to toggle expensive inference work as scenes or profiles change.
+        Startup::GetRenderer().SetAIFrameGenerationEnabled(enabled);
+    }
+
+    bool RenderCommand::IsAIFrameGenerationEnabled()
+    {
+        // Surface the current enablement flag so UI elements can stay in sync with runtime preferences.
+        return Startup::GetRenderer().IsAIFrameGenerationEnabled();
+    }
+
+    bool RenderCommand::HasAIResultTexture()
+    {
+        // Quickly report whether a finished AI frame is ready before fetching descriptor data.
+        return Startup::GetRenderer().HasAIResultTexture();
+    }
+
+    bool RenderCommand::TryGetAIResultTexture(VkDescriptorImageInfo& outDescriptor, VkExtent2D& outExtent)
+    {
+        // Fetch the descriptor/extent pair so overlays can draw the inference result without poking renderer internals.
+        return Startup::GetRenderer().TryGetAIResultTexture(outDescriptor, outExtent);
+    }
+
+    bool RenderCommand::IsAIFramePending()
+    {
+        // Let diagnostics widgets show when the AI queue is busy to help explain input/output latency.
+        return Startup::GetRenderer().IsAIFramePending();
+    }
+
+    double RenderCommand::GetAIExpectedLatencyMilliseconds()
+    {
+        // Bubble up the measured latency budget so future tuning can keep presentation and inference aligned.
+        return Startup::GetRenderer().GetAIExpectedLatencyMilliseconds();
+    }
 }
