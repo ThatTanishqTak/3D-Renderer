@@ -27,6 +27,7 @@ namespace Trident
         void CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory);
         void CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size, CommandBufferPool& pool);
         void DestroyBuffer(VkBuffer buffer, VkDeviceMemory memory);
+        void TrackAllocation(VkBuffer buffer, VkDeviceMemory memory);
 
     private:
         // Utility helpers

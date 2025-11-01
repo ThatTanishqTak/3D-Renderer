@@ -29,9 +29,23 @@ namespace Trident
          */
         struct FrameDescriptors
         {
+            struct CPUBufferView
+            {
+                VkBuffer m_Buffer = VK_NULL_HANDLE;        ///< Buffer storing CPU-visible staging pixels.
+                VkDeviceSize m_Offset = 0;                  ///< Byte offset where the relevant image begins.
+                VkDeviceSize m_Size = 0;                    ///< Total number of bytes copied for the image.
+                VkFormat m_Format = VK_FORMAT_UNDEFINED;    ///< Format used when the GPU produced the pixels.
+                VkExtent2D m_Extent{ 0, 0 };                ///< Dimensions of the source image.
+                uint32_t m_RowPitch = 0;                    ///< Number of bytes that make up one scanline in the staging buffer.
+                void* m_MappedMemory = nullptr;             ///< Persistently mapped pointer for CPU consumers.
+            };
+
             VkDescriptorImageInfo m_Colour{}; ///< Descriptor describing the colour buffer for the frame.
             VkDescriptorImageInfo m_Depth{}; ///< Descriptor describing the depth buffer for the frame.
             VkDescriptorImageInfo m_Motion{}; ///< Descriptor describing the motion-vector buffer for the frame.
+            CPUBufferView m_ColourReadback{}; ///< CPU-visible staging view for the colour buffer.
+            CPUBufferView m_DepthReadback{}; ///< CPU-visible staging view for the depth buffer.
+            CPUBufferView m_MotionReadback{}; ///< CPU-visible staging view for the motion buffer (reserved for future work).
         };
 
         /**

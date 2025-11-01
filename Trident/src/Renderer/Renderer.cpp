@@ -2,6 +2,8 @@
 
 #include "Application/Startup.h"
 
+#include "AI/FrameGenerator.h"
+
 #include "ECS/Components/TransformComponent.h"
 #include "ECS/Components/CameraComponent.h"
 #include "Geometry/Mesh.h"
@@ -129,6 +131,34 @@ namespace
         }
 
         return true;
+    }
+
+    uint32_t CalculateFormatBytesPerPixel(VkFormat format)
+    {
+        switch (format)
+        {
+        case VK_FORMAT_R8G8B8A8_UNORM:
+        case VK_FORMAT_R8G8B8A8_SRGB:
+        case VK_FORMAT_B8G8R8A8_UNORM:
+        case VK_FORMAT_B8G8R8A8_SRGB:
+            return 4;
+        case VK_FORMAT_A2R10G10B10_UNORM_PACK32:
+        case VK_FORMAT_A2B10G10R10_UNORM_PACK32:
+            return 4;
+        case VK_FORMAT_R16_SFLOAT:
+        case VK_FORMAT_R16_UNORM:
+            return 2;
+        case VK_FORMAT_D16_UNORM:
+            return 2;
+        case VK_FORMAT_D24_UNORM_S8_UINT:
+            return 4;
+        case VK_FORMAT_D32_SFLOAT:
+            return 4;
+        case VK_FORMAT_D32_SFLOAT_S8_UINT:
+            return 8;
+        default:
+            return 0;
+        }
     }
 
     std::tm ToLocalTime(std::time_t time)
@@ -2739,6 +2769,36 @@ namespace Trident
 
         vkDeviceWaitIdle(l_Device);
 
+        if (l_Target.m_ColourStagingMapping != nullptr)
+        {
+            vkUnmapMemory(l_Device, l_Target.m_ColourStagingMemory);
+            l_Target.m_ColourStagingMapping = nullptr;
+        }
+
+        if (l_Target.m_DepthStagingMapping != nullptr)
+        {
+            vkUnmapMemory(l_Device, l_Target.m_DepthStagingMemory);
+            l_Target.m_DepthStagingMapping = nullptr;
+        }
+
+        if (l_Target.m_ColourStagingBuffer != VK_NULL_HANDLE || l_Target.m_ColourStagingMemory != VK_NULL_HANDLE)
+        {
+            m_Buffers.DestroyBuffer(l_Target.m_ColourStagingBuffer, l_Target.m_ColourStagingMemory);
+            l_Target.m_ColourStagingBuffer = VK_NULL_HANDLE;
+            l_Target.m_ColourStagingMemory = VK_NULL_HANDLE;
+            l_Target.m_ColourStagingSize = 0;
+            l_Target.m_ColourBytesPerPixel = 0;
+        }
+
+        if (l_Target.m_DepthStagingBuffer != VK_NULL_HANDLE || l_Target.m_DepthStagingMemory != VK_NULL_HANDLE)
+        {
+            m_Buffers.DestroyBuffer(l_Target.m_DepthStagingBuffer, l_Target.m_DepthStagingMemory);
+            l_Target.m_DepthStagingBuffer = VK_NULL_HANDLE;
+            l_Target.m_DepthStagingMemory = VK_NULL_HANDLE;
+            l_Target.m_DepthStagingSize = 0;
+            l_Target.m_DepthBytesPerPixel = 0;
+        }
+
         // TODO: LOOK INTO RAII TO HANDLE ALL THIS RESOURCE
         //if (l_Target.m_TextureID != VK_NULL_HANDLE)
         //{
@@ -2886,8 +2946,34 @@ namespace Trident
         // Ensure the GPU is idle before we reuse or release any image memory.
         vkDeviceWaitIdle(l_Device);
 
-        auto a_ResetTarget = [l_Device](OffscreenTarget& target)
+        auto a_ResetTarget = [l_Device, this](OffscreenTarget& target)
             {
+                if (target.m_ColourStagingMapping != nullptr)
+                {
+                    vkUnmapMemory(l_Device, target.m_ColourStagingMemory);
+                    target.m_ColourStagingMapping = nullptr;
+                }
+
+                if (target.m_DepthStagingMapping != nullptr)
+                {
+                    vkUnmapMemory(l_Device, target.m_DepthStagingMemory);
+                    target.m_DepthStagingMapping = nullptr;
+                }
+
+                if (target.m_ColourStagingBuffer != VK_NULL_HANDLE || target.m_ColourStagingMemory != VK_NULL_HANDLE)
+                {
+                    m_Buffers.DestroyBuffer(target.m_ColourStagingBuffer, target.m_ColourStagingMemory);
+                    target.m_ColourStagingBuffer = VK_NULL_HANDLE;
+                    target.m_ColourStagingMemory = VK_NULL_HANDLE;
+                }
+
+                if (target.m_DepthStagingBuffer != VK_NULL_HANDLE || target.m_DepthStagingMemory != VK_NULL_HANDLE)
+                {
+                    m_Buffers.DestroyBuffer(target.m_DepthStagingBuffer, target.m_DepthStagingMemory);
+                    target.m_DepthStagingBuffer = VK_NULL_HANDLE;
+                    target.m_DepthStagingMemory = VK_NULL_HANDLE;
+                }
+
                 if (target.m_TextureID != VK_NULL_HANDLE)
                 {
                     ImGui_ImplVulkan_RemoveTexture(target.m_TextureID);
@@ -2945,6 +3031,10 @@ namespace Trident
                 target.m_Extent = { 0, 0 };
                 target.m_CurrentLayout = VK_IMAGE_LAYOUT_UNDEFINED;
                 target.m_DepthLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+                target.m_ColourStagingSize = 0;
+                target.m_ColourBytesPerPixel = 0;
+                target.m_DepthStagingSize = 0;
+                target.m_DepthBytesPerPixel = 0;
             };
 
         a_ResetTarget(target);
@@ -3025,7 +3115,7 @@ namespace Trident
         l_DepthInfo.format = m_Pipeline.GetDepthFormat();
         l_DepthInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
         l_DepthInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        l_DepthInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+        l_DepthInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
         l_DepthInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         l_DepthInfo.samples = VK_SAMPLE_COUNT_1_BIT;
 
@@ -3091,6 +3181,63 @@ namespace Trident
             a_ResetTarget(target);
 
             return;
+        }
+
+        // Allocate CPU-visible buffers that mirror the colour and depth attachments so tooling can analyse the output.
+        target.m_ColourBytesPerPixel = CalculateFormatBytesPerPixel(l_ImageInfo.format);
+        if (target.m_ColourBytesPerPixel == 0)
+        {
+            TR_CORE_WARN("Colour format {} is not supported for offscreen readback; staging is disabled for this viewport.", static_cast<uint32_t>(l_ImageInfo.format));
+        }
+        else
+        {
+            const VkDeviceSize l_ColourBufferSize = static_cast<VkDeviceSize>(extent.width) * static_cast<VkDeviceSize>(extent.height) * static_cast<VkDeviceSize>(target.m_ColourBytesPerPixel);
+            m_Buffers.CreateBuffer(l_ColourBufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                target.m_ColourStagingBuffer, target.m_ColourStagingMemory);
+            if (target.m_ColourStagingBuffer != VK_NULL_HANDLE && target.m_ColourStagingMemory != VK_NULL_HANDLE)
+            {
+                m_Buffers.TrackAllocation(target.m_ColourStagingBuffer, target.m_ColourStagingMemory);
+
+                VkResult l_MapResult = vkMapMemory(l_Device, target.m_ColourStagingMemory, 0, l_ColourBufferSize, 0, &target.m_ColourStagingMapping);
+                if (l_MapResult != VK_SUCCESS)
+                {
+                    TR_CORE_ERROR("Failed to map colour staging buffer for viewport readback (code {}).", static_cast<int32_t>(l_MapResult));
+                    target.m_ColourStagingMapping = nullptr;
+                    target.m_ColourStagingSize = 0;
+                }
+                else
+                {
+                    target.m_ColourStagingSize = l_ColourBufferSize;
+                }
+            }
+        }
+
+        target.m_DepthBytesPerPixel = CalculateFormatBytesPerPixel(l_DepthInfo.format);
+        if (target.m_DepthBytesPerPixel == 0)
+        {
+            TR_CORE_WARN("Depth format {} is not supported for offscreen readback; staging is disabled for this viewport.", static_cast<uint32_t>(l_DepthInfo.format));
+        }
+        else
+        {
+            const VkDeviceSize l_DepthBufferSize = static_cast<VkDeviceSize>(extent.width) * static_cast<VkDeviceSize>(extent.height) * static_cast<VkDeviceSize>(target.m_DepthBytesPerPixel);
+            m_Buffers.CreateBuffer(l_DepthBufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                target.m_DepthStagingBuffer, target.m_DepthStagingMemory);
+            if (target.m_DepthStagingBuffer != VK_NULL_HANDLE && target.m_DepthStagingMemory != VK_NULL_HANDLE)
+            {
+                m_Buffers.TrackAllocation(target.m_DepthStagingBuffer, target.m_DepthStagingMemory);
+
+                VkResult l_MapResult = vkMapMemory(l_Device, target.m_DepthStagingMemory, 0, l_DepthBufferSize, 0, &target.m_DepthStagingMapping);
+                if (l_MapResult != VK_SUCCESS)
+                {
+                    TR_CORE_ERROR("Failed to map depth staging buffer for viewport readback (code {}).", static_cast<int32_t>(l_MapResult));
+                    target.m_DepthStagingMapping = nullptr;
+                    target.m_DepthStagingSize = 0;
+                }
+                else
+                {
+                    target.m_DepthStagingSize = l_DepthBufferSize;
+                }
+            }
         }
 
         VkSamplerCreateInfo l_SamplerInfo{ VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO };
@@ -3292,6 +3439,11 @@ namespace Trident
                     l_DepthPreviousStage = VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
                     l_DepthPreviousAccess = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
                 }
+                else if (l_Target.m_DepthLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL)
+                {
+                    l_DepthPreviousStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+                    l_DepthPreviousAccess = VK_ACCESS_TRANSFER_READ_BIT;
+                }
 
                 VkImageMemoryBarrier l_PrepareDepth{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
                 l_PrepareDepth.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -3466,6 +3618,103 @@ namespace Trident
                 vkCmdPipelineBarrier(l_CommandBuffer, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
                     0, 0, nullptr, 0, nullptr, 1, &l_OffscreenBarrier);
                 l_Target.m_CurrentLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+
+                const bool l_CanCopyColour = l_Target.m_ColourStagingBuffer != VK_NULL_HANDLE && l_Target.m_ColourStagingSize > 0;
+                const bool l_CanCopyDepth = l_Target.m_DepthStagingBuffer != VK_NULL_HANDLE && l_Target.m_DepthStagingSize > 0;
+
+                if (l_CanCopyDepth)
+                {
+                    VkImageMemoryBarrier l_DepthToTransfer{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+                    l_DepthToTransfer.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                    l_DepthToTransfer.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                    l_DepthToTransfer.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+                    l_DepthToTransfer.subresourceRange.baseMipLevel = 0;
+                    l_DepthToTransfer.subresourceRange.levelCount = 1;
+                    l_DepthToTransfer.subresourceRange.baseArrayLayer = 0;
+                    l_DepthToTransfer.subresourceRange.layerCount = 1;
+                    l_DepthToTransfer.oldLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+                    l_DepthToTransfer.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+                    l_DepthToTransfer.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+                    l_DepthToTransfer.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+                    l_DepthToTransfer.image = l_Target.m_DepthImage;
+
+                    // Promote the depth attachment to transfer-src so we can capture CPU diagnostics without stalling the next frame.
+                    vkCmdPipelineBarrier(l_CommandBuffer, VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                        0, 0, nullptr, 0, nullptr, 1, &l_DepthToTransfer);
+                }
+
+                if (l_CanCopyColour)
+                {
+                    VkBufferImageCopy l_ColourCopy{};
+                    l_ColourCopy.bufferOffset = 0;
+                    l_ColourCopy.bufferRowLength = 0;
+                    l_ColourCopy.bufferImageHeight = 0;
+                    l_ColourCopy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                    l_ColourCopy.imageSubresource.mipLevel = 0;
+                    l_ColourCopy.imageSubresource.baseArrayLayer = 0;
+                    l_ColourCopy.imageSubresource.layerCount = 1;
+                    l_ColourCopy.imageOffset = { 0, 0, 0 };
+                    l_ColourCopy.imageExtent = { l_Target.m_Extent.width, l_Target.m_Extent.height, 1 };
+
+                    // Record the copy so the CPU-visible buffer mirrors the finished colour image.
+                    vkCmdCopyImageToBuffer(l_CommandBuffer, l_Target.m_Image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                        l_Target.m_ColourStagingBuffer, 1, &l_ColourCopy);
+                }
+
+                if (l_CanCopyDepth)
+                {
+                    VkBufferImageCopy l_DepthCopy{};
+                    l_DepthCopy.bufferOffset = 0;
+                    l_DepthCopy.bufferRowLength = 0;
+                    l_DepthCopy.bufferImageHeight = 0;
+                    l_DepthCopy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+                    l_DepthCopy.imageSubresource.mipLevel = 0;
+                    l_DepthCopy.imageSubresource.baseArrayLayer = 0;
+                    l_DepthCopy.imageSubresource.layerCount = 1;
+                    l_DepthCopy.imageOffset = { 0, 0, 0 };
+                    l_DepthCopy.imageExtent = { l_Target.m_Extent.width, l_Target.m_Extent.height, 1 };
+
+                    // Capture the depth buffer so AI tooling can reconstruct scene geometry.
+                    vkCmdCopyImageToBuffer(l_CommandBuffer, l_Target.m_DepthImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                        l_Target.m_DepthStagingBuffer, 1, &l_DepthCopy);
+
+                    l_Target.m_DepthLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+                }
+
+                std::array<VkBufferMemoryBarrier, 2> l_PostCopyBarriers{};
+                uint32_t l_PostCopyBarrierCount = 0;
+                if (l_CanCopyColour)
+                {
+                    VkBufferMemoryBarrier& l_ColourBarrier = l_PostCopyBarriers[l_PostCopyBarrierCount++];
+                    l_ColourBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+                    l_ColourBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+                    l_ColourBarrier.dstAccessMask = VK_ACCESS_HOST_READ_BIT;
+                    l_ColourBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                    l_ColourBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                    l_ColourBarrier.buffer = l_Target.m_ColourStagingBuffer;
+                    l_ColourBarrier.offset = 0;
+                    l_ColourBarrier.size = VK_WHOLE_SIZE;
+                }
+
+                if (l_CanCopyDepth)
+                {
+                    VkBufferMemoryBarrier& l_DepthBarrier = l_PostCopyBarriers[l_PostCopyBarrierCount++];
+                    l_DepthBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+                    l_DepthBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+                    l_DepthBarrier.dstAccessMask = VK_ACCESS_HOST_READ_BIT;
+                    l_DepthBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                    l_DepthBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                    l_DepthBarrier.buffer = l_Target.m_DepthStagingBuffer;
+                    l_DepthBarrier.offset = 0;
+                    l_DepthBarrier.size = VK_WHOLE_SIZE;
+                }
+
+                if (l_PostCopyBarrierCount > 0)
+                {
+                    // Ensure the CPU sees the freshly copied pixels once the frame fence signals.
+                    vkCmdPipelineBarrier(l_CommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT,
+                        0, 0, nullptr, l_PostCopyBarrierCount, l_PostCopyBarriers.data(), 0, nullptr);
+                }
 
                 if (!isPrimary)
                 {
@@ -4258,6 +4507,53 @@ namespace Trident
         l_Submission.m_Text.assign(text.begin(), text.end());
         // TODO: Surface localization-aware font selection once the editor exposes language packs.
         m_TextSubmissionQueue[viewportId].emplace_back(std::move(l_Submission));
+    }
+
+    bool Renderer::PopulateAIFrameDescriptors(uint32_t viewportId, AI::FrameDescriptors& outDescriptors) const
+    {
+        const ViewportContext* l_Context = FindViewportContext(viewportId);
+        if (l_Context == nullptr)
+        {
+            return false;
+        }
+
+        const OffscreenTarget& l_Target = l_Context->m_Target;
+        if (l_Target.m_Framebuffer == VK_NULL_HANDLE || l_Target.m_Extent.width == 0 || l_Target.m_Extent.height == 0)
+        {
+            return false;
+        }
+
+        // Populate the GPU descriptors so future interop paths can import the images directly when supported.
+        outDescriptors.m_Colour.sampler = l_Target.m_Sampler;
+        outDescriptors.m_Colour.imageView = l_Target.m_ImageView;
+        outDescriptors.m_Colour.imageLayout = l_Target.m_CurrentLayout;
+
+        outDescriptors.m_Depth.sampler = VK_NULL_HANDLE;
+        outDescriptors.m_Depth.imageView = l_Target.m_DepthView;
+        outDescriptors.m_Depth.imageLayout = l_Target.m_DepthLayout;
+
+        outDescriptors.m_Motion = {};
+
+        // Package the CPU-visible readback buffers so AI systems can access the pixels without touching Vulkan internals.
+        outDescriptors.m_ColourReadback.m_Buffer = l_Target.m_ColourStagingBuffer;
+        outDescriptors.m_ColourReadback.m_Offset = 0;
+        outDescriptors.m_ColourReadback.m_Size = l_Target.m_ColourStagingSize;
+        outDescriptors.m_ColourReadback.m_Format = m_Swapchain.GetImageFormat();
+        outDescriptors.m_ColourReadback.m_Extent = l_Target.m_Extent;
+        outDescriptors.m_ColourReadback.m_RowPitch = l_Target.m_Extent.width * l_Target.m_ColourBytesPerPixel;
+        outDescriptors.m_ColourReadback.m_MappedMemory = l_Target.m_ColourStagingMapping;
+
+        outDescriptors.m_DepthReadback.m_Buffer = l_Target.m_DepthStagingBuffer;
+        outDescriptors.m_DepthReadback.m_Offset = 0;
+        outDescriptors.m_DepthReadback.m_Size = l_Target.m_DepthStagingSize;
+        outDescriptors.m_DepthReadback.m_Format = m_Pipeline.GetDepthFormat();
+        outDescriptors.m_DepthReadback.m_Extent = l_Target.m_Extent;
+        outDescriptors.m_DepthReadback.m_RowPitch = l_Target.m_Extent.width * l_Target.m_DepthBytesPerPixel;
+        outDescriptors.m_DepthReadback.m_MappedMemory = l_Target.m_DepthStagingMapping;
+
+        outDescriptors.m_MotionReadback = {};
+
+        return true;
     }
 
     void Renderer::SetTransform(const Transform& props)

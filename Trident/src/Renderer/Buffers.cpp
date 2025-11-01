@@ -291,4 +291,14 @@ namespace Trident
             m_Allocations.erase(it);
         }
     }
+
+    void Buffers::TrackAllocation(VkBuffer buffer, VkDeviceMemory memory)
+    {
+        if (buffer == VK_NULL_HANDLE || memory == VK_NULL_HANDLE)
+        {
+            return;
+        }
+
+        m_Allocations.push_back({ buffer, memory });
+    }
 }

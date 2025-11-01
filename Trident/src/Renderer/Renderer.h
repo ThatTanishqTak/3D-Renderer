@@ -43,6 +43,7 @@ namespace Trident
 {
     namespace UI { class ImGuiLayer; }
     namespace ECS { class Registry; }
+    namespace AI { struct FrameDescriptors; }
 
     struct ViewportInfo
     {
@@ -154,6 +155,8 @@ namespace Trident
         void SetViewportCamera(ECS::Entity entity);
         // Allow callers to submit screen-space text that will be composited after the main scene pass.
         void SubmitText(uint32_t viewportId, const glm::vec2& position, const glm::vec4& color, std::string_view text);
+        // Packages the latest offscreen readback buffers into an AI descriptor payload so inference systems can consume them.
+        bool PopulateAIFrameDescriptors(uint32_t viewportId, AI::FrameDescriptors& outDescriptors) const;
 
         Transform GetTransform() const;
         ViewportInfo GetViewport() const;
@@ -303,6 +306,16 @@ namespace Trident
             VkExtent2D m_Extent{ 0, 0 };
             VkImageLayout m_CurrentLayout = VK_IMAGE_LAYOUT_UNDEFINED;
             VkImageLayout m_DepthLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            VkBuffer m_ColourStagingBuffer = VK_NULL_HANDLE;      ///< CPU-visible buffer mirroring the colour attachment.
+            VkDeviceMemory m_ColourStagingMemory = VK_NULL_HANDLE;///< Memory backing the colour staging buffer.
+            void* m_ColourStagingMapping = nullptr;               ///< Persistently mapped pointer for CPU access.
+            VkDeviceSize m_ColourStagingSize = 0;                 ///< Total number of bytes copied into the colour staging buffer.
+            uint32_t m_ColourBytesPerPixel = 0;                   ///< Bytes-per-pixel used to interpret the colour staging data.
+            VkBuffer m_DepthStagingBuffer = VK_NULL_HANDLE;       ///< CPU-visible buffer mirroring the depth attachment.
+            VkDeviceMemory m_DepthStagingMemory = VK_NULL_HANDLE; ///< Memory backing the depth staging buffer.
+            void* m_DepthStagingMapping = nullptr;                ///< Persistently mapped pointer for depth readback.
+            VkDeviceSize m_DepthStagingSize = 0;                  ///< Total number of bytes copied into the depth staging buffer.
+            uint32_t m_DepthBytesPerPixel = 0;                    ///< Bytes-per-pixel used to interpret the depth staging data.
         };
 
         // Offscreen rendering resources keyed by viewport identifier so multiple panels can co-exist.
