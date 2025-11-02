@@ -58,6 +58,67 @@ else()
   )
 endif()
 
+# Provide a portable imported target for ONNX Runtime so CMake can link against it.
+if(NOT TARGET onnxruntime::onnxruntime)
+  # Allow developers to override the default SDK location when they have a custom install.
+  set(TRIDENT_ONNXRUNTIME_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/vendor/onnxruntime" CACHE PATH
+    "Root directory containing the ONNX Runtime SDK")
+
+  # Discover the public headers that ship with the runtime distribution.
+  find_path(ONNXRUNTIME_INCLUDE_DIR
+    NAMES onnxruntime_cxx_api.h onnxruntime_c_api.h
+    HINTS
+      "${TRIDENT_ONNXRUNTIME_ROOT}/include"
+      "${TRIDENT_ONNXRUNTIME_ROOT}"
+  )
+
+  # Locate the linker import library or shared object depending on the platform.
+  find_library(ONNXRUNTIME_LIBRARY
+    NAMES onnxruntime
+    HINTS
+      "${TRIDENT_ONNXRUNTIME_ROOT}/lib"
+      "${TRIDENT_ONNXRUNTIME_ROOT}/lib64"
+      "${TRIDENT_ONNXRUNTIME_ROOT}"
+  )
+
+  if(NOT ONNXRUNTIME_INCLUDE_DIR OR NOT ONNXRUNTIME_LIBRARY)
+    message(FATAL_ERROR
+      "Unable to locate ONNX Runtime. Update TRIDENT_ONNXRUNTIME_ROOT to a valid SDK directory.")
+  endif()
+
+  add_library(onnxruntime::onnxruntime UNKNOWN IMPORTED)
+  set_target_properties(onnxruntime::onnxruntime PROPERTIES
+    INTERFACE_INCLUDE_DIRECTORIES "${ONNXRUNTIME_INCLUDE_DIR}"
+  )
+
+  if(WIN32)
+    # Windows packages ship a DLL alongside an import library. Prefer both when available.
+    find_file(ONNXRUNTIME_DLL
+      NAMES onnxruntime.dll
+      HINTS
+        "${TRIDENT_ONNXRUNTIME_ROOT}/bin"
+        "${TRIDENT_ONNXRUNTIME_ROOT}"
+    )
+
+    if(ONNXRUNTIME_DLL)
+      set_target_properties(onnxruntime::onnxruntime PROPERTIES
+        IMPORTED_IMPLIB "${ONNXRUNTIME_LIBRARY}"
+        IMPORTED_LOCATION "${ONNXRUNTIME_DLL}"
+      )
+    else()
+      # Fallback for static or unusual packaging layouts.
+      set_target_properties(onnxruntime::onnxruntime PROPERTIES
+        IMPORTED_LOCATION "${ONNXRUNTIME_LIBRARY}"
+      )
+    endif()
+  else()
+    # Non-Windows platforms link directly against the shared object or static library.
+    set_target_properties(onnxruntime::onnxruntime PROPERTIES
+      IMPORTED_LOCATION "${ONNXRUNTIME_LIBRARY}"
+    )
+  endif()
+endif()
+
 include(FetchContent)
 
 set(ASSIMP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
