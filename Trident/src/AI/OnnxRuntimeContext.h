@@ -79,7 +79,7 @@ namespace Trident
              * Expose the underlying ONNX Runtime environment for advanced
              * diagnostics when needed. Normal callers should not need this but
              * it provides an escape hatch without compromising encapsulation.
-             */
+             */ 
             const Ort::Env& GetEnvironment() const;
 
         private:

@@ -16,7 +16,9 @@ target_link_options(${PROJECT_NAME} PRIVATE
     $<$<CONFIG:Release>:/ENTRY:mainCRTStartup>
 )
 
+# -----------------------------------------------------------------
 # Shader compilation
+# -----------------------------------------------------------------
 find_program(GLSLANG_VALIDATOR glslangValidator HINTS $ENV{VULKAN_SDK}/Bin)
 set(SHADER_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/Assets/Shaders)
 set(SHADER_BIN_DIR ${SHADER_SRC_DIR})
@@ -37,7 +39,7 @@ if(GLSLANG_VALIDATOR)
         COMMAND ${CMAKE_COMMAND} -E make_directory "${_spv_dir}"
         COMMAND ${GLSLANG_VALIDATOR} -V "${SRC}" -o "${SPV}"
         DEPENDS "${SRC}"
-        COMMENT "Compiling GLSL ==> SPIR-V: ${SHADER_FILE}"
+        COMMENT "Compiling GLSL -> SPIR-V: ${SHADER_FILE}"
         VERBATIM
     )
     list(APPEND SPIRV_OUTPUTS ${SPV})
@@ -48,11 +50,23 @@ else()
   message(WARNING "glslangValidator not found; relying on runtime shader compilation.")
 endif()
 
+# -----------------------------------------------------------------
 # Copy assets
+# -----------------------------------------------------------------
 set(ASSETS_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/Assets)
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
             "${ASSETS_SRC_DIR}"
             "$<TARGET_FILE_DIR:${PROJECT_NAME}>/Assets"
     COMMENT "Copying assets to runtime output..."
+)
+
+# -----------------------------------------------------------------
+# Copy ONNX Runtime DLL next to the executable
+# -----------------------------------------------------------------
+add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${ONNXRUNTIME_DLL_PATH}"
+            "$<TARGET_FILE_DIR:${PROJECT_NAME}>"
+    COMMENT "Copying onnxruntime.dll -> output"
 )

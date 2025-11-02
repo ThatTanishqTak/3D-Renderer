@@ -10,7 +10,6 @@ set(VULKAN_SDK_PATH $ENV{VULKAN_SDK})
 
 find_path(VULKAN_INCLUDE_DIR NAMES vulkan/vulkan.h HINTS "${VULKAN_SDK_PATH}/Include")
 find_library(VULKAN_LIBRARY NAMES vulkan-1 HINTS "${VULKAN_SDK_PATH}/Lib")
-
 if(NOT VULKAN_INCLUDE_DIR OR NOT VULKAN_LIBRARY)
   message(FATAL_ERROR "Unable to find Vulkan headers or lib in ${VULKAN_SDK_PATH}")
 endif()
@@ -18,7 +17,7 @@ endif()
 find_package(Vulkan REQUIRED)
 include(FetchContent)
 
-# Vendor libraries
+# Vendor libraries -------------------------------------------------
 add_library(glm INTERFACE)
 target_include_directories(glm INTERFACE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/vendor/glm>)
 
@@ -45,7 +44,7 @@ else()
   set_target_properties(libktx PROPERTIES IMPORTED_LOCATION "${CMAKE_CURRENT_SOURCE_DIR}/vendor/libktx/lib/libktx.so")
 endif()
 
-# Assimp
+# Assimp -----------------------------------------------------------
 set(ASSIMP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(ASSIMP_BUILD_ASSIMP_TOOLS OFF CACHE BOOL "" FORCE)
 set(ASSIMP_BUILD_ALL_EXPORTERS_BY_DEFAULT OFF CACHE BOOL "" FORCE)
@@ -56,13 +55,13 @@ set(ASSIMP_INSTALL OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(assimp URL https://github.com/assimp/assimp/archive/refs/tags/v5.3.1.zip)
 FetchContent_MakeAvailable(assimp)
 
-# ImGuizmo
+# ImGuizmo ---------------------------------------------------------
 set(IMGUIZMO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/vendor/imguizmo")
 add_library(imguizmo STATIC ${IMGUIZMO_ROOT}/ImGuizmo.cpp)
 target_include_directories(imguizmo PUBLIC $<BUILD_INTERFACE:${IMGUIZMO_ROOT}>)
 target_link_libraries(imguizmo PUBLIC imgui)
 
-# Trident source
+# Trident source ---------------------------------------------------
 file(GLOB_RECURSE TRIDENT_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp ${CMAKE_CURRENT_SOURCE_DIR}/src/*.h)
 add_library(${PROJECT_NAME} STATIC ${TRIDENT_SOURCES})
 
@@ -78,7 +77,7 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
   onnxruntime::headers
 )
 
-# Options
+# Options ----------------------------------------------------------
 option(TRIDENT_ENABLE_VALIDATION "Enable Vulkan Validation Layers" ON)
 if(TRIDENT_ENABLE_VALIDATION)
   target_compile_definitions(${PROJECT_NAME} PUBLIC TRIDENT_VALIDATION_LAYERS=1)
