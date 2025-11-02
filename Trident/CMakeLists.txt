@@ -73,15 +73,9 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 
 target_link_libraries(${PROJECT_NAME} PUBLIC
   Vulkan::Vulkan
-  glm
-  spdlog
-  imguizmo
-  stb
-  tinyexr
-  libktx
-  assimp::assimp
-  onnxruntime           # static lib
-  onnxruntime_headers   # includes
+  glm spdlog imguizmo stb tinyexr libktx assimp::assimp
+  onnxruntime::onnxruntime
+  onnxruntime::headers
 )
 
 # Options

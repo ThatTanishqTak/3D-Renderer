@@ -26,6 +26,3 @@
 [submodule "Trident/vendor/nanosvg"]
 	path = Trident/vendor/nanosvg
 	url = https://github.com/ThatTanishqTak/nanosvg.git
-[submodule "Trident/vendor/onnxruntime"]
-	path = Trident/vendor/onnxruntime
-	url = https://github.com/microsoft/onnxruntime.git

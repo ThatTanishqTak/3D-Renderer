@@ -1,4 +1,4 @@
-include(FetchContent)
+﻿include(FetchContent)
 
 # -------------------------------------------------
 # GLFW
@@ -45,48 +45,57 @@ target_include_directories(imgui PUBLIC
 target_link_libraries(imgui PUBLIC glfw Vulkan::Vulkan)
 
 # -------------------------------------------------
-# ONNX Runtime � static build
+# ONNX Runtime v1.23.2 – Pre-built CPU (x64 Windows)
 # -------------------------------------------------
-set(onnxruntime_BUILD_SHARED_LIB OFF CACHE BOOL "Build ONNX Runtime as static libraries" FORCE)
-set(onnxruntime_BUILD_UNIT_TESTS OFF CACHE BOOL "Disable ONNX Runtime unit tests" FORCE)
-set(onnxruntime_ENABLE_CPU_EP ON CACHE BOOL "Enable the CPU execution provider" FORCE)
-set(onnxruntime_ENABLE_CUDA OFF CACHE BOOL "Disable CUDA execution provider" FORCE)
-set(onnxruntime_ENABLE_ROCM OFF CACHE BOOL "Disable ROCm execution provider" FORCE)
-set(onnxruntime_ENABLE_OPENVINO OFF CACHE BOOL "Disable OpenVINO execution provider" FORCE)
-set(onnxruntime_ENABLE_TENSORRT OFF CACHE BOOL "Disable TensorRT execution provider" FORCE)
-set(onnxruntime_ENABLE_DNNL OFF CACHE BOOL "Disable oneDNN execution provider" FORCE)
-set(onnxruntime_ENABLE_NNAPI OFF CACHE BOOL "Disable NNAPI execution provider" FORCE)
-set(onnxruntime_ENABLE_COREML OFF CACHE BOOL "Disable CoreML execution provider" FORCE)
-set(onnxruntime_ENABLE_TVM OFF CACHE BOOL "Disable TVM execution provider" FORCE)
-set(onnxruntime_ENABLE_VITISAI OFF CACHE BOOL "Disable Vitis AI execution provider" FORCE)
-set(onnxruntime_ENABLE_OPENCL OFF CACHE BOOL "Disable OpenCL execution provider" FORCE)
-set(onnxruntime_ENABLE_MIGRAPHX OFF CACHE BOOL "Disable MIGraphX execution provider" FORCE)
+set(ORT_VERSION "1.23.2")
+set(ORT_PACKAGE "onnxruntime-win-x64-${ORT_VERSION}")
 
 FetchContent_Declare(
-  onnxruntime
-  GIT_REPOSITORY https://github.com/microsoft/onnxruntime.git
-  GIT_TAG v1.23.2
+  ort_sdk
+  URL "https://github.com/microsoft/onnxruntime/releases/download/v${ORT_VERSION}/${ORT_PACKAGE}.zip"
+  SOURCE_DIR "${CMAKE_BINARY_DIR}/_deps/ort-sdk"
 )
-FetchContent_MakeAvailable(onnxruntime)
 
-# -------------------------------------------------
-# Fix: Properly expose ONNX Runtime headers
-# -------------------------------------------------
-# Get the source directory
-get_target_property(ONNXRUNTIME_SOURCE_DIR onnxruntime SOURCE_DIR)
-if(NOT ONNXRUNTIME_SOURCE_DIR)
-  message(FATAL_ERROR "ONNX Runtime source directory not found!")
+FetchContent_GetProperties(ort_sdk)
+if(NOT ort_sdk_POPULATED)
+  message(STATUS "Downloading ONNX Runtime v${ORT_VERSION} (CPU)...")
+  FetchContent_Populate(ort_sdk)
 endif()
 
-# The actual include path is <source>/include
-set(ONNXRUNTIME_INCLUDE_DIR "${ONNXRUNTIME_SOURCE_DIR}/include")
+# Paths (official layout)
+set(ORT_ROOT    "${ort_sdk_SOURCE_DIR}")
+set(ORT_INCLUDE "${ORT_ROOT}/include")
+set(ORT_LIB     "${ORT_ROOT}/lib/onnxruntime.lib")
+set(ORT_DLL     "${ORT_ROOT}/lib/onnxruntime.dll")
 
-# Create interface library to propagate includes
-add_library(onnxruntime_headers INTERFACE)
-target_include_directories(onnxruntime_headers INTERFACE
-  "${ONNXRUNTIME_INCLUDE_DIR}"
+# Verify files exist
+if(NOT EXISTS "${ORT_INCLUDE}/onnxruntime_cxx_api.h")
+  message(FATAL_ERROR "ONNX Runtime headers missing! Expected: ${ORT_INCLUDE}/onnxruntime_cxx_api.h")
+endif()
+if(NOT EXISTS "${ORT_LIB}")
+  message(FATAL_ERROR "ONNX Runtime import library missing! Expected: ${ORT_LIB}")
+endif()
+if(NOT EXISTS "${ORT_DLL}")
+  message(FATAL_ERROR "ONNX Runtime DLL missing! Expected: ${ORT_DLL}")
+endif()
+
+# Modern CMake imported targets
+add_library(onnxruntime::headers INTERFACE)
+target_include_directories(onnxruntime::headers INTERFACE "${ORT_INCLUDE}")
+
+add_library(onnxruntime::onnxruntime STATIC IMPORTED)
+set_target_properties(onnxruntime::onnxruntime PROPERTIES
+  IMPORTED_LOCATION "${ORT_LIB}"
+  INTERFACE_INCLUDE_DIRECTORIES "${ORT_INCLUDE}"
 )
 
-# Optional: make target_link_libraries cleaner
-add_library(onnxruntime::onnxruntime ALIAS onnxruntime)
-add_library(onnxruntime::headers      ALIAS onnxruntime_headers)
+# Copy DLL to output directory
+add_custom_command(
+  TARGET Trident-Forge POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
+          "${ORT_DLL}"
+          "$<TARGET_FILE_DIR:Trident-Forge>"
+  COMMENT "Copying onnxruntime.dll → output"
+)
+
+message(STATUS "ONNX Runtime v${ORT_VERSION} (CPU) ready!")
