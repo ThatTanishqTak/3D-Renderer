@@ -374,12 +374,22 @@ namespace Trident
         AI::FrameGenerator m_FrameGenerator;                   ///< Helper that owns the ONNX runtime bindings.
         std::vector<float> m_AiInterpolationBuffer;            ///< Latest AI output available for dependent passes.
         std::vector<float> m_PendingFrameReadback;             ///< Staging buffer populated once GPU readback hooks are ready.
+        std::vector<VkBuffer> m_FrameReadbackBuffers;          ///< CPU-visible buffers receiving colour copies per swapchain image.
+        std::vector<VkDeviceMemory> m_FrameReadbackMemory;     ///< Host-visible allocations backing the staging buffers.
+        std::vector<bool> m_FrameReadbackPending;              ///< Flags indicating which buffers contain fresh GPU data.
+        VkExtent2D m_FrameReadbackExtent{ 0, 0 };              ///< Cached extent used to validate copy/readback paths.
+        VkDeviceSize m_FrameReadbackBufferSize = 0;            ///< Expected byte size for each staging buffer.
+        uint32_t m_FrameReadbackBytesPerPixel = 0;             ///< Cached pixel stride derived from the swapchain format.
+        uint32_t m_FrameReadbackChannelCount = 0;              ///< Number of colour channels copied into the staging buffer.
 
     private:
         // Core setup
         void ProcessAiFrame();
         bool TryAcquireRenderedFrame(std::vector<float>& outPixels);
         std::optional<std::filesystem::path> ResolveAiModelPath() const;
+        void CreateOrResizeReadbackResources();
+        void DestroyReadbackResources();
+        void ResolvePendingReadback(uint32_t imageIndex);
 
         void CreateDescriptorPool();
         void CreateDefaultTexture();

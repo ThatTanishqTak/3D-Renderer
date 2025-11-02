@@ -44,6 +44,27 @@ namespace
 {
     constexpr const char* kDefaultTextureKey = "renderer://default-white";
 
+    struct SwapchainFormatInfo
+    {
+        uint32_t m_BytesPerPixel = 0; ///< Total bytes consumed by a single pixel in the swapchain format.
+        uint32_t m_ChannelCount = 0;  ///< Number of colour channels represented by the format.
+    };
+
+    SwapchainFormatInfo QuerySwapchainFormatInfo(VkFormat format)
+    {
+        // Extendable helper that converts the swapchain format into a CPU-friendly description.
+        switch (format)
+        {
+        case VK_FORMAT_B8G8R8A8_UNORM:
+        case VK_FORMAT_B8G8R8A8_SRGB:
+        case VK_FORMAT_R8G8B8A8_UNORM:
+        case VK_FORMAT_R8G8B8A8_SRGB:
+            return { 4u, 4u };
+        default:
+            return {};
+        }
+    }
+
     glm::mat4 ComposeTransform(const Trident::Transform& transform)
     {
         glm::mat4 l_Mat{ 1.0f };
@@ -208,7 +229,6 @@ namespace Trident
         CreateDefaultSkybox();
         CreateDescriptorSets();
 
-
         const uint32_t l_FrameCount = static_cast<uint32_t>(m_Swapchain.GetImageCount());
         m_TextRenderer.Init(m_Buffers, m_Commands, m_DescriptorPool, m_Pipeline.GetRenderPass(), l_FrameCount);
 
@@ -223,6 +243,9 @@ namespace Trident
         l_DefaultContext.m_Info.Position = { 0.0f, 0.0f };
         l_DefaultContext.m_Info.Size = { static_cast<float>(m_Swapchain.GetExtent().width), static_cast<float>(m_Swapchain.GetExtent().height) };
         l_DefaultContext.m_CachedExtent = { 0, 0 };
+
+        // Prepare CPU-visible staging resources so AI tooling can safely consume rendered pixels.
+        CreateOrResizeReadbackResources();
 
         VkFenceCreateInfo l_FenceInfo{ VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
         l_FenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
@@ -288,6 +311,9 @@ namespace Trident
 
         DestroySkyboxCubemap();
 
+        // Release the CPU-visible staging buffers used for AI readback before the buffer allocator is reset.
+        DestroyReadbackResources();
+
         for (auto& it_Texture : m_ImGuiTexturePool)
         {
             if (it_Texture)
@@ -335,6 +361,9 @@ namespace Trident
 
             return;
         }
+
+        // Resolve any completed GPU readback before new commands reuse the staging buffers for this swapchain image.
+        ResolvePendingReadback(l_ImageIndex);
 
         UpdateUniformBuffer(l_ImageIndex);
 
@@ -389,6 +418,7 @@ namespace Trident
                 {
                     const int64_t l_SafeLhs = std::max<int64_t>(a_Lhs, 1);
                     const int64_t l_SafeRhs = std::max<int64_t>(a_Rhs, 1);
+
                     return l_SafeLhs * l_SafeRhs;
                 }));
         }
@@ -396,14 +426,14 @@ namespace Trident
         std::vector<float> l_FrameReadback;
         if (!TryAcquireRenderedFrame(l_FrameReadback))
         {
-            // The GPU readback path has not supplied data yet. Future work will connect the renderer's transfer queues here.
+            // No fresh GPU readback is available. This occurs when the viewport resolution changes or the frame has not
+            // completed yet; the AI helper simply reuses the previous output in that scenario.
             return;
         }
 
         if (l_ExpectedElements > 0 && l_FrameReadback.size() != l_ExpectedElements)
         {
-            TR_CORE_WARN("AI frame generator received {} elements but expected {}. Skipping inference this frame.",
-                l_FrameReadback.size(), l_ExpectedElements);
+            TR_CORE_WARN("AI frame generator received {} elements but expected {}. Skipping inference this frame.", l_FrameReadback.size(), l_ExpectedElements);
             return;
         }
 
@@ -426,7 +456,130 @@ namespace Trident
 
         a_OutPixels = m_PendingFrameReadback;
         m_PendingFrameReadback.clear();
+
         return true;
+    }
+
+    void Renderer::CreateOrResizeReadbackResources()
+    {
+        const VkExtent2D l_TargetExtent = m_Swapchain.GetExtent();
+        const uint32_t l_ImageCount = m_Swapchain.GetImageCount();
+        const SwapchainFormatInfo l_FormatInfo = QuerySwapchainFormatInfo(m_Swapchain.GetImageFormat());
+
+        if (l_TargetExtent.width == 0 || l_TargetExtent.height == 0 || l_ImageCount == 0 || l_FormatInfo.m_BytesPerPixel == 0 || l_FormatInfo.m_ChannelCount == 0)
+        {
+            if (l_TargetExtent.width > 0 && l_TargetExtent.height > 0 && l_FormatInfo.m_BytesPerPixel == 0)
+            {
+                TR_CORE_WARN("Swapchain format {} is not supported for frame readback yet.", static_cast<int32_t>(m_Swapchain.GetImageFormat()));
+            }
+
+            // Either the swapchain is minimised or we encountered an unsupported format; clear any stale allocations.
+            DestroyReadbackResources();
+
+            return;
+        }
+
+        const VkDeviceSize l_BufferSize = static_cast<VkDeviceSize>(l_TargetExtent.width) * static_cast<VkDeviceSize>(l_TargetExtent.height) * l_FormatInfo.m_BytesPerPixel;
+
+        const bool l_MatchingExtent = (m_FrameReadbackExtent.width == l_TargetExtent.width) && (m_FrameReadbackExtent.height == l_TargetExtent.height);
+        const bool l_MatchingSize = (m_FrameReadbackBufferSize == l_BufferSize);
+        const bool l_MatchingCount = (m_FrameReadbackBuffers.size() == l_ImageCount);
+
+        if (l_MatchingExtent && l_MatchingSize && l_MatchingCount)
+        {
+            return;
+        }
+
+        DestroyReadbackResources();
+
+        m_FrameReadbackBuffers.resize(l_ImageCount, VK_NULL_HANDLE);
+        m_FrameReadbackMemory.resize(l_ImageCount, VK_NULL_HANDLE);
+        m_FrameReadbackPending.assign(l_ImageCount, false);
+
+        for (uint32_t it_Index = 0; it_Index < l_ImageCount; ++it_Index)
+        {
+            VkBuffer l_Buffer = VK_NULL_HANDLE;
+            VkDeviceMemory l_Memory = VK_NULL_HANDLE;
+            m_Buffers.CreateBuffer(l_BufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, l_Buffer, l_Memory);
+
+            m_FrameReadbackBuffers[it_Index] = l_Buffer;
+            m_FrameReadbackMemory[it_Index] = l_Memory;
+        }
+
+        m_FrameReadbackExtent = l_TargetExtent;
+        m_FrameReadbackBufferSize = l_BufferSize;
+        m_FrameReadbackBytesPerPixel = l_FormatInfo.m_BytesPerPixel;
+        m_FrameReadbackChannelCount = l_FormatInfo.m_ChannelCount;
+
+        TR_CORE_TRACE("Frame readback staging resized to {}x{} ({} bytes per pixel, {} buffers)", l_TargetExtent.width, l_TargetExtent.height, 
+            l_FormatInfo.m_BytesPerPixel, l_ImageCount);
+    }
+
+    void Renderer::DestroyReadbackResources()
+    {
+        for (size_t it_Index = 0; it_Index < m_FrameReadbackBuffers.size(); ++it_Index)
+        {
+            VkBuffer& l_Buffer = m_FrameReadbackBuffers[it_Index];
+            VkDeviceMemory l_Memory = (it_Index < m_FrameReadbackMemory.size()) ? m_FrameReadbackMemory[it_Index] : VK_NULL_HANDLE;
+            if (l_Buffer != VK_NULL_HANDLE || l_Memory != VK_NULL_HANDLE)
+            {
+                m_Buffers.DestroyBuffer(l_Buffer, l_Memory);
+            }
+        }
+
+        m_FrameReadbackBuffers.clear();
+        m_FrameReadbackMemory.clear();
+        m_FrameReadbackPending.clear();
+        m_FrameReadbackExtent = { 0, 0 };
+        m_FrameReadbackBufferSize = 0;
+        m_FrameReadbackBytesPerPixel = 0;
+        m_FrameReadbackChannelCount = 0;
+        m_PendingFrameReadback.clear();
+    }
+
+    void Renderer::ResolvePendingReadback(uint32_t imageIndex)
+    {
+        if (imageIndex >= m_FrameReadbackBuffers.size())
+        {
+            return;
+        }
+
+        if (!m_FrameReadbackPending[imageIndex])
+        {
+            return;
+        }
+
+        if (m_FrameReadbackBufferSize == 0 || m_FrameReadbackChannelCount == 0)
+        {
+            m_FrameReadbackPending[imageIndex] = false;
+            return;
+        }
+
+        VkDevice l_Device = Startup::GetDevice();
+        void* l_Mapped = nullptr;
+        if (vkMapMemory(l_Device, m_FrameReadbackMemory[imageIndex], 0, m_FrameReadbackBufferSize, 0, &l_Mapped) != VK_SUCCESS)
+        {
+            TR_CORE_CRITICAL("Failed to map frame readback buffer {}", imageIndex);
+            m_FrameReadbackPending[imageIndex] = false;
+
+            return;
+        }
+
+        const uint8_t* l_SourceBytes = static_cast<const uint8_t*>(l_Mapped);
+        const size_t l_PixelCount = static_cast<size_t>(m_FrameReadbackExtent.width) * static_cast<size_t>(m_FrameReadbackExtent.height);
+        const size_t l_TotalElements = l_PixelCount * static_cast<size_t>(m_FrameReadbackChannelCount);
+        m_PendingFrameReadback.resize(l_TotalElements);
+
+        const float l_Normalise = 1.0f / 255.0f;
+        for (size_t it_Index = 0; it_Index < l_TotalElements; ++it_Index)
+        {
+            const uint8_t l_Value = l_SourceBytes[it_Index];
+            // Normalise the byte channels so downstream AI code can consume standardised [0,1] data.
+            m_PendingFrameReadback[it_Index] = static_cast<float>(l_Value) * l_Normalise;
+        }
+
+        vkUnmapMemory(l_Device, m_FrameReadbackMemory[imageIndex]);
+        m_FrameReadbackPending[imageIndex] = false;
     }
 
     std::optional<std::filesystem::path> Renderer::ResolveAiModelPath() const
@@ -1790,6 +1943,9 @@ namespace Trident
         {
             DestroyOffscreenResources(m_ActiveViewportId);
         }
+
+        // Ensure the readback staging buffers match the refreshed swapchain geometry.
+        CreateOrResizeReadbackResources();
         m_TextRenderer.RecreatePipeline(m_Pipeline.GetRenderPass());
     }
 
@@ -3687,6 +3843,47 @@ namespace Trident
 
         if (l_PrimaryViewportActive)
         {
+            if (imageIndex < m_FrameReadbackBuffers.size() && imageIndex < m_FrameReadbackPending.size())
+            {
+                const bool l_ExtentMatches = (m_FrameReadbackExtent.width == l_PrimaryTarget->m_Extent.width) && (m_FrameReadbackExtent.height == l_PrimaryTarget->m_Extent.height);
+                VkBuffer l_ReadbackBuffer = m_FrameReadbackBuffers[imageIndex];
+
+                if (l_ExtentMatches && l_ReadbackBuffer != VK_NULL_HANDLE)
+                {
+                    VkBufferImageCopy l_ReadbackRegion{};
+                    l_ReadbackRegion.bufferOffset = 0;
+                    l_ReadbackRegion.bufferRowLength = 0;
+                    l_ReadbackRegion.bufferImageHeight = 0;
+                    l_ReadbackRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                    l_ReadbackRegion.imageSubresource.mipLevel = 0;
+                    l_ReadbackRegion.imageSubresource.baseArrayLayer = 0;
+                    l_ReadbackRegion.imageSubresource.layerCount = 1;
+                    l_ReadbackRegion.imageOffset = { 0, 0, 0 };
+                    l_ReadbackRegion.imageExtent = { l_PrimaryTarget->m_Extent.width, l_PrimaryTarget->m_Extent.height, 1 };
+
+                    // Copy the rendered colour attachment into a CPU-visible buffer so AI tooling can inspect the pixels.
+                    vkCmdCopyImageToBuffer(l_CommandBuffer, l_PrimaryTarget->m_Image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, l_ReadbackBuffer, 1, &l_ReadbackRegion);
+
+                    VkBufferMemoryBarrier l_ReadbackBarrier{ VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER };
+                    l_ReadbackBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                    l_ReadbackBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                    l_ReadbackBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+                    l_ReadbackBarrier.dstAccessMask = VK_ACCESS_HOST_READ_BIT;
+                    l_ReadbackBarrier.buffer = l_ReadbackBuffer;
+                    l_ReadbackBarrier.offset = 0;
+                    l_ReadbackBarrier.size = VK_WHOLE_SIZE;
+
+                    vkCmdPipelineBarrier(l_CommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT, 0, 0, nullptr, 1, &l_ReadbackBarrier, 0, nullptr);
+
+                    m_FrameReadbackPending[imageIndex] = true;
+                }
+                else
+                {
+                    // Resolution mismatches are expected once asynchronous readback arrives; skip the copy for now.
+                    m_FrameReadbackPending[imageIndex] = false;
+                }
+            }
+
             // Multi-panel path: copy the rendered viewport into the swapchain image so every editor panel sees a synchronized back buffer.
             VkImageBlit l_BlitRegion{};
             l_BlitRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -3730,6 +3927,11 @@ namespace Trident
         }
         else
         {
+            if (imageIndex < m_FrameReadbackPending.size())
+            {
+                m_FrameReadbackPending[imageIndex] = false;
+            }
+
             // Legacy path clear performed via transfer op now that the render pass load operation no longer performs it implicitly.
             VkClearColorValue l_ClearValue{};
             l_ClearValue.float32[0] = m_ClearColor.r;
