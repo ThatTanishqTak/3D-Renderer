@@ -51,6 +51,12 @@ namespace Trident
             m_RuntimeContext = &AI::OnnxRuntimeContext::Get();
         }
 
+        FrameGenerator::~FrameGenerator()
+        {
+            // Ensure the worker thread is stopped before the owning subsystem shuts down.
+            ResetState();
+        }
+
         bool FrameGenerator::Initialise(const std::filesystem::path& modelPath)
         {
             ResetState();
@@ -89,6 +95,10 @@ namespace Trident
                 return false;
             }
 
+            // The model metadata is ready, so spin up the background worker that will service inference jobs.
+            m_WorkerShouldStop = false;
+            m_WorkerThread = std::thread(&FrameGenerator::WorkerLoop, this);
+
             m_IsInitialised = true;
 
             return true;
@@ -115,61 +125,36 @@ namespace Trident
                 return false;
             }
 
-            std::vector<const char*> l_InputNames;
-            l_InputNames.reserve(m_InputBindings.size());
-            for (const TensorBinding& it_Binding : m_InputBindings)
+            FrameJob l_Job{};
+            l_Job.m_InputTensor.assign(frameData.begin(), frameData.end()); // Copy into a stable buffer the worker thread can consume.
+
             {
-                l_InputNames.push_back(it_Binding.m_Name.c_str());
+                std::scoped_lock l_Lock(m_QueueMutex);
+                m_PendingJobs.emplace_back(std::move(l_Job));
             }
+            m_QueueCondition.notify_one();
 
-            std::vector<Ort::Value> l_InputTensors;
-            l_InputTensors.reserve(m_InputBindings.size());
+            return true;
+        }
 
-            try
+        std::vector<float> FrameGenerator::GetLastOutput() const
+        {
+            std::scoped_lock l_Lock(m_OutputMutex);
+            return m_LastOutputTensor;
+        }
+
+        bool FrameGenerator::TryConsumeOutput(std::vector<float>& a_OutOutput)
+        {
+            std::scoped_lock l_Lock(m_OutputMutex);
+            if (m_CompletedOutputs.empty())
             {
-                // TODO: Extend this to support multi-input models when the engine begins to leverage them.
-                Ort::Value a_FrameTensor = m_RuntimeContext->CreateTensorFloat(frameData, l_PrimaryInput.m_Shape);
-                l_InputTensors.emplace_back(std::move(a_FrameTensor));
-
-                std::vector<const char*> l_OutputNames;
-                l_OutputNames.reserve(m_OutputBindings.size());
-                for (const TensorBinding& it_Binding : m_OutputBindings)
-                {
-                    l_OutputNames.push_back(it_Binding.m_Name.c_str());
-                }
-
-                auto a_OutputTensors = m_RuntimeContext->Run(m_ModelKey, l_InputNames, l_InputTensors, l_OutputNames);
-
-                m_LastOutputTensor.clear();
-                for (size_t it_Index = 0; it_Index < a_OutputTensors.size(); ++it_Index)
-                {
-                    const Ort::Value& l_Output = a_OutputTensors[it_Index];
-                    const Ort::TensorTypeAndShapeInfo l_Info = l_Output.GetTensorTypeAndShapeInfo();
-                    const size_t l_ElementCount = static_cast<size_t>(l_Info.GetElementCount());
-                    const float* l_Data = l_Output.GetTensorData<float>();
-                    if (l_Data == nullptr)
-                    {
-                        TR_CORE_WARN("Output tensor {} did not contain any data.", it_Index);
-                        continue;
-                    }
-
-                    const size_t l_WriteOffset = m_LastOutputTensor.size();
-                    m_LastOutputTensor.resize(l_WriteOffset + l_ElementCount);
-                    std::copy(l_Data, l_Data + l_ElementCount, m_LastOutputTensor.begin() + static_cast<std::ptrdiff_t>(l_WriteOffset));
-                }
-            }
-            catch (const Ort::Exception& l_Exception)
-            {
-                TR_CORE_ERROR("ONNX runtime rejected a frame submission: {}", l_Exception.what());
-                return false;
-            }
-            catch (const std::exception& l_Exception)
-            {
-                TR_CORE_ERROR("Unexpected failure during AI frame processing: {}", l_Exception.what());
                 return false;
             }
 
-            return !m_LastOutputTensor.empty();
+            a_OutOutput = std::move(m_CompletedOutputs.front());
+            m_CompletedOutputs.pop_front();
+
+            return true;
         }
 
         std::span<const int64_t> FrameGenerator::GetPrimaryInputShape() const
@@ -225,10 +210,131 @@ namespace Trident
 
         void FrameGenerator::ResetState()
         {
+            // Tear down the asynchronous pipeline so a subsequent Initialise call starts from a clean slate.
+            {
+                std::unique_lock<std::mutex> l_Lock(m_QueueMutex);
+                m_WorkerShouldStop = true;
+                m_QueueCondition.notify_all();
+            }
+
+            if (m_WorkerThread.joinable())
+            {
+                m_WorkerThread.join();
+            }
+
+            {
+                std::scoped_lock l_Lock(m_QueueMutex);
+                m_PendingJobs.clear();
+                m_WorkerShouldStop = false;
+            }
+
+            {
+                std::scoped_lock l_Lock(m_OutputMutex);
+                m_CompletedOutputs.clear();
+            }
+
             m_IsInitialised = false;
             m_InputBindings.clear();
             m_OutputBindings.clear();
             m_LastOutputTensor.clear();
+        }
+
+        void FrameGenerator::WorkerLoop()
+        {
+            // Process frames submitted by the renderer until shutdown is requested.
+            while (true)
+            {
+                FrameJob l_Job{};
+                {
+                    std::unique_lock<std::mutex> l_Lock(m_QueueMutex);
+                    m_QueueCondition.wait(l_Lock, [this]()
+                        {
+                            return m_WorkerShouldStop || !m_PendingJobs.empty();
+                        });
+
+                    if (m_WorkerShouldStop)
+                    {
+                        break;
+                    }
+
+                    l_Job = std::move(m_PendingJobs.front());
+                    m_PendingJobs.pop_front();
+                }
+
+                if (l_Job.m_InputTensor.empty())
+                {
+                    continue;
+                }
+
+                std::vector<float> l_CombinedOutput;
+
+                try
+                {
+                    std::vector<const char*> l_InputNames;
+                    l_InputNames.reserve(m_InputBindings.size());
+                    for (const TensorBinding& it_Binding : m_InputBindings)
+                    {
+                        l_InputNames.push_back(it_Binding.m_Name.c_str());
+                    }
+
+                    std::vector<Ort::Value> l_InputTensors;
+                    l_InputTensors.reserve(m_InputBindings.size());
+
+                    // TODO: Extend this to support multi-input models when the engine begins to leverage them.
+                    Ort::Value l_FrameTensor = m_RuntimeContext->CreateTensorFloat(l_Job.m_InputTensor, m_InputBindings.front().m_Shape);
+                    l_InputTensors.emplace_back(std::move(l_FrameTensor));
+
+                    std::vector<const char*> l_OutputNames;
+                    l_OutputNames.reserve(m_OutputBindings.size());
+                    for (const TensorBinding& it_Binding : m_OutputBindings)
+                    {
+                        l_OutputNames.push_back(it_Binding.m_Name.c_str());
+                    }
+
+                    auto a_OutputTensors = m_RuntimeContext->Run(m_ModelKey, l_InputNames, l_InputTensors, l_OutputNames);
+
+                    for (size_t it_Index = 0; it_Index < a_OutputTensors.size(); ++it_Index)
+                    {
+                        const Ort::Value& l_Output = a_OutputTensors[it_Index];
+                        const Ort::TensorTypeAndShapeInfo l_Info = l_Output.GetTensorTypeAndShapeInfo();
+                        const size_t l_ElementCount = static_cast<size_t>(l_Info.GetElementCount());
+                        const float* l_Data = l_Output.GetTensorData<float>();
+                        if (l_Data == nullptr)
+                        {
+                            TR_CORE_WARN("Output tensor {} did not contain any data.", it_Index);
+                            continue;
+                        }
+
+                        const size_t l_WriteOffset = l_CombinedOutput.size();
+                        l_CombinedOutput.resize(l_WriteOffset + l_ElementCount);
+                        std::copy(l_Data, l_Data + l_ElementCount, l_CombinedOutput.begin() + static_cast<std::ptrdiff_t>(l_WriteOffset));
+                    }
+                }
+                catch (const Ort::Exception& l_Exception)
+                {
+                    TR_CORE_ERROR("ONNX runtime rejected a frame submission: {}", l_Exception.what());
+                    continue;
+                }
+                catch (const std::exception& l_Exception)
+                {
+                    TR_CORE_ERROR("Unexpected failure during AI frame processing: {}", l_Exception.what());
+                    continue;
+                }
+
+                if (l_CombinedOutput.empty())
+                {
+                    continue;
+                }
+
+                std::vector<float> l_FinalOutput = std::move(l_CombinedOutput);
+                {
+                    std::scoped_lock l_Lock(m_OutputMutex);
+                    m_LastOutputTensor = l_FinalOutput;
+                    m_CompletedOutputs.emplace_back(l_FinalOutput);
+                }
+
+                // TODO: Investigate temporal accumulation, adaptive batching, and GPU buffer interop to further optimise the asynchronous path.
+            }
         }
     }
 }

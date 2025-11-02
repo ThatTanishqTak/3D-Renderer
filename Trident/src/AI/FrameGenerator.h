@@ -4,9 +4,13 @@
 
 #include <filesystem>
 #include <cstdint>
+#include <condition_variable>
+#include <deque>
+#include <mutex>
 #include <span>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <vector>
 
 namespace Trident
@@ -27,6 +31,7 @@ namespace Trident
         {
         public:
             FrameGenerator();
+            ~FrameGenerator();
 
             /**
              * @brief Load the requested model and cache its tensor metadata.
@@ -42,17 +47,25 @@ namespace Trident
             bool IsInitialised() const { return m_IsInitialised; }
 
             /**
-             * @brief Push the latest frame into the model and persist its outputs.
+             * @brief Enqueue the latest frame so the background worker can process it asynchronously.
              *
              * @param frameData Input tensor representing the rendered frame.
-             * @return true when inference completed successfully.
+             * @return true when the job was accepted by the queue.
              */
             bool ProcessFrame(std::span<const float> frameData);
 
             /**
-             * @brief Expose the cached output buffer so the renderer can feed later passes.
+             * @brief Attempt to retrieve the most recent output tensor produced by the worker thread.
+             *
+             * The method never blocks; callers can poll it each frame and only copy data when a new
+             * inference result is available.
              */
-            const std::vector<float>& GetLastOutput() const { return m_LastOutputTensor; }
+            bool TryConsumeOutput(std::vector<float>& a_OutOutput);
+
+            /**
+             * @brief Expose a copy of the cached output buffer so the renderer can feed later passes.
+             */
+            std::vector<float> GetLastOutput() const;
 
             /**
              * @brief Provide callers with the expected input shape.
@@ -60,6 +73,14 @@ namespace Trident
             std::span<const int64_t> GetPrimaryInputShape() const;
 
         private:
+            /**
+             * @brief Lightweight job object used by the background worker when dispatching inference.
+             */
+            struct FrameJob
+            {
+                std::vector<float> m_InputTensor; ///< Flattened tensor data copied from the renderer readback.
+            };
+
             struct TensorBinding
             {
                 std::string m_Name{};                ///< Graph binding name used during inference runs.
@@ -69,6 +90,7 @@ namespace Trident
 
             bool CacheModelBindings(const Ort::Session& session);
             void ResetState();
+            void WorkerLoop();
 
             std::string m_ModelKey{};                                   ///< Identifier supplied to OnnxRuntimeContext.
             AI::OnnxRuntimeContext* m_RuntimeContext = nullptr;          ///< Pointer to the shared runtime controller.
@@ -76,6 +98,13 @@ namespace Trident
             std::vector<TensorBinding> m_InputBindings;                  ///< Cached description of model inputs.
             std::vector<TensorBinding> m_OutputBindings;                 ///< Cached description of model outputs.
             std::vector<float> m_LastOutputTensor;                       ///< Flattened buffer storing the latest AI result.
+            std::deque<FrameJob> m_PendingJobs;                          ///< Queue of frames waiting to be processed asynchronously.
+            std::deque<std::vector<float>> m_CompletedOutputs;           ///< Queue of freshly generated AI outputs awaiting consumption.
+            std::mutex m_QueueMutex;                                     ///< Guards pending job access between producer and worker.
+            mutable std::mutex m_OutputMutex;                            ///< Guards completed output queue and cached tensor.
+            std::condition_variable m_QueueCondition;                    ///< Signals the worker thread when new jobs arrive.
+            std::thread m_WorkerThread;                                  ///< Dedicated worker responsible for running inference.
+            bool m_WorkerShouldStop = false;                             ///< Latch toggled during shutdown so the worker exits gracefully.
         };
     }
 }

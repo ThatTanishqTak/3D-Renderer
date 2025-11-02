@@ -409,6 +409,13 @@ namespace Trident
             return;
         }
 
+        // Poll for completed AI tensors before scheduling new work so post-processing can react immediately.
+        std::vector<float> l_CompletedOutput;
+        if (m_FrameGenerator.TryConsumeOutput(l_CompletedOutput) && !l_CompletedOutput.empty())
+        {
+            m_AiInterpolationBuffer = std::move(l_CompletedOutput);
+        }
+
         const std::span<const int64_t> l_PrimaryShape = m_FrameGenerator.GetPrimaryInputShape();
         size_t l_ExpectedElements = 0;
         if (!l_PrimaryShape.empty())
@@ -443,8 +450,7 @@ namespace Trident
             return;
         }
 
-        // Persist the output so subsequent passes can consume the AI augmentation data.
-        m_AiInterpolationBuffer = m_FrameGenerator.GetLastOutput();
+        // TODO: Once the async path matures, explore scheduling policies such as adaptive batching or prioritising history frames.
     }
 
     bool Renderer::TryAcquireRenderedFrame(std::vector<float>& a_OutPixels)
