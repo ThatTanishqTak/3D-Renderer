@@ -18,6 +18,9 @@ endif()
 add_definitions(-DGLFW_INCLUDE_VULKAN)
 find_package(Vulkan REQUIRED)
 
+# FetchContent is used for third-party dependencies such as ONNX Runtime and Assimp.
+include(FetchContent)
+
 add_library(glm INTERFACE)
 target_include_directories(glm INTERFACE
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/vendor/glm>
@@ -81,6 +84,49 @@ if(NOT TARGET onnxruntime::onnxruntime)
       "${TRIDENT_ONNXRUNTIME_ROOT}"
   )
 
+    # When the SDK is missing on Windows, pull in a known-good binary distribution automatically.
+  if((NOT ONNXRUNTIME_INCLUDE_DIR OR NOT ONNXRUNTIME_LIBRARY) AND WIN32)
+    set(TRIDENT_DEFAULT_ONNXRUNTIME_VERSION "1.16.3")
+    set(TRIDENT_DEFAULT_ONNXRUNTIME_PACKAGE "onnxruntime-win-x64-${TRIDENT_DEFAULT_ONNXRUNTIME_VERSION}")
+    set(TRIDENT_DEFAULT_ONNXRUNTIME_URL
+      "https://github.com/microsoft/onnxruntime/releases/download/v${TRIDENT_DEFAULT_ONNXRUNTIME_VERSION}/${TRIDENT_DEFAULT_ONNXRUNTIME_PACKAGE}.zip")
+
+    # Store the downloaded SDK inside the build tree so multiple configurations can reuse it.
+    set(TRIDENT_ONNXRUNTIME_DOWNLOAD_DIR "${CMAKE_BINARY_DIR}/_deps/onnxruntime")
+
+    FetchContent_Declare(trident_onnxruntime_sdk
+      URL "${TRIDENT_DEFAULT_ONNXRUNTIME_URL}"
+      SOURCE_DIR "${TRIDENT_ONNXRUNTIME_DOWNLOAD_DIR}/${TRIDENT_DEFAULT_ONNXRUNTIME_PACKAGE}"
+    )
+
+    FetchContent_GetProperties(trident_onnxruntime_sdk)
+    if(NOT trident_onnxruntime_sdk_POPULATED)
+      message(STATUS "Fetching ONNX Runtime ${TRIDENT_DEFAULT_ONNXRUNTIME_VERSION} because no local SDK was found.")
+      FetchContent_Populate(trident_onnxruntime_sdk)
+    endif()
+
+    set(TRIDENT_ONNXRUNTIME_ROOT "${trident_onnxruntime_sdk_SOURCE_DIR}" CACHE PATH
+      "Root directory containing the ONNX Runtime SDK" FORCE)
+
+    # Retry discovery with the freshly downloaded SDK.
+    find_path(ONNXRUNTIME_INCLUDE_DIR
+      NAMES onnxruntime_cxx_api.h onnxruntime_c_api.h
+      HINTS
+        "${TRIDENT_ONNXRUNTIME_ROOT}/include"
+        "${TRIDENT_ONNXRUNTIME_ROOT}"
+      NO_DEFAULT_PATH
+    )
+
+    find_library(ONNXRUNTIME_LIBRARY
+      NAMES onnxruntime
+      HINTS
+        "${TRIDENT_ONNXRUNTIME_ROOT}/lib"
+        "${TRIDENT_ONNXRUNTIME_ROOT}/lib64"
+        "${TRIDENT_ONNXRUNTIME_ROOT}"
+      NO_DEFAULT_PATH
+    )
+  endif()
+
   if(NOT ONNXRUNTIME_INCLUDE_DIR OR NOT ONNXRUNTIME_LIBRARY)
     message(FATAL_ERROR
       "Unable to locate ONNX Runtime. Update TRIDENT_ONNXRUNTIME_ROOT to a valid SDK directory.")
@@ -118,8 +164,6 @@ if(NOT TARGET onnxruntime::onnxruntime)
     )
   endif()
 endif()
-
-include(FetchContent)
 
 set(ASSIMP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(ASSIMP_BUILD_ASSIMP_TOOLS OFF CACHE BOOL "" FORCE)
