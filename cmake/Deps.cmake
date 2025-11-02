@@ -1,6 +1,8 @@
 include(FetchContent)
 
+# -------------------------------------------------
 # GLFW
+# -------------------------------------------------
 FetchContent_Declare(
   glfw
   GIT_REPOSITORY https://github.com/glfw/glfw.git
@@ -8,7 +10,9 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(glfw)
 
+# -------------------------------------------------
 # ImGui (docking branch)
+# -------------------------------------------------
 FetchContent_Declare(
   imgui
   GIT_REPOSITORY https://github.com/ocornut/imgui.git
@@ -16,14 +20,12 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(imgui)
 
-# Wrap Dear ImGui into a proper CMake target
 FetchContent_GetProperties(imgui)
 if (NOT imgui_POPULATED)
   FetchContent_Populate(imgui)
 endif()
 set(IMGUI_DIR ${imgui_SOURCE_DIR})
 
-# Vulkan backend
 find_package(Vulkan REQUIRED)
 
 add_library(imgui STATIC
@@ -40,18 +42,11 @@ target_include_directories(imgui PUBLIC
   ${IMGUI_DIR}/backends
 )
 
-# Link deps for Vulkan, not OpenGL
 target_link_libraries(imgui PUBLIC glfw Vulkan::Vulkan)
 
-#
-# ONNX Runtime
-# The renderer's neural components will rely on ONNX Runtime in the future. The
-# configuration below keeps the integration lightweight by limiting execution
-# providers and turning off optional components that are not required for a CPU
-#-centric static build.
-#
-
-# Disable optional functionality to keep the build conservative and portable.
+# -------------------------------------------------
+# ONNX Runtime – static build
+# -------------------------------------------------
 set(onnxruntime_BUILD_SHARED_LIB OFF CACHE BOOL "Build ONNX Runtime as static libraries" FORCE)
 set(onnxruntime_BUILD_UNIT_TESTS OFF CACHE BOOL "Disable ONNX Runtime unit tests" FORCE)
 set(onnxruntime_ENABLE_CPU_EP ON CACHE BOOL "Enable the CPU execution provider" FORCE)
@@ -67,11 +62,31 @@ set(onnxruntime_ENABLE_VITISAI OFF CACHE BOOL "Disable Vitis AI execution provid
 set(onnxruntime_ENABLE_OPENCL OFF CACHE BOOL "Disable OpenCL execution provider" FORCE)
 set(onnxruntime_ENABLE_MIGRAPHX OFF CACHE BOOL "Disable MIGraphX execution provider" FORCE)
 
-# Fetch the ONNX Runtime dependency so that targets can link against
-# onnxruntime::onnxruntime in future renderer components.
 FetchContent_Declare(
   onnxruntime
   GIT_REPOSITORY https://github.com/microsoft/onnxruntime.git
   GIT_TAG v1.23.2
 )
 FetchContent_MakeAvailable(onnxruntime)
+
+# -------------------------------------------------
+# Fix: Properly expose ONNX Runtime headers
+# -------------------------------------------------
+# Get the source directory
+get_target_property(ONNXRUNTIME_SOURCE_DIR onnxruntime SOURCE_DIR)
+if(NOT ONNXRUNTIME_SOURCE_DIR)
+  message(FATAL_ERROR "ONNX Runtime source directory not found!")
+endif()
+
+# The actual include path is <source>/include
+set(ONNXRUNTIME_INCLUDE_DIR "${ONNXRUNTIME_SOURCE_DIR}/include")
+
+# Create interface library to propagate includes
+add_library(onnxruntime_headers INTERFACE)
+target_include_directories(onnxruntime_headers INTERFACE
+  "${ONNXRUNTIME_INCLUDE_DIR}"
+)
+
+# Optional: make target_link_libraries cleaner
+add_library(onnxruntime::onnxruntime ALIAS onnxruntime)
+add_library(onnxruntime::headers      ALIAS onnxruntime_headers)

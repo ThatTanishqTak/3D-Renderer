@@ -1,16 +1,16 @@
 ﻿cmake_minimum_required(VERSION 3.20)
 project(3D-Renderer LANGUAGES CXX)
 
-# Enable discovery of helper modules (e.g., dependency declarations).
+# Enable discovery of helper modules
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 
-# Configure third-party dependencies before fetching them.
+# Configure third-party dependencies before fetching them
 set(GLFW_BUILD_WAYLAND OFF CACHE BOOL "" FORCE)
 
-# Centralize dependency fetching logic for third-party libraries.
+# Centralize dependency fetching
 include(Deps)
 
-# Share project-wide tooling helpers such as warnings and sanitizers.
+# Tooling (warnings, output dirs)
 include(Tooling)
 
 set(CMAKE_CXX_STANDARD 20)
@@ -25,7 +25,7 @@ endif()
 add_subdirectory(Trident)
 add_subdirectory(Trident-Forge)
 
-# Apply consistent warnings and sanitizer settings to the primary targets.
+# Apply warnings and sanitizers
 enable_project_warnings(Trident)
 enable_project_warnings(Trident-Forge)
 enable_sanitizers(Trident)
