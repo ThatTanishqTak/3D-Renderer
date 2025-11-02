@@ -590,22 +590,39 @@ namespace Trident
 
     std::optional<std::filesystem::path> Renderer::ResolveAiModelPath() const
     {
+        // Allow developers to override the bundled sample model when iterating on higher quality alternatives.
         const char* l_EnvironmentModel = std::getenv("TRIDENT_AI_MODEL");
         if (l_EnvironmentModel != nullptr && l_EnvironmentModel[0] != '\0')
         {
             const std::filesystem::path l_Candidate{ l_EnvironmentModel };
             if (std::filesystem::exists(l_Candidate))
             {
-                return l_Candidate;
+                return std::filesystem::absolute(l_Candidate);
             }
 
             TR_CORE_WARN("TRIDENT_AI_MODEL pointed at '{}' but the file does not exist. Falling back to default search paths.", l_Candidate.string());
         }
 
-        const std::filesystem::path l_DefaultPath = std::filesystem::path("Assets") / "AI" / "frame_generator.onnx";
-        if (std::filesystem::exists(l_DefaultPath))
+        // Search a handful of likely roots so both local runs and packaged builds resolve the shipped sample consistently.
+        const std::array<std::filesystem::path, 3> l_SearchRoots =
         {
-            return l_DefaultPath;
+            std::filesystem::current_path(),
+            std::filesystem::current_path().parent_path(),
+            std::filesystem::current_path().parent_path().parent_path()
+        };
+
+        for (const std::filesystem::path& it_Root : l_SearchRoots)
+        {
+            if (it_Root.empty())
+            {
+                continue;
+            }
+
+            const std::filesystem::path l_DefaultPath = it_Root / "Assets" / "AI" / "frame_generator.onnx";
+            if (std::filesystem::exists(l_DefaultPath))
+            {
+                return std::filesystem::absolute(l_DefaultPath);
+            }
         }
 
         // No model was found; the renderer can still run while we wire the asset pipeline to supply one.
