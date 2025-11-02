@@ -22,7 +22,11 @@
 #include <sstream>
 #include <iomanip>
 #include <filesystem>
+#include <cstdlib>
 #include <limits>
+#include <numeric>
+#include <optional>
+#include <cstdint>
 #include <ctime>
 #include <memory>
 #include <system_error>
@@ -145,6 +149,26 @@ namespace
 
 namespace Trident
 {
+    Renderer::Renderer()
+    {
+        // Attempt to locate an AI model so frame interpolation can be ready before the first render.
+        const std::optional<std::filesystem::path> l_ModelPath = ResolveAiModelPath();
+        if (!l_ModelPath.has_value())
+        {
+            TR_CORE_INFO("AI frame generator did not locate a model. Rendering will continue without AI augmentation until one is provided.");
+            return;
+        }
+
+        if (m_FrameGenerator.Initialise(l_ModelPath.value()))
+        {
+            TR_CORE_INFO("AI frame generator initialised with model '{}'", l_ModelPath->string());
+        }
+        else
+        {
+            TR_CORE_WARN("AI frame generator failed to initialise using model '{}'. Future frames will skip AI processing until a valid model is supplied.", l_ModelPath->string());
+        }
+    }
+
     Renderer::~Renderer()
     {
         if (!m_Shutdown)
@@ -323,6 +347,9 @@ namespace Trident
             return;
         }
 
+        // Once the main color pass is ready we can offer the frame to the AI helper.
+        ProcessAiFrame();
+
         // Capture the extent actually used when recording commands so our metrics reflect the final render target dimensions.
         l_FrameExtent = m_Swapchain.GetExtent();
 
@@ -344,6 +371,86 @@ namespace Trident
         const double l_FrameMilliseconds = std::chrono::duration<double, std::milli>(l_FrameEndTime - l_FrameStartTime).count();
         const double l_FrameFPS = l_FrameMilliseconds > 0.0 ? 1000.0 / l_FrameMilliseconds : 0.0;
         AccumulateFrameTiming(l_FrameMilliseconds, l_FrameFPS, l_FrameExtent, l_FrameWallClock);
+    }
+
+    void Renderer::ProcessAiFrame()
+    {
+        if (!m_FrameGenerator.IsInitialised())
+        {
+            return;
+        }
+
+        const std::span<const int64_t> l_PrimaryShape = m_FrameGenerator.GetPrimaryInputShape();
+        size_t l_ExpectedElements = 0;
+        if (!l_PrimaryShape.empty())
+        {
+            l_ExpectedElements = static_cast<size_t>(std::accumulate(l_PrimaryShape.begin(), l_PrimaryShape.end(), int64_t{ 1 },
+                [](int64_t a_Lhs, int64_t a_Rhs)
+                {
+                    const int64_t l_SafeLhs = std::max<int64_t>(a_Lhs, 1);
+                    const int64_t l_SafeRhs = std::max<int64_t>(a_Rhs, 1);
+                    return l_SafeLhs * l_SafeRhs;
+                }));
+        }
+
+        std::vector<float> l_FrameReadback;
+        if (!TryAcquireRenderedFrame(l_FrameReadback))
+        {
+            // The GPU readback path has not supplied data yet. Future work will connect the renderer's transfer queues here.
+            return;
+        }
+
+        if (l_ExpectedElements > 0 && l_FrameReadback.size() != l_ExpectedElements)
+        {
+            TR_CORE_WARN("AI frame generator received {} elements but expected {}. Skipping inference this frame.",
+                l_FrameReadback.size(), l_ExpectedElements);
+            return;
+        }
+
+        if (!m_FrameGenerator.ProcessFrame(l_FrameReadback))
+        {
+            TR_CORE_WARN("AI frame generator rejected the current frame. Retaining the previous AI output for now.");
+            return;
+        }
+
+        // Persist the output so subsequent passes can consume the AI augmentation data.
+        m_AiInterpolationBuffer = m_FrameGenerator.GetLastOutput();
+    }
+
+    bool Renderer::TryAcquireRenderedFrame(std::vector<float>& a_OutPixels)
+    {
+        if (m_PendingFrameReadback.empty())
+        {
+            return false;
+        }
+
+        a_OutPixels = m_PendingFrameReadback;
+        m_PendingFrameReadback.clear();
+        return true;
+    }
+
+    std::optional<std::filesystem::path> Renderer::ResolveAiModelPath() const
+    {
+        const char* l_EnvironmentModel = std::getenv("TRIDENT_AI_MODEL");
+        if (l_EnvironmentModel != nullptr && l_EnvironmentModel[0] != '\0')
+        {
+            const std::filesystem::path l_Candidate{ l_EnvironmentModel };
+            if (std::filesystem::exists(l_Candidate))
+            {
+                return l_Candidate;
+            }
+
+            TR_CORE_WARN("TRIDENT_AI_MODEL pointed at '{}' but the file does not exist. Falling back to default search paths.", l_Candidate.string());
+        }
+
+        const std::filesystem::path l_DefaultPath = std::filesystem::path("Assets") / "AI" / "frame_generator.onnx";
+        if (std::filesystem::exists(l_DefaultPath))
+        {
+            return l_DefaultPath;
+        }
+
+        // No model was found; the renderer can still run while we wire the asset pipeline to supply one.
+        return std::nullopt;
     }
 
     void Renderer::UploadMesh(const std::vector<Geometry::Mesh>& meshes, const std::vector<Geometry::Material>& materials, const std::vector<std::string>& textures)

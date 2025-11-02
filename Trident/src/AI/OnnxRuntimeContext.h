@@ -63,9 +63,7 @@ namespace Trident
              * Execute an inference run for the named model. Input and output
              * names must match the graph signature.
              */
-            std::vector<Ort::Value> Run(std::string_view modelName,
-                std::span<const char* const> inputNames,
-                std::span<const Ort::Value> inputs,
+            std::vector<Ort::Value> Run(std::string_view modelName, std::span<const char* const> inputNames, std::span<const Ort::Value> inputs,
                 std::span<const char* const> outputNames);
 
             /**

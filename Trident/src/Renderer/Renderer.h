@@ -12,6 +12,7 @@
 #include "Renderer/Commands.h"
 #include "Renderer/Skybox.h"
 #include "Renderer/TextRenderer.h"
+#include "AI/FrameGenerator.h"
 
 #include "Geometry/Mesh.h"
 #include "Geometry/Material.h"
@@ -36,8 +37,10 @@
 #include <chrono>
 #include <unordered_map>
 #include <limits>
+#include <optional>
 #include <string>
 #include <string_view>
+#include <filesystem>
 
 namespace Trident
 {
@@ -90,6 +93,7 @@ namespace Trident
             double AverageFPS = 0.0;
         };
 
+        Renderer();
         ~Renderer();
 
         void Init();
@@ -367,8 +371,16 @@ namespace Trident
         std::chrono::system_clock::time_point m_PerformanceCaptureStartTime{};
         std::vector<VkImageLayout> m_SwapchainDepthLayouts;
 
+        AI::FrameGenerator m_FrameGenerator;                   ///< Helper that owns the ONNX runtime bindings.
+        std::vector<float> m_AiInterpolationBuffer;            ///< Latest AI output available for dependent passes.
+        std::vector<float> m_PendingFrameReadback;             ///< Staging buffer populated once GPU readback hooks are ready.
+
     private:
         // Core setup
+        void ProcessAiFrame();
+        bool TryAcquireRenderedFrame(std::vector<float>& outPixels);
+        std::optional<std::filesystem::path> ResolveAiModelPath() const;
+
         void CreateDescriptorPool();
         void CreateDefaultTexture();
         void CreateDefaultSkybox();
