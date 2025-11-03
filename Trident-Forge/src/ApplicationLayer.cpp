@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cfloat>
 #include <filesystem>
 #include <cmath>
 #include <iterator>
@@ -345,6 +346,71 @@ void ApplicationLayer::RenderSceneToolbar()
             ImGui::TextColored(ImVec4(0.85f, 0.25f, 0.25f, 1.0f), "Recording...");
         }
 
+        ImGui::Separator();
+
+        // Pull the latest AI pipeline statistics so artists understand the state of the generator at a glance.
+        const Trident::Renderer::AiDebugStats l_AiStats = Trident::RenderCommand::GetAiDebugStats();
+        const bool l_ModelReady = l_AiStats.m_ModelInitialised;
+        const bool l_TextureReady = l_AiStats.m_TextureReady;
+        const bool l_DataStale = l_ModelReady && !l_TextureReady && (l_AiStats.m_CompletedInferenceCount == 0);
+
+        // Present a concise status line that captures initialisation, queue depth, and timing trends.
+        ImGui::Text("AI Model: %s | Queue: %zu pending | Resolution: %ux%u", l_ModelReady ? "Loaded" : "Loading", l_AiStats.m_PendingJobCount, l_AiStats.m_TextureExtent.width,
+            l_AiStats.m_TextureExtent.height);
+        ImGui::Text( "Last %.2f ms | Average %.2f ms | Completed %llu", l_AiStats.m_LastInferenceMilliseconds, l_AiStats.m_AverageInferenceMilliseconds,
+            static_cast<unsigned long long>(l_AiStats.m_CompletedInferenceCount));
+
+        // Indicate whether the renderer is still waiting on fresh inference results so QA can triage pipeline stalls.
+        const float l_QueueDepth = static_cast<float>(l_AiStats.m_PendingJobCount);
+        const float l_NormalisedDepth = l_QueueDepth > 0.0f ? std::min(l_QueueDepth / 8.0f, 1.0f) : 0.0f;
+        const char* l_ProgressLabel = l_DataStale ? "Awaiting first inference" : "Inference throughput";
+        ImGui::ProgressBar(l_NormalisedDepth, ImVec2(-FLT_MIN, 0.0f), l_ProgressLabel);
+        if (l_DataStale)
+        {
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(0.95f, 0.65f, 0.15f, 1.0f), "Stale data");
+            ImGui::SetItemTooltip("No AI frames have completed yet. Future builds can expose timestamps to refine this alert.");
+        }
+        else if (!l_ModelReady)
+        {
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(0.55f, 0.55f, 0.95f, 1.0f), "Initialising");
+            ImGui::SetItemTooltip("Model weights are still loading. Follow-up tooling can show download progress here.");
+        }
+
+        // Allow artists to control how strongly AI pixels influence the final composite while guarding uninitialised states.
+        const float l_CurrentBlendStrength = Trident::RenderCommand::GetAiBlendStrength();
+        ImGui::BeginDisabled(!l_ModelReady);
+        float l_BlendStrength = l_CurrentBlendStrength;
+        if (ImGui::SliderFloat("AI Blend", &l_BlendStrength, 0.0f, 1.0f, "%.2f"))
+        {
+            Trident::RenderCommand::SetAiBlendStrength(l_BlendStrength);
+        }
+        ImGui::EndDisabled();
+        if (!l_ModelReady)
+        {
+            ImGui::SetItemTooltip("The AI blend factor unlocks once the model is ready. Future UX can surface reasons for delays.");
+        }
+        else
+        {
+            ImGui::SetItemTooltip("Blend between rasterised and AI generated frames. Future versions may expose presets here.");
+        }
+
+        // Reserve a small region for upcoming visual comparisons without allocating textures before the renderer exposes them.
+        if (l_TextureReady)
+        {
+            ImGui::Text("AI Preview");
+            ImGui::Image(Trident::RenderCommand::GetAiTextureDescriptor(), ImVec2(96.0f, 54.0f));
+        }
+        else
+        {
+            ImGui::Text("AI Preview (reserved)");
+            ImGui::Dummy(ImVec2(96.0f, 54.0f));
+        }
+        ImGui::SetItemTooltip("This space will host richer split-view comparisons once descriptors become available.");
+
+        // Future improvements can add icons, hotkeys, or advanced transport controls here without touching other panels.
+        // Additional analytics, timelines, and visual overlays can extend this block while reusing the captured statistics.
         // Future improvements can add icons, hotkeys, or advanced transport controls here without touching other panels.
     }
     ImGui::End();
