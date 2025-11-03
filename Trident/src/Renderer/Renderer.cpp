@@ -1604,7 +1604,7 @@ namespace Trident
     {
         // UI tooling will eventually register an ImGui descriptor for the AI output. Returning nullptr keeps the API safe
         // until the descriptor pool work lands, while signalling clearly that the texture is not yet exposed to widgets.
-        return (ImTextureID)nullptr;
+        return nullptr;
     }
 
     VkDescriptorSet Renderer::GetViewportTexture(uint32_t viewportId) const

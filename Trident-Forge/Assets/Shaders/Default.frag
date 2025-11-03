@@ -3,6 +3,14 @@
 #extension GL_EXT_nonuniform_qualifier : enable // Needed for dynamic indexing into the sampler array.
 #extension GL_KHR_vulkan_glsl : enable
 
+// Provide a portable helper that maps to nonuniformEXT when the extension is available.
+// HLSL compilers do not recognize nonuniformEXT, so fall back to a no-op to keep them happy.
+#ifdef GL_EXT_nonuniform_qualifier
+#define NON_UNIFORM_INDEX(a_Index) nonuniformEXT(a_Index)
+#else
+#define NON_UNIFORM_INDEX(a_Index) (a_Index)
+#endif
+
 layout(location = 0) in vec3 inWorldPosition;
 layout(location = 1) in vec3 inNormal;
 layout(location = 2) in vec3 inTangent;
@@ -124,7 +132,8 @@ void main()
     vec3 l_ViewDirection = normalize(g_Global.CameraPosition.xyz - inWorldPosition);
 
     int l_TextureSlot = pc.TextureSlot; // Copy to a local so we can mark the index non-uniform for Vulkan descriptor indexing.
-    vec4 l_SampledColor = texture(BaseColorSamplers[nonuniformEXT(l_TextureSlot)], inTexCoord); // Use the slot pushed from the renderer.
+    // Use the slot pushed from the renderer; mark non-uniform when supported to satisfy Vulkan validation.
+    vec4 l_SampledColor = texture(BaseColorSamplers[NON_UNIFORM_INDEX(l_TextureSlot)], inTexCoord);
     vec3 l_Albedo = l_SampledColor.rgb * g_Material.BaseColorFactor.rgb * pc.TintColor.rgb * inVertexColor;
     float l_Metallic = clamp(g_Material.MaterialFactors.x, 0.0, 1.0);
     float l_Roughness = clamp(g_Material.MaterialFactors.y, 0.045, 1.0);
