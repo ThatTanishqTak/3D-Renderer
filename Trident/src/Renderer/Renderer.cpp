@@ -313,6 +313,7 @@ namespace Trident
 
         // Release the CPU-visible staging buffers used for AI readback before the buffer allocator is reset.
         DestroyReadbackResources();
+        DestroyAiResources();
 
         for (auto& it_Texture : m_ImGuiTexturePool)
         {
@@ -414,7 +415,10 @@ namespace Trident
         if (m_FrameGenerator.TryConsumeOutput(l_CompletedOutput) && !l_CompletedOutput.empty())
         {
             m_AiInterpolationBuffer = std::move(l_CompletedOutput);
+            m_AiTextureDirty = true;
         }
+
+        UploadAiInterpolationToGpu();
 
         const std::span<const int64_t> l_PrimaryShape = m_FrameGenerator.GetPrimaryInputShape();
         size_t l_ExpectedElements = 0;
@@ -586,6 +590,340 @@ namespace Trident
 
         vkUnmapMemory(l_Device, m_FrameReadbackMemory[imageIndex]);
         m_FrameReadbackPending[imageIndex] = false;
+    }
+
+    bool Renderer::EnsureAiTextureResources(VkExtent2D extent)
+    {
+        if (extent.width == 0 || extent.height == 0)
+        {
+            return false;
+        }
+
+        const VkDeviceSize l_RequiredBytes = static_cast<VkDeviceSize>(extent.width) * static_cast<VkDeviceSize>(extent.height) * 4ull;
+
+        if ((m_AiTextureImage != VK_NULL_HANDLE) && (extent.width != m_AiTextureExtent.width || extent.height != m_AiTextureExtent.height))
+        {
+            // Resolution changed, destroy the previous GPU resources before allocating replacements.
+            DestroyAiResources();
+        }
+
+        if (m_AiTextureImage == VK_NULL_HANDLE)
+        {
+            VkImageCreateInfo l_ImageInfo{ VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO };
+            l_ImageInfo.imageType = VK_IMAGE_TYPE_2D;
+            l_ImageInfo.extent = { extent.width, extent.height, 1u };
+            l_ImageInfo.mipLevels = 1;
+            l_ImageInfo.arrayLayers = 1;
+            l_ImageInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
+            l_ImageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+            l_ImageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            l_ImageInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+            l_ImageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+            l_ImageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+
+            if (vkCreateImage(Startup::GetDevice(), &l_ImageInfo, nullptr, &m_AiTextureImage) != VK_SUCCESS)
+            {
+                TR_CORE_CRITICAL("Failed to create AI interpolation image");
+                DestroyAiResources();
+
+                return false;
+            }
+
+            VkMemoryRequirements l_Requirements{};
+            vkGetImageMemoryRequirements(Startup::GetDevice(), m_AiTextureImage, &l_Requirements);
+
+            VkMemoryAllocateInfo l_AllocInfo{ VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO };
+            l_AllocInfo.allocationSize = l_Requirements.size;
+            l_AllocInfo.memoryTypeIndex = m_Buffers.FindMemoryType(l_Requirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+            if (vkAllocateMemory(Startup::GetDevice(), &l_AllocInfo, nullptr, &m_AiTextureMemory) != VK_SUCCESS)
+            {
+                TR_CORE_CRITICAL("Failed to allocate memory for AI interpolation image");
+                DestroyAiResources();
+
+                return false;
+            }
+
+            vkBindImageMemory(Startup::GetDevice(), m_AiTextureImage, m_AiTextureMemory, 0);
+
+            VkImageViewCreateInfo l_ViewInfo{ VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
+            l_ViewInfo.image = m_AiTextureImage;
+            l_ViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+            l_ViewInfo.format = l_ImageInfo.format;
+            l_ViewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            l_ViewInfo.subresourceRange.baseMipLevel = 0;
+            l_ViewInfo.subresourceRange.levelCount = 1;
+            l_ViewInfo.subresourceRange.baseArrayLayer = 0;
+            l_ViewInfo.subresourceRange.layerCount = 1;
+
+            if (vkCreateImageView(Startup::GetDevice(), &l_ViewInfo, nullptr, &m_AiTextureView) != VK_SUCCESS)
+            {
+                TR_CORE_CRITICAL("Failed to create AI interpolation image view");
+                DestroyAiResources();
+
+                return false;
+            }
+
+            VkSamplerCreateInfo l_SamplerInfo{ VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO };
+            l_SamplerInfo.magFilter = VK_FILTER_LINEAR;
+            l_SamplerInfo.minFilter = VK_FILTER_LINEAR;
+            l_SamplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+            l_SamplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+            l_SamplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+            l_SamplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+            l_SamplerInfo.minLod = 0.0f;
+            l_SamplerInfo.maxLod = 0.0f;
+
+            if (vkCreateSampler(Startup::GetDevice(), &l_SamplerInfo, nullptr, &m_AiTextureSampler) != VK_SUCCESS)
+            {
+                TR_CORE_CRITICAL("Failed to create AI interpolation sampler");
+                DestroyAiResources();
+
+                return false;
+            }
+
+            m_AiTextureExtent = extent;
+            m_AiTextureLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        }
+
+        if (m_AiUploadBuffer == VK_NULL_HANDLE || m_AiUploadBufferSize < l_RequiredBytes)
+        {
+            if (m_AiUploadBuffer != VK_NULL_HANDLE)
+            {
+                m_Buffers.DestroyBuffer(m_AiUploadBuffer, m_AiUploadMemory);
+            }
+
+            m_Buffers.CreateBuffer(l_RequiredBytes, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, m_AiUploadBuffer, m_AiUploadMemory);
+
+            if (m_AiUploadBuffer == VK_NULL_HANDLE)
+            {
+                TR_CORE_CRITICAL("Failed to allocate AI interpolation staging buffer");
+                DestroyAiResources();
+
+                return false;
+            }
+
+            m_AiUploadBufferSize = l_RequiredBytes;
+        }
+
+        return (m_AiTextureImage != VK_NULL_HANDLE) && (m_AiUploadBuffer != VK_NULL_HANDLE);
+    }
+
+    void Renderer::DestroyAiResources()
+    {
+        if (m_AiUploadBuffer != VK_NULL_HANDLE || m_AiUploadMemory != VK_NULL_HANDLE)
+        {
+            m_Buffers.DestroyBuffer(m_AiUploadBuffer, m_AiUploadMemory);
+        }
+
+        if (m_AiTextureSampler != VK_NULL_HANDLE)
+        {
+            vkDestroySampler(Startup::GetDevice(), m_AiTextureSampler, nullptr);
+        }
+
+        if (m_AiTextureView != VK_NULL_HANDLE)
+        {
+            vkDestroyImageView(Startup::GetDevice(), m_AiTextureView, nullptr);
+        }
+
+        if (m_AiTextureImage != VK_NULL_HANDLE)
+        {
+            vkDestroyImage(Startup::GetDevice(), m_AiTextureImage, nullptr);
+        }
+
+        if (m_AiTextureMemory != VK_NULL_HANDLE)
+        {
+            vkFreeMemory(Startup::GetDevice(), m_AiTextureMemory, nullptr);
+        }
+
+        m_AiUploadBuffer = VK_NULL_HANDLE;
+        m_AiUploadMemory = VK_NULL_HANDLE;
+        m_AiUploadBufferSize = 0;
+        m_AiTextureSampler = VK_NULL_HANDLE;
+        m_AiTextureView = VK_NULL_HANDLE;
+        m_AiTextureImage = VK_NULL_HANDLE;
+        m_AiTextureMemory = VK_NULL_HANDLE;
+        m_AiTextureExtent = { 0, 0 };
+        m_AiTextureLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        m_AiTextureReady = false;
+
+        if (!m_AiInterpolationBuffer.empty())
+        {
+            // Preserve the most recent AI frame so we can re-upload once new resources are ready.
+            m_AiTextureDirty = true;
+        }
+
+        UpdateAiDescriptorBinding();
+    }
+
+    void Renderer::UploadAiInterpolationToGpu()
+    {
+        if (!m_AiTextureDirty)
+        {
+            return;
+        }
+
+        if (m_AiInterpolationBuffer.empty())
+        {
+            m_AiTextureDirty = false;
+            m_AiTextureReady = false;
+            UpdateAiDescriptorBinding();
+
+            return;
+        }
+
+        if (m_FrameReadbackExtent.width == 0 || m_FrameReadbackExtent.height == 0 || m_FrameReadbackChannelCount == 0)
+        {
+            return;
+        }
+
+        const size_t l_PixelCount = static_cast<size_t>(m_FrameReadbackExtent.width) * static_cast<size_t>(m_FrameReadbackExtent.height);
+        const size_t l_ExpectedElements = l_PixelCount * static_cast<size_t>(m_FrameReadbackChannelCount);
+
+        if (m_AiInterpolationBuffer.size() < l_ExpectedElements)
+        {
+            TR_CORE_WARN("AI interpolation buffer contained {} elements but {} were required to fill the GPU texture.",
+                m_AiInterpolationBuffer.size(), l_ExpectedElements);
+            m_AiTextureDirty = false;
+            m_AiTextureReady = false;
+            UpdateAiDescriptorBinding();
+
+            return;
+        }
+
+        if (!EnsureAiTextureResources(m_FrameReadbackExtent))
+        {
+            return;
+        }
+
+        std::vector<uint8_t> l_PackedPixels;
+        l_PackedPixels.resize(l_PixelCount * 4u);
+
+        const size_t l_ChannelCount = static_cast<size_t>(m_FrameReadbackChannelCount);
+        for (size_t it_Pixel = 0; it_Pixel < l_PixelCount; ++it_Pixel)
+        {
+            const size_t l_BaseIndex = it_Pixel * l_ChannelCount;
+            for (size_t it_Channel = 0; it_Channel < 4; ++it_Channel)
+            {
+                float l_Value = 0.0f;
+                if (it_Channel < l_ChannelCount)
+                {
+                    l_Value = m_AiInterpolationBuffer[l_BaseIndex + it_Channel];
+                }
+                else if (it_Channel == 3)
+                {
+                    l_Value = 1.0f; // Default alpha to opaque when the network omits it.
+                }
+
+                l_Value = std::clamp(l_Value, 0.0f, 1.0f);
+                l_PackedPixels[it_Pixel * 4u + it_Channel] = static_cast<uint8_t>(std::round(l_Value * 255.0f));
+            }
+        }
+
+        void* l_Mapped = nullptr;
+        if (vkMapMemory(Startup::GetDevice(), m_AiUploadMemory, 0, m_AiUploadBufferSize, 0, &l_Mapped) != VK_SUCCESS)
+        {
+            TR_CORE_CRITICAL("Failed to map AI interpolation staging buffer");
+
+            return;
+        }
+
+        std::memcpy(l_Mapped, l_PackedPixels.data(), l_PackedPixels.size());
+        vkUnmapMemory(Startup::GetDevice(), m_AiUploadMemory);
+
+        VkCommandBuffer l_CommandBuffer = m_Commands.BeginSingleTimeCommands();
+
+        VkImageMemoryBarrier l_PrepareBarrier{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+        l_PrepareBarrier.oldLayout = m_AiTextureLayout;
+        l_PrepareBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        l_PrepareBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        l_PrepareBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        l_PrepareBarrier.image = m_AiTextureImage;
+        l_PrepareBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        l_PrepareBarrier.subresourceRange.baseMipLevel = 0;
+        l_PrepareBarrier.subresourceRange.levelCount = 1;
+        l_PrepareBarrier.subresourceRange.baseArrayLayer = 0;
+        l_PrepareBarrier.subresourceRange.layerCount = 1;
+        l_PrepareBarrier.srcAccessMask = (m_AiTextureLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) ? VK_ACCESS_SHADER_READ_BIT : 0;
+        l_PrepareBarrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+
+        // Transition from the previous shader-read layout (if any) so the copy can safely overwrite the image contents.
+        vkCmdPipelineBarrier(l_CommandBuffer, (m_AiTextureLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) ? VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT : VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+            VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &l_PrepareBarrier);
+
+        VkBufferImageCopy l_CopyRegion{};
+        l_CopyRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        l_CopyRegion.imageSubresource.baseArrayLayer = 0;
+        l_CopyRegion.imageSubresource.layerCount = 1;
+        l_CopyRegion.imageExtent = { m_AiTextureExtent.width, m_AiTextureExtent.height, 1 };
+        l_CopyRegion.bufferOffset = 0;
+
+        vkCmdCopyBufferToImage(l_CommandBuffer, m_AiUploadBuffer, m_AiTextureImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &l_CopyRegion);
+
+        VkImageMemoryBarrier l_ToShader{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+        l_ToShader.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        l_ToShader.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        l_ToShader.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        l_ToShader.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        l_ToShader.image = m_AiTextureImage;
+        l_ToShader.subresourceRange = l_PrepareBarrier.subresourceRange;
+        l_ToShader.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        l_ToShader.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+        // Make the freshly uploaded pixels visible to fragment shader sampling before the next draw begins.
+        vkCmdPipelineBarrier(l_CommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &l_ToShader);
+
+        m_Commands.EndSingleTimeCommands(l_CommandBuffer);
+
+        m_AiTextureLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        m_AiTextureDirty = false;
+        m_AiTextureReady = true;
+
+        UpdateAiDescriptorBinding();
+    }
+
+    void Renderer::UpdateAiDescriptorBinding()
+    {
+        if (m_DescriptorSets.empty())
+        {
+            return;
+        }
+
+        VkDescriptorImageInfo l_ImageInfo{};
+        if (m_AiTextureReady && m_AiTextureView != VK_NULL_HANDLE && m_AiTextureSampler != VK_NULL_HANDLE)
+        {
+            l_ImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            l_ImageInfo.imageView = m_AiTextureView;
+            l_ImageInfo.sampler = m_AiTextureSampler;
+        }
+        else if (!m_TextureSlots.empty())
+        {
+            l_ImageInfo = m_TextureSlots.front().m_Descriptor;
+        }
+        else
+        {
+            l_ImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            l_ImageInfo.imageView = VK_NULL_HANDLE;
+            l_ImageInfo.sampler = VK_NULL_HANDLE;
+        }
+
+        std::vector<VkWriteDescriptorSet> l_Writes;
+        l_Writes.reserve(m_DescriptorSets.size());
+
+        for (VkDescriptorSet l_Set : m_DescriptorSets)
+        {
+            VkWriteDescriptorSet l_Write{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
+            l_Write.dstSet = l_Set;
+            l_Write.dstBinding = 5;
+            l_Write.dstArrayElement = 0;
+            l_Write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            l_Write.descriptorCount = 1;
+            l_Write.pImageInfo = &l_ImageInfo;
+            l_Writes.push_back(l_Write);
+        }
+
+        vkUpdateDescriptorSets(Startup::GetDevice(), static_cast<uint32_t>(l_Writes.size()), l_Writes.data(), 0, nullptr);
     }
 
     std::optional<std::filesystem::path> Renderer::ResolveAiModelPath() const
@@ -1967,7 +2305,8 @@ namespace Trident
             DestroyOffscreenResources(m_ActiveViewportId);
         }
 
-        // Ensure the readback staging buffers match the refreshed swapchain geometry.
+        DestroyAiResources();
+        // Ensure the readback staging buffers match the refreshed swapchain geometry before re-uploading AI frames.
         CreateOrResizeReadbackResources();
         m_TextRenderer.RecreatePipeline(m_Pipeline.GetRenderPass());
     }
@@ -1987,10 +2326,10 @@ namespace Trident
         l_PoolSizes[2].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
         l_PoolSizes[2].descriptorCount = l_ImageCount; // Bone palette buffer updated once per swapchain image.
         l_PoolSizes[3].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        // Each swapchain image consumes an array of material textures plus a cubemap sampler in the main set and a cubemap
-        // sampler in the dedicated skybox set. The text renderer also binds a combined image sampler once per frame, so reserve
-        // an additional descriptor for that path.
-        l_PoolSizes[3].descriptorCount = l_ImageCount * (Pipeline::s_MaxMaterialTextures + 3);
+        // Each swapchain image consumes an array of material textures, an AI blend texture and a cubemap sampler in the main
+        // set, plus a cubemap sampler in the dedicated skybox set. The text renderer also binds a combined image sampler once
+        // per frame, so reserve an additional descriptor for that path.
+        l_PoolSizes[3].descriptorCount = l_ImageCount * (Pipeline::s_MaxMaterialTextures + 4);
 
         VkDescriptorPoolCreateInfo l_PoolInfo{};
         l_PoolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -2788,6 +3127,13 @@ namespace Trident
             l_BonePaletteInfo.offset = 0;
             l_BonePaletteInfo.range = m_BonePaletteBufferSize;
 
+            VkDescriptorImageInfo l_AiImageInfo{};
+            if (!m_TextureSlots.empty())
+            {
+                // Default to the white texture so descriptor validation remains happy until the AI upload completes.
+                l_AiImageInfo = m_TextureSlots.front().m_Descriptor;
+            }
+
             VkWriteDescriptorSet l_GlobalWrite{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
             l_GlobalWrite.dstSet = m_DescriptorSets[i];
             l_GlobalWrite.dstBinding = 0;
@@ -2813,12 +3159,21 @@ namespace Trident
             l_BonePaletteWrite.descriptorCount = 1;
             l_BonePaletteWrite.pBufferInfo = &l_BonePaletteInfo;
 
-            VkWriteDescriptorSet l_Writes[] = { l_GlobalWrite, l_MaterialWrite, l_BonePaletteWrite };
+            VkWriteDescriptorSet l_AiWrite{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
+            l_AiWrite.dstSet = m_DescriptorSets[i];
+            l_AiWrite.dstBinding = 5;
+            l_AiWrite.dstArrayElement = 0;
+            l_AiWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            l_AiWrite.descriptorCount = 1;
+            l_AiWrite.pImageInfo = &l_AiImageInfo;
+
+            VkWriteDescriptorSet l_Writes[] = { l_GlobalWrite, l_MaterialWrite, l_BonePaletteWrite, l_AiWrite };
             vkUpdateDescriptorSets(Startup::GetDevice(), static_cast<uint32_t>(std::size(l_Writes)), l_Writes, 0, nullptr);
         }
 
         RefreshTextureDescriptorBindings();
         UpdateSkyboxBindingOnMainSets();
+        UpdateAiDescriptorBinding();
         CreateSkyboxDescriptorSets();
 
         TR_CORE_TRACE("Descriptor Sets Allocated (Main = {}, Skybox = {})", l_ImageCount, m_SkyboxDescriptorSets.size());
@@ -4437,6 +4792,17 @@ namespace Trident
         l_Global.DirectionalLightDirection = glm::vec4(l_DirectionalDirection, 0.0f);
         l_Global.DirectionalLightColor = glm::vec4(l_DirectionalColor, l_DirectionalIntensity);
         l_Global.LightCounts = glm::uvec4(l_DirectionalUsed, l_PointLightWriteCount, 0u, 0u);
+
+        if (m_AiTextureReady && m_AiTextureExtent.width > 0 && m_AiTextureExtent.height > 0)
+        {
+            const float l_InvWidth = 1.0f / static_cast<float>(std::max<uint32_t>(m_AiTextureExtent.width, 1));
+            const float l_InvHeight = 1.0f / static_cast<float>(std::max<uint32_t>(m_AiTextureExtent.height, 1));
+            l_Global.AiBlendConfig = glm::vec4(m_AiBlendStrength, l_InvWidth, l_InvHeight, 1.0f);
+        }
+        else
+        {
+            l_Global.AiBlendConfig = glm::vec4(0.0f);
+        }
 
         auto BuildMaterialPayload = [this]()
             {

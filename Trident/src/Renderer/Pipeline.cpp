@@ -480,17 +480,27 @@ namespace Trident
         l_BonePaletteBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
         l_BonePaletteBinding.pImmutableSamplers = nullptr;
 
+        VkDescriptorSetLayoutBinding l_AiBlendBinding{};
+        l_AiBlendBinding.binding = 5;
+        l_AiBlendBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        l_AiBlendBinding.descriptorCount = 1;
+        l_AiBlendBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+        l_AiBlendBinding.pImmutableSamplers = nullptr;
+
         // Descriptor layout summary (set = 0):
         // 0 -> Global scene uniform buffer, 1 -> Material table, 2 -> Material textures, 3 -> Skybox cubemap,
-        // 4 -> Bone palette storage buffer. Future optimisation passes can extend this without reshuffling existing slots.
-        std::array<VkDescriptorSetLayoutBinding, 5> l_Bindings
+        // 4 -> Bone palette storage buffer, 5 -> AI frame blend texture sampled during shading.
+        // Future optimisation passes can extend this without reshuffling existing slots.
+        std::array<VkDescriptorSetLayoutBinding, 6> l_Bindings
         {
             l_GlobalLayoutBinding,
             l_MaterialLayoutBinding,
             l_SamplerLayoutBinding,
             l_SkyboxSamplerBinding,
-            l_BonePaletteBinding
+            l_BonePaletteBinding,
+            l_AiBlendBinding
         };
+
 
         VkDescriptorSetLayoutCreateInfo l_LayoutInfo{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
         l_LayoutInfo.bindingCount = static_cast<uint32_t>(l_Bindings.size());

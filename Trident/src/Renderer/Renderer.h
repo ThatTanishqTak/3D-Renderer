@@ -381,6 +381,18 @@ namespace Trident
         VkDeviceSize m_FrameReadbackBufferSize = 0;            ///< Expected byte size for each staging buffer.
         uint32_t m_FrameReadbackBytesPerPixel = 0;             ///< Cached pixel stride derived from the swapchain format.
         uint32_t m_FrameReadbackChannelCount = 0;              ///< Number of colour channels copied into the staging buffer.
+        VkImage m_AiTextureImage = VK_NULL_HANDLE;             ///< GPU image sampling the AI generated frame.
+        VkDeviceMemory m_AiTextureMemory = VK_NULL_HANDLE;     ///< Device local memory backing the AI texture.
+        VkImageView m_AiTextureView = VK_NULL_HANDLE;          ///< View bound to descriptor sets for sampling.
+        VkSampler m_AiTextureSampler = VK_NULL_HANDLE;         ///< Sampler used when shading blends the AI output.
+        VkImageLayout m_AiTextureLayout = VK_IMAGE_LAYOUT_UNDEFINED; ///< Cached layout used when transitioning the AI texture.
+        VkExtent2D m_AiTextureExtent{ 0, 0 };                  ///< Resolution of the GPU AI texture for descriptor updates.
+        VkBuffer m_AiUploadBuffer = VK_NULL_HANDLE;            ///< Host-visible staging buffer for AI uploads.
+        VkDeviceMemory m_AiUploadMemory = VK_NULL_HANDLE;      ///< Memory backing the staging buffer.
+        VkDeviceSize m_AiUploadBufferSize = 0;                 ///< Size of the host-visible staging allocation.
+        bool m_AiTextureDirty = false;                         ///< Signals that a fresh AI frame should be uploaded to the GPU.
+        bool m_AiTextureReady = false;                         ///< Tracks whether the descriptor can point at the GPU texture.
+        float m_AiBlendStrength = 0.35f;                       ///< Blend factor used to mix the AI and rasterised frames.
 
     private:
         // Core setup
@@ -390,6 +402,10 @@ namespace Trident
         void CreateOrResizeReadbackResources();
         void DestroyReadbackResources();
         void ResolvePendingReadback(uint32_t imageIndex);
+        bool EnsureAiTextureResources(VkExtent2D extent);
+        void DestroyAiResources();
+        void UploadAiInterpolationToGpu();
+        void UpdateAiDescriptorBinding();
 
         void CreateDescriptorPool();
         void CreateDefaultTexture();

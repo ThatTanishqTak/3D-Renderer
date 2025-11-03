@@ -42,6 +42,7 @@ layout(set = 0, binding = 0) uniform GlobalUniformBuffer
     vec4 DirectionalLightDirection;
     vec4 DirectionalLightColor;
     uvec4 LightCounts;
+    vec4 AiBlendConfig;
     PointLightUniform PointLights[8];
 } g_Global;
 
@@ -52,6 +53,7 @@ layout(set = 0, binding = 1) uniform MaterialUniformBuffer
 } g_Material;
 
 layout(set = 0, binding = 2) uniform sampler2D BaseColorSamplers[]; // Array lets us bind many textures while reusing the shader.
+layout(set = 0, binding = 5) uniform sampler2D AiBlendTexture;
 
 const float PI = 3.14159265359;
 
@@ -166,6 +168,17 @@ void main()
     l_Color = pow(l_Color, vec3(1.0 / 2.2));
 
     outColor = vec4(l_Color, g_Material.BaseColorFactor.a * pc.TintColor.a * l_SampledColor.a);
+
+    if (g_Global.AiBlendConfig.w > 0.0)
+    {
+        float l_BlendWeight = clamp(g_Global.AiBlendConfig.x, 0.0, 1.0);
+        if (l_BlendWeight > 0.0)
+        {
+            vec2 l_FrameUv = vec2(gl_FragCoord.x * g_Global.AiBlendConfig.y, gl_FragCoord.y * g_Global.AiBlendConfig.z);
+            vec4 l_AiColour = texture(AiBlendTexture, l_FrameUv);
+            outColor = mix(outColor, l_AiColour, l_BlendWeight);
+        }
+    }
 
     // Future enhancement: once the base-color flow is proven we can wire up metallic/roughness and normal textures here.
 }

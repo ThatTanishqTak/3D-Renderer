@@ -23,6 +23,7 @@ struct GlobalUniformBuffer
     glm::vec4 DirectionalLightDirection;  // Directional light forward vector (w unused)
     glm::vec4 DirectionalLightColor;      // Directional light colour and intensity in w
     glm::uvec4 LightCounts;               // x = directional count, y = point count, z/w reserved
+    glm::vec4 AiBlendConfig;              // x = blend weight, y = 1/width, z = 1/height, w > 0 when AI data is valid
     PointLightUniform PointLights[kMaxPointLights]; // Packed array of active point lights
 };
 
