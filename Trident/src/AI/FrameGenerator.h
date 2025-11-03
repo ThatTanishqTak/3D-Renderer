@@ -124,7 +124,7 @@ namespace Trident
             std::vector<float> m_LastOutputTensor;                       ///< Flattened buffer storing the latest AI result.
             std::deque<FrameJob> m_PendingJobs;                          ///< Queue of frames waiting to be processed asynchronously.
             std::deque<std::vector<float>> m_CompletedOutputs;           ///< Queue of freshly generated AI outputs awaiting consumption.
-            std::mutex m_QueueMutex;                                     ///< Guards pending job access between producer and worker.
+            mutable std::mutex m_QueueMutex;                             ///< Guards pending job access. Marked mutable so const inspectors can lock safely.
             mutable std::mutex m_OutputMutex;                            ///< Guards completed output queue and cached tensor.
             std::condition_variable m_QueueCondition;                    ///< Signals the worker thread when new jobs arrive.
             std::thread m_WorkerThread;                                  ///< Dedicated worker responsible for running inference.

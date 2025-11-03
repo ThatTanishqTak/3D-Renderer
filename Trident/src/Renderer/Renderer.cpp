@@ -1602,9 +1602,9 @@ namespace Trident
 
     ImTextureID Renderer::GetAiTextureDescriptor() const
     {
-        // UI tooling will eventually register an ImGui descriptor for the AI output. Returning nullptr keeps the API safe
-        // until the descriptor pool work lands, while signalling clearly that the texture is not yet exposed to widgets.
-        return nullptr;
+        // UI tooling will eventually register an ImGui descriptor for the AI output. Explicitly cast the null handle so
+        // MSVC accepts the placeholder value regardless of how ImTextureID is defined (pointer or integral).
+        return reinterpret_cast<ImTextureID>(nullptr);
     }
 
     VkDescriptorSet Renderer::GetViewportTexture(uint32_t viewportId) const
@@ -3163,14 +3163,15 @@ namespace Trident
     {
         TR_CORE_TRACE("Allocating Descriptor Sets");
 
-        size_t l_ImageCount = m_Swapchain.GetImageCount();
+        const size_t l_ImageCount = m_Swapchain.GetImageCount();
+        const uint32_t l_ImageCount32 = static_cast<uint32_t>(l_ImageCount); // Vulkan expects 32-bit counts in allocation structs.
 
         std::vector<VkDescriptorSetLayout> l_Layouts(l_ImageCount, m_Pipeline.GetDescriptorSetLayout());
 
         VkDescriptorSetAllocateInfo l_AllocateInfo{};
         l_AllocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
         l_AllocateInfo.descriptorPool = m_DescriptorPool;
-        l_AllocateInfo.descriptorSetCount = l_ImageCount;
+        l_AllocateInfo.descriptorSetCount = l_ImageCount32;
         l_AllocateInfo.pSetLayouts = l_Layouts.data();
 
         m_DescriptorSets.resize(l_ImageCount);
