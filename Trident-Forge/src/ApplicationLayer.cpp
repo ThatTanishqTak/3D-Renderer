@@ -15,6 +15,7 @@
 #include "UI/FileDialog.h"
 
 #include <imgui.h>
+#include <imgui_internal.h>
 
 #include <algorithm>
 #include <cctype>
@@ -172,6 +173,7 @@ void ApplicationLayer::Update()
     m_InspectorPanel.Update();
     //m_AnimationGraphPanel.Update();
     m_ConsolePanel.Update();
+    m_AIDebugPanel.Update();
 }
 
 void ApplicationLayer::Render()
@@ -190,6 +192,7 @@ void ApplicationLayer::Render()
     m_InspectorPanel.Render();
     //m_AnimationGraphPanel.Render();
     m_ConsolePanel.Render();
+    m_AIDebugPanel.Render();
 }
 
 void ApplicationLayer::RenderMainMenuBar()
@@ -241,25 +244,69 @@ void ApplicationLayer::RenderMainMenuBar()
 
 void ApplicationLayer::RenderSceneToolbar()
 {
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f, 4.0f));
-    const ImGuiWindowFlags l_WindowFlags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoNavFocus;
-    if (ImGui::Begin("Scene Controls", nullptr, l_WindowFlags))
+    // Anchor the transport window relative to the viewport row so it floats centrally above Scene/Game.
+    ImGuiViewport* l_MainViewport = ImGui::GetMainViewport();
+    ImGuiViewport* l_TargetViewport = l_MainViewport;
+
+    bool l_HasViewportBounds = false;
+    ImVec2 l_BoundsMin{};
+    ImVec2 l_BoundsMax{};
+
+    const auto a_AccumulateBounds = [&](ImGuiWindow* a_Window)
+        {
+            if (a_Window == nullptr || a_Window->Hidden)
+            {
+                return;
+            }
+
+            const ImVec2 l_WindowMin = a_Window->Pos;
+            const ImVec2 l_WindowMax = ImVec2(a_Window->Pos.x + a_Window->Size.x, a_Window->Pos.y + a_Window->Size.y);
+
+            if (!l_HasViewportBounds)
+            {
+                l_BoundsMin = l_WindowMin;
+                l_BoundsMax = l_WindowMax;
+                if (a_Window->Viewport != nullptr)
+                {
+                    l_TargetViewport = a_Window->Viewport;
+                }
+                l_HasViewportBounds = true;
+            }
+            else
+            {
+                l_BoundsMin.x = std::min(l_BoundsMin.x, l_WindowMin.x);
+                l_BoundsMin.y = std::min(l_BoundsMin.y, l_WindowMin.y);
+                l_BoundsMax.x = std::max(l_BoundsMax.x, l_WindowMax.x);
+                l_BoundsMax.y = std::max(l_BoundsMax.y, l_WindowMax.y);
+            }
+        };
+
+    a_AccumulateBounds(ImGui::FindWindowByName("Scene"));
+    a_AccumulateBounds(ImGui::FindWindowByName("Game"));
+
+    if (!l_HasViewportBounds)
+    {
+        l_BoundsMin = l_MainViewport->Pos;
+        l_BoundsMax = ImVec2(l_MainViewport->Pos.x + l_MainViewport->Size.x, l_MainViewport->Pos.y + l_MainViewport->Size.y);
+    }
+
+    const float l_VerticalOffset = 12.0f; // Leaves breathing room above the viewport row while keeping the toolbar close.
+    const float l_CenterX = (l_BoundsMin.x + l_BoundsMax.x) * 0.5f;
+    const float l_AnchorY = l_BoundsMin.y - l_VerticalOffset;
+
+    ImGui::SetNextWindowViewport(l_TargetViewport->ID);
+    ImGui::SetNextWindowPos(ImVec2(l_CenterX, l_AnchorY), ImGuiCond_Always, ImVec2(0.5f, 1.0f));
+
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 6.0f));
+    const ImGuiWindowFlags l_WindowFlags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
+        ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoNavFocus;
+
+    if (ImGui::Begin("Scene Transport", nullptr, l_WindowFlags))
     {
         const bool l_HasScene = m_ActiveScene != nullptr;
         const bool l_IsPlaying = l_HasScene && m_ActiveScene->IsPlaying();
 
-        // Surface the last scene I/O status so artists receive immediate feedback near the transport controls.
-        if (!m_SceneIoTooltip.empty())
-        {
-            const ImVec4 l_Color = m_LastSceneIoFailed ? ImVec4(0.85f, 0.35f, 0.35f, 1.0f) : ImVec4(0.35f, 0.85f, 0.45f, 1.0f);
-            ImGui::TextColored(l_Color, m_LastSceneIoFailed ? "Scene IO Error" : "Scene IO");
-            if (ImGui::IsItemHovered())
-            {
-                ImGui::SetTooltip("%s", m_SceneIoTooltip.c_str());
-            }
-        }
-
-        ImGui::Separator();
+        // Primary play/pause/stop widgets remain centred in this transport strip.
 
         ImGui::BeginDisabled(!l_HasScene);
         if (l_HasScene)
@@ -320,6 +367,11 @@ void ApplicationLayer::RenderSceneToolbar()
         ImGui::SameLine();
         const char* l_StatusLabel = l_IsPlaying ? "Playing" : "Editing";
         ImGui::Text("Scene State: %s", l_StatusLabel);
+        if (!m_SceneIoTooltip.empty() && ImGui::IsItemHovered())
+        {
+            // Preserve scene IO feedback as a tooltip so save/load results remain easy to discover.
+            ImGui::SetTooltip("%s", m_SceneIoTooltip.c_str());
+        }
 
         ImGui::Separator();
 
@@ -346,72 +398,7 @@ void ApplicationLayer::RenderSceneToolbar()
             ImGui::TextColored(ImVec4(0.85f, 0.25f, 0.25f, 1.0f), "Recording...");
         }
 
-        ImGui::Separator();
-
-        // Pull the latest AI pipeline statistics so artists understand the state of the generator at a glance.
-        const Trident::Renderer::AiDebugStats l_AiStats = Trident::RenderCommand::GetAiDebugStats();
-        const bool l_ModelReady = l_AiStats.m_ModelInitialised;
-        const bool l_TextureReady = l_AiStats.m_TextureReady;
-        const bool l_DataStale = l_ModelReady && !l_TextureReady && (l_AiStats.m_CompletedInferenceCount == 0);
-
-        // Present a concise status line that captures initialisation, queue depth, and timing trends.
-        ImGui::Text("AI Model: %s | Queue: %zu pending | Resolution: %ux%u", l_ModelReady ? "Loaded" : "Loading", l_AiStats.m_PendingJobCount, l_AiStats.m_TextureExtent.width,
-            l_AiStats.m_TextureExtent.height);
-        ImGui::Text( "Last %.2f ms | Average %.2f ms | Completed %llu", l_AiStats.m_LastInferenceMilliseconds, l_AiStats.m_AverageInferenceMilliseconds,
-            static_cast<unsigned long long>(l_AiStats.m_CompletedInferenceCount));
-
-        // Indicate whether the renderer is still waiting on fresh inference results so QA can triage pipeline stalls.
-        const float l_QueueDepth = static_cast<float>(l_AiStats.m_PendingJobCount);
-        const float l_NormalisedDepth = l_QueueDepth > 0.0f ? std::min(l_QueueDepth / 8.0f, 1.0f) : 0.0f;
-        const char* l_ProgressLabel = l_DataStale ? "Awaiting first inference" : "Inference throughput";
-        ImGui::ProgressBar(l_NormalisedDepth, ImVec2(-FLT_MIN, 0.0f), l_ProgressLabel);
-        if (l_DataStale)
-        {
-            ImGui::SameLine();
-            ImGui::TextColored(ImVec4(0.95f, 0.65f, 0.15f, 1.0f), "Stale data");
-            ImGui::SetItemTooltip("No AI frames have completed yet. Future builds can expose timestamps to refine this alert.");
-        }
-        else if (!l_ModelReady)
-        {
-            ImGui::SameLine();
-            ImGui::TextColored(ImVec4(0.55f, 0.55f, 0.95f, 1.0f), "Initialising");
-            ImGui::SetItemTooltip("Model weights are still loading. Follow-up tooling can show download progress here.");
-        }
-
-        // Allow artists to control how strongly AI pixels influence the final composite while guarding uninitialised states.
-        const float l_CurrentBlendStrength = Trident::RenderCommand::GetAiBlendStrength();
-        ImGui::BeginDisabled(!l_ModelReady);
-        float l_BlendStrength = l_CurrentBlendStrength;
-        if (ImGui::SliderFloat("AI Blend", &l_BlendStrength, 0.0f, 1.0f, "%.2f"))
-        {
-            Trident::RenderCommand::SetAiBlendStrength(l_BlendStrength);
-        }
-        ImGui::EndDisabled();
-        if (!l_ModelReady)
-        {
-            ImGui::SetItemTooltip("The AI blend factor unlocks once the model is ready. Future UX can surface reasons for delays.");
-        }
-        else
-        {
-            ImGui::SetItemTooltip("Blend between rasterised and AI generated frames. Future versions may expose presets here.");
-        }
-
-        // Reserve a small region for upcoming visual comparisons without allocating textures before the renderer exposes them.
-        if (l_TextureReady)
-        {
-            ImGui::Text("AI Preview");
-            ImGui::Image(Trident::RenderCommand::GetAiTextureDescriptor(), ImVec2(96.0f, 54.0f));
-        }
-        else
-        {
-            ImGui::Text("AI Preview (reserved)");
-            ImGui::Dummy(ImVec2(96.0f, 54.0f));
-        }
-        ImGui::SetItemTooltip("This space will host richer split-view comparisons once descriptors become available.");
-
-        // Future improvements can add icons, hotkeys, or advanced transport controls here without touching other panels.
-        // Additional analytics, timelines, and visual overlays can extend this block while reusing the captured statistics.
-        // Future improvements can add icons, hotkeys, or advanced transport controls here without touching other panels.
+        // Future improvement: swap text buttons for icons, add hotkeys, and explore docking-friendly layout tweaks.
     }
     ImGui::End();
     ImGui::PopStyleVar();
