@@ -166,10 +166,33 @@ namespace Trident
         return Startup::GetRenderer().GetModelCount();
     }
 
-
     int32_t RenderCommand::ResolveTextureSlot(const std::string& texturePath)
     {
         // Forward the request to the renderer so tooling can trigger reloads after editing component properties.
         return Startup::GetRenderer().ResolveTextureSlot(texturePath);
+    }
+
+    Renderer::AiDebugStats RenderCommand::GetAiDebugStats()
+    {
+        // Surface the AI instrumentation so panels can visualise inference timing and queue depth without duplicating logic.
+        return Startup::GetRenderer().GetAiDebugStats();
+    }
+
+    void RenderCommand::SetAiBlendStrength(float blendStrength)
+    {
+        // Forward user adjustments to the renderer so the AI blend remains in sync across runtime and editor views.
+        Startup::GetRenderer().SetAiBlendStrength(blendStrength);
+    }
+
+    float RenderCommand::GetAiBlendStrength()
+    {
+        // Provide callers with the current blend factor when they need to mirror the renderer state in UI widgets.
+        return Startup::GetRenderer().GetAiBlendStrength();
+    }
+
+    ImTextureID RenderCommand::GetAiTextureDescriptor()
+    {
+        // Placeholder that will eventually return the ImGui descriptor once the renderer exposes the AI texture to tooling.
+        return Startup::GetRenderer().GetAiTextureDescriptor();
     }
 }

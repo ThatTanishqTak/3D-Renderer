@@ -172,21 +172,30 @@ namespace Trident
 {
     Renderer::Renderer()
     {
+        m_AiDebugStats.m_BlendStrength = m_AiBlendStrength;
+        m_AiDebugStats.m_TextureExtent = m_AiTextureExtent;
+        m_AiDebugStats.m_TextureReady = m_AiTextureReady;
+        m_AiDebugStats.m_ModelInitialised = m_FrameGenerator.IsInitialised();
+
         // Attempt to locate an AI model so frame interpolation can be ready before the first render.
         const std::optional<std::filesystem::path> l_ModelPath = ResolveAiModelPath();
         if (!l_ModelPath.has_value())
         {
             TR_CORE_INFO("AI frame generator did not locate a model. Rendering will continue without AI augmentation until one is provided.");
+            m_AiDebugStats.m_ModelInitialised = false;
+
             return;
         }
 
         if (m_FrameGenerator.Initialise(l_ModelPath.value()))
         {
             TR_CORE_INFO("AI frame generator initialised with model '{}'", l_ModelPath->string());
+            m_AiDebugStats.m_ModelInitialised = true;
         }
         else
         {
             TR_CORE_WARN("AI frame generator failed to initialise using model '{}'. Future frames will skip AI processing until a valid model is supplied.", l_ModelPath->string());
+            m_AiDebugStats.m_ModelInitialised = false;
         }
     }
 
@@ -405,10 +414,31 @@ namespace Trident
 
     void Renderer::ProcessAiFrame()
     {
-        if (!m_FrameGenerator.IsInitialised())
+        m_AiDebugStats.m_ModelInitialised = m_FrameGenerator.IsInitialised();
+        m_AiDebugStats.m_BlendStrength = m_AiBlendStrength;
+        m_AiDebugStats.m_TextureReady = m_AiTextureReady;
+        m_AiDebugStats.m_TextureExtent = m_AiTextureExtent;
+
+        if (!m_AiDebugStats.m_ModelInitialised)
         {
+            m_AiDebugStats.m_PendingJobCount = 0;
+            m_AiDebugStats.m_CompletedInferenceCount = 0;
+            m_AiDebugStats.m_LastInferenceMilliseconds = 0.0;
+            m_AiDebugStats.m_AverageInferenceMilliseconds = 0.0;
+
             return;
         }
+
+        // Lambda keeps the sampling logic centralised so every exit path reports consistent queue and timing metrics.
+        const auto a_RefreshStats = [this]()
+            {
+                m_AiDebugStats.m_PendingJobCount = m_FrameGenerator.GetPendingJobCount();
+                m_AiDebugStats.m_CompletedInferenceCount = m_FrameGenerator.GetCompletedInferenceCount();
+                m_AiDebugStats.m_LastInferenceMilliseconds = m_FrameGenerator.GetLastInferenceMilliseconds();
+                m_AiDebugStats.m_AverageInferenceMilliseconds = m_FrameGenerator.GetAverageInferenceMilliseconds();
+            };
+
+        a_RefreshStats();
 
         // Poll for completed AI tensors before scheduling new work so post-processing can react immediately.
         std::vector<float> l_CompletedOutput;
@@ -416,6 +446,7 @@ namespace Trident
         {
             m_AiInterpolationBuffer = std::move(l_CompletedOutput);
             m_AiTextureDirty = true;
+            a_RefreshStats();
         }
 
         UploadAiInterpolationToGpu();
@@ -445,14 +476,20 @@ namespace Trident
         if (l_ExpectedElements > 0 && l_FrameReadback.size() != l_ExpectedElements)
         {
             TR_CORE_WARN("AI frame generator received {} elements but expected {}. Skipping inference this frame.", l_FrameReadback.size(), l_ExpectedElements);
+            a_RefreshStats();
+
             return;
         }
 
         if (!m_FrameGenerator.ProcessFrame(l_FrameReadback))
         {
             TR_CORE_WARN("AI frame generator rejected the current frame. Retaining the previous AI output for now.");
+            a_RefreshStats();
+
             return;
         }
+
+        a_RefreshStats();
 
         // TODO: Once the async path matures, explore scheduling policies such as adaptive batching or prioritising history frames.
     }
@@ -747,6 +784,8 @@ namespace Trident
         m_AiTextureExtent = { 0, 0 };
         m_AiTextureLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         m_AiTextureReady = false;
+        m_AiDebugStats.m_TextureReady = false;
+        m_AiDebugStats.m_TextureExtent = { 0, 0 };
 
         if (!m_AiInterpolationBuffer.empty())
         {
@@ -759,6 +798,13 @@ namespace Trident
 
     void Renderer::UploadAiInterpolationToGpu()
     {
+        // Keep texture related debug values aligned with the descriptor state so the UI can react immediately.
+        const auto a_UpdateTextureStats = [this]()
+            {
+                m_AiDebugStats.m_TextureReady = m_AiTextureReady;
+                m_AiDebugStats.m_TextureExtent = m_AiTextureExtent;
+            };
+
         if (!m_AiTextureDirty)
         {
             return;
@@ -768,13 +814,17 @@ namespace Trident
         {
             m_AiTextureDirty = false;
             m_AiTextureReady = false;
+
             UpdateAiDescriptorBinding();
+            a_UpdateTextureStats();
 
             return;
         }
 
         if (m_FrameReadbackExtent.width == 0 || m_FrameReadbackExtent.height == 0 || m_FrameReadbackChannelCount == 0)
         {
+            a_UpdateTextureStats();
+
             return;
         }
 
@@ -783,17 +833,20 @@ namespace Trident
 
         if (m_AiInterpolationBuffer.size() < l_ExpectedElements)
         {
-            TR_CORE_WARN("AI interpolation buffer contained {} elements but {} were required to fill the GPU texture.",
-                m_AiInterpolationBuffer.size(), l_ExpectedElements);
+            TR_CORE_WARN("AI interpolation buffer contained {} elements but {} were required to fill the GPU texture.", m_AiInterpolationBuffer.size(), l_ExpectedElements);
             m_AiTextureDirty = false;
             m_AiTextureReady = false;
+
             UpdateAiDescriptorBinding();
+            a_UpdateTextureStats();
 
             return;
         }
 
         if (!EnsureAiTextureResources(m_FrameReadbackExtent))
         {
+            a_UpdateTextureStats();
+
             return;
         }
 
@@ -825,6 +878,7 @@ namespace Trident
         if (vkMapMemory(Startup::GetDevice(), m_AiUploadMemory, 0, m_AiUploadBufferSize, 0, &l_Mapped) != VK_SUCCESS)
         {
             TR_CORE_CRITICAL("Failed to map AI interpolation staging buffer");
+            a_UpdateTextureStats();
 
             return;
         }
@@ -881,6 +935,7 @@ namespace Trident
         m_AiTextureReady = true;
 
         UpdateAiDescriptorBinding();
+        a_UpdateTextureStats();
     }
 
     void Renderer::UpdateAiDescriptorBinding()
@@ -1533,6 +1588,23 @@ namespace Trident
     {
         // Persist the preferred clear colour so both render passes remain visually consistent.
         m_ClearColor = color;
+    }
+
+    void Renderer::SetAiBlendStrength(float blendStrength)
+    {
+        const float l_ClampedStrength = std::clamp(blendStrength, 0.0f, 1.0f);
+        m_AiBlendStrength = l_ClampedStrength;
+        m_AiDebugStats.m_BlendStrength = m_AiBlendStrength;
+
+        // Future revisions may expose curve-driven blending or per-view overrides. Keeping the setter focused for now makes
+        // those extensions straightforward without rewriting the plumbing.
+    }
+
+    ImTextureID Renderer::GetAiTextureDescriptor() const
+    {
+        // UI tooling will eventually register an ImGui descriptor for the AI output. Returning nullptr keeps the API safe
+        // until the descriptor pool work lands, while signalling clearly that the texture is not yet exposed to widgets.
+        return (ImTextureID)nullptr;
     }
 
     VkDescriptorSet Renderer::GetViewportTexture(uint32_t viewportId) const

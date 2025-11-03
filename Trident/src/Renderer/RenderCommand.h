@@ -52,5 +52,12 @@ namespace Trident
         static size_t GetModelCount();
         // Allow editor tooling to resolve texture slots on demand when authors request explicit reloads.
         static int32_t ResolveTextureSlot(const std::string& texturePath);
+        // Mirror the AI debug stats so UI panels can surface runtime information without poking renderer internals.
+        static Renderer::AiDebugStats GetAiDebugStats();
+        // Allow tooling to adjust the AI blend strength without reaching into the renderer singleton directly.
+        static void SetAiBlendStrength(float blendStrength);
+        static float GetAiBlendStrength();
+        // Placeholder hook for future UI that will surface the AI texture preview.
+        static ImTextureID GetAiTextureDescriptor();
     };
 }

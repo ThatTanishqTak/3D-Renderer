@@ -93,6 +93,20 @@ namespace Trident
             double AverageFPS = 0.0;
         };
 
+        // Surface AI pipeline metrics so editor tooling can reason about queue depth and timing behaviour.
+        struct AiDebugStats
+        {
+            bool m_ModelInitialised = false;                 ///< True when the frame generator has successfully loaded a model.
+            size_t m_PendingJobCount = 0;                    ///< Number of frames sitting in the queue awaiting inference.
+            uint64_t m_CompletedInferenceCount = 0;          ///< Total number of jobs that produced an output tensor.
+            double m_LastInferenceMilliseconds = 0.0;        ///< Duration of the most recent inference in milliseconds.
+            double m_AverageInferenceMilliseconds = 0.0;     ///< Average duration across all completed runs.
+            bool m_TextureReady = false;                     ///< Signals whether the AI texture is bound for sampling.
+            float m_BlendStrength = 0.0f;                    ///< Current blend factor applied during compositing.
+            VkExtent2D m_TextureExtent{ 0, 0 };              ///< Resolution of the uploaded AI texture.
+            double m_ReservedMetric = 0.0;                   ///< Placeholder slot for future statistics without breaking ABI.
+        };
+
         Renderer();
         ~Renderer();
 
@@ -181,6 +195,31 @@ namespace Trident
         VkDescriptorSetLayout GetDescriptorSetLayout() const { return m_Pipeline.GetDescriptorSetLayout(); }
         VkCommandPool GetCommandPool() const { return m_Commands.GetCommandPool(); }
         std::vector<VkCommandBuffer> GetCommandBuffer() const { return m_Commands.GetCommandBuffers(); }
+
+        /**
+         * @brief Return cached debug statistics describing the AI frame generator's current state.
+         */
+        AiDebugStats GetAiDebugStats() const { return m_AiDebugStats; }
+
+        /**
+         * @brief Set the strength used when blending AI generated pixels with the rasterised frame.
+         *
+         * Values outside the [0,1] range are clamped so caller mistakes do not produce undefined blends.
+         */
+        void SetAiBlendStrength(float blendStrength);
+
+        /**
+         * @brief Query the blend strength applied when compositing AI pixels.
+         */
+        float GetAiBlendStrength() const { return m_AiBlendStrength; }
+
+        /**
+         * @brief Placeholder for tooling that wishes to display the AI texture in UI panels.
+         *
+         * The renderer does not yet register an ImGui descriptor for the AI output. The stub keeps the plumbing ready so a
+         * future change can wire the descriptor pool without touching the rest of the renderer again.
+         */
+        ImTextureID GetAiTextureDescriptor() const;
 
         bool m_Shutdown = false;
 
@@ -393,6 +432,7 @@ namespace Trident
         bool m_AiTextureDirty = false;                         ///< Signals that a fresh AI frame should be uploaded to the GPU.
         bool m_AiTextureReady = false;                         ///< Tracks whether the descriptor can point at the GPU texture.
         float m_AiBlendStrength = 0.35f;                       ///< Blend factor used to mix the AI and rasterised frames.
+        AiDebugStats m_AiDebugStats{};                         ///< Snapshot of AI metrics surfaced to debug tooling.
 
     private:
         // Core setup

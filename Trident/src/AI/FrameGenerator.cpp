@@ -3,6 +3,7 @@
 #include "Core/Utilities.h"
 
 #include <algorithm>
+#include <chrono>
 #include <numeric>
 
 namespace Trident
@@ -131,6 +132,7 @@ namespace Trident
             {
                 std::scoped_lock l_Lock(m_QueueMutex);
                 m_PendingJobs.emplace_back(std::move(l_Job));
+                m_PendingJobCount = m_PendingJobs.size();
             }
             m_QueueCondition.notify_one();
 
@@ -155,6 +157,39 @@ namespace Trident
             m_CompletedOutputs.pop_front();
 
             return true;
+        }
+
+        double FrameGenerator::GetLastInferenceMilliseconds() const
+        {
+            std::scoped_lock l_Lock(m_OutputMutex);
+
+            return m_LastInferenceMilliseconds;
+        }
+
+        double FrameGenerator::GetAverageInferenceMilliseconds() const
+        {
+            std::scoped_lock l_Lock(m_OutputMutex);
+
+            if (m_CompletedInferenceCount == 0)
+            {
+                return 0.0;
+            }
+
+            return m_TotalInferenceMilliseconds / static_cast<double>(m_CompletedInferenceCount);
+        }
+
+        uint64_t FrameGenerator::GetCompletedInferenceCount() const
+        {
+            std::scoped_lock l_Lock(m_OutputMutex);
+
+            return m_CompletedInferenceCount;
+        }
+
+        size_t FrameGenerator::GetPendingJobCount() const
+        {
+            std::scoped_lock l_Lock(m_QueueMutex);
+
+            return m_PendingJobCount;
         }
 
         std::span<const int64_t> FrameGenerator::GetPrimaryInputShape() const
@@ -226,17 +261,21 @@ namespace Trident
                 std::scoped_lock l_Lock(m_QueueMutex);
                 m_PendingJobs.clear();
                 m_WorkerShouldStop = false;
+                m_PendingJobCount = 0;
             }
 
             {
                 std::scoped_lock l_Lock(m_OutputMutex);
                 m_CompletedOutputs.clear();
+                m_LastOutputTensor.clear();
+                m_LastInferenceMilliseconds = 0.0;
+                m_TotalInferenceMilliseconds = 0.0;
+                m_CompletedInferenceCount = 0;
             }
 
             m_IsInitialised = false;
             m_InputBindings.clear();
             m_OutputBindings.clear();
-            m_LastOutputTensor.clear();
         }
 
         void FrameGenerator::WorkerLoop()
@@ -259,6 +298,7 @@ namespace Trident
 
                     l_Job = std::move(m_PendingJobs.front());
                     m_PendingJobs.pop_front();
+                    m_PendingJobCount = m_PendingJobs.size();
                 }
 
                 if (l_Job.m_InputTensor.empty())
@@ -267,6 +307,8 @@ namespace Trident
                 }
 
                 std::vector<float> l_CombinedOutput;
+                double l_RunMilliseconds = 0.0;
+                bool l_RecordedTiming = false;
 
                 try
                 {
@@ -291,7 +333,12 @@ namespace Trident
                         l_OutputNames.push_back(it_Binding.m_Name.c_str());
                     }
 
+                    // Capture the inference duration so the renderer can expose accurate timing data for debugging.
+                    const auto l_RunStart = std::chrono::steady_clock::now();
                     auto a_OutputTensors = m_RuntimeContext->Run(m_ModelKey, l_InputNames, l_InputTensors, l_OutputNames);
+                    const auto l_RunEnd = std::chrono::steady_clock::now();
+                    l_RunMilliseconds = std::chrono::duration<double, std::milli>(l_RunEnd - l_RunStart).count();
+                    l_RecordedTiming = true;
 
                     for (size_t it_Index = 0; it_Index < a_OutputTensors.size(); ++it_Index)
                     {
@@ -323,6 +370,12 @@ namespace Trident
 
                 if (l_CombinedOutput.empty())
                 {
+                    if (l_RecordedTiming)
+                    {
+                        std::scoped_lock l_Lock(m_OutputMutex);
+                        m_LastInferenceMilliseconds = l_RunMilliseconds;
+                    }
+
                     continue;
                 }
 
@@ -331,6 +384,12 @@ namespace Trident
                     std::scoped_lock l_Lock(m_OutputMutex);
                     m_LastOutputTensor = l_FinalOutput;
                     m_CompletedOutputs.emplace_back(l_FinalOutput);
+                    if (l_RecordedTiming)
+                    {
+                        m_LastInferenceMilliseconds = l_RunMilliseconds;
+                        m_TotalInferenceMilliseconds += l_RunMilliseconds;
+                        ++m_CompletedInferenceCount;
+                    }
                 }
 
                 // TODO: Investigate temporal accumulation, adaptive batching, and GPU buffer interop to further optimise the asynchronous path.

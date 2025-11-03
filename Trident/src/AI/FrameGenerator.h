@@ -72,6 +72,30 @@ namespace Trident
              */
             std::span<const int64_t> GetPrimaryInputShape() const;
 
+            /**
+             * @brief Retrieve the most recent inference duration recorded by the worker thread.
+             *
+             * The timing value is captured immediately after the ONNX runtime completes a Run call. The getter
+             * acquires the output mutex so external systems can safely sample the value while the worker thread
+             * continues processing frames.
+             */
+            double GetLastInferenceMilliseconds() const;
+
+            /**
+             * @brief Calculate the running average inference time across all completed jobs.
+             */
+            double GetAverageInferenceMilliseconds() const;
+
+            /**
+             * @brief Return the total number of successful inference jobs executed since initialisation.
+             */
+            uint64_t GetCompletedInferenceCount() const;
+
+            /**
+             * @brief Report how many frame jobs are currently waiting in the queue.
+             */
+            size_t GetPendingJobCount() const;
+
         private:
             /**
              * @brief Lightweight job object used by the background worker when dispatching inference.
@@ -105,6 +129,10 @@ namespace Trident
             std::condition_variable m_QueueCondition;                    ///< Signals the worker thread when new jobs arrive.
             std::thread m_WorkerThread;                                  ///< Dedicated worker responsible for running inference.
             bool m_WorkerShouldStop = false;                             ///< Latch toggled during shutdown so the worker exits gracefully.
+            double m_LastInferenceMilliseconds = 0.0;                    ///< Timing for the most recent inference run measured in milliseconds.
+            double m_TotalInferenceMilliseconds = 0.0;                   ///< Accumulated duration of all completed inference runs.
+            uint64_t m_CompletedInferenceCount = 0;                      ///< Number of jobs that produced an output tensor.
+            size_t m_PendingJobCount = 0;                                ///< Cached size of the pending job queue for quick inspection.
         };
     }
 }
