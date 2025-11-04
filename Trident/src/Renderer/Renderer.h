@@ -436,11 +436,16 @@ namespace Trident
         AiDebugStats m_AiDebugStats{};                         ///< Snapshot of AI metrics surfaced to debug tooling.
         bool m_AiInputLayoutVerified = false;                  ///< Ensures tensor layout validation logs only trigger once.
         bool m_AiOutputLayoutVerified = false;                 ///< Ensures output layout validation does not spam the console.
-        AI::FrameDatasetRecorder m_FrameDatasetRecorder;           ///< Helper that persists AI training samples for offline pipelines.
+        inline static constexpr std::chrono::milliseconds s_AiModelSearchInterval{ 1000 }; ///< Interval between AI model search attempts.
+        std::chrono::steady_clock::time_point m_AiNextModelSearchTime{ std::chrono::steady_clock::time_point::min() }; ///< Time when the next model search should be attempted.
+        bool m_AiModelMissingWarningIssued = false;            ///< Prevents the missing model log from repeating every frame.
+        bool m_AiModelInitialiseWarningIssued = false;         ///< Prevents repeated warnings when a supplied model fails to load.
+        AI::FrameDatasetRecorder m_FrameDatasetRecorder;       ///< Helper that persists AI training samples for offline pipelines.
 
     private:
         // Core setup
         void ProcessAiFrame();
+        bool TryInitialiseAiModel();
         bool TryAcquireRenderedFrame(std::vector<float>& outPixels);
         std::optional<std::filesystem::path> ResolveAiModelPath() const;
         void CreateOrResizeReadbackResources();

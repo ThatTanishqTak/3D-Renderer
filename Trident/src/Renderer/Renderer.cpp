@@ -348,25 +348,9 @@ namespace Trident
         m_AiDebugStats.m_ModelInitialised = m_FrameGenerator.IsInitialised();
 
         // Attempt to locate an AI model so frame interpolation can be ready before the first render.
-        const std::optional<std::filesystem::path> l_ModelPath = ResolveAiModelPath();
-        if (!l_ModelPath.has_value())
-        {
-            TR_CORE_INFO("AI frame generator did not locate a model. Rendering will continue without AI augmentation until one is provided.");
-            m_AiDebugStats.m_ModelInitialised = false;
-
-            return;
-        }
-
-        if (m_FrameGenerator.Initialise(l_ModelPath.value()))
-        {
-            TR_CORE_INFO("AI frame generator initialised with model '{}'", l_ModelPath->string());
-            m_AiDebugStats.m_ModelInitialised = true;
-        }
-        else
-        {
-            TR_CORE_WARN("AI frame generator failed to initialise using model '{}'. Future frames will skip AI processing until a valid model is supplied.", l_ModelPath->string());
-            m_AiDebugStats.m_ModelInitialised = false;
-        }
+        const bool l_ModelInitialised = TryInitialiseAiModel();
+        m_AiDebugStats.m_ModelInitialised = l_ModelInitialised;
+        m_AiNextModelSearchTime = std::chrono::steady_clock::now() + s_AiModelSearchInterval;
 
         // Dataset capture can be toggled via environment variables so tooling scripts enable it on demand.
         const char* l_EnableCaptureEnv = std::getenv("TRIDENT_DATASET_CAPTURE_ENABLE");
@@ -614,10 +598,22 @@ namespace Trident
 
         if (!m_AiDebugStats.m_ModelInitialised)
         {
-            m_AiDebugStats.m_PendingJobCount = 0;
-            m_AiDebugStats.m_CompletedInferenceCount = 0;
-            m_AiDebugStats.m_LastInferenceMilliseconds = 0.0;
-            m_AiDebugStats.m_AverageInferenceMilliseconds = 0.0;
+            // Periodically retry model discovery so dropping new weights on disk activates the AI path without a restart.
+            const auto l_Now = std::chrono::steady_clock::now();
+            if (l_Now >= m_AiNextModelSearchTime)
+            {
+                TryInitialiseAiModel();
+                m_AiDebugStats.m_ModelInitialised = m_FrameGenerator.IsInitialised();
+                m_AiNextModelSearchTime = l_Now + s_AiModelSearchInterval;
+            }
+
+            if (!m_AiDebugStats.m_ModelInitialised)
+            {
+                m_AiDebugStats.m_PendingJobCount = 0;
+                m_AiDebugStats.m_CompletedInferenceCount = 0;
+                m_AiDebugStats.m_LastInferenceMilliseconds = 0.0;
+                m_AiDebugStats.m_AverageInferenceMilliseconds = 0.0;
+            }
 
             return;
         }
@@ -731,6 +727,40 @@ namespace Trident
         m_PendingFrameReadback.clear();
 
         return true;
+    }
+
+    bool Renderer::TryInitialiseAiModel()
+    {
+        // Attempt to resolve the AI model and initialise the frame generator. Logging is throttled so development builds remain readable.
+        const std::optional<std::filesystem::path> l_ModelPath = ResolveAiModelPath();
+        if (!l_ModelPath.has_value())
+        {
+            if (!m_AiModelMissingWarningIssued)
+            {
+                TR_CORE_INFO("AI frame generator did not locate a model. Rendering will continue without AI augmentation until one is provided.");
+                m_AiModelMissingWarningIssued = true;
+                m_AiModelInitialiseWarningIssued = false;
+            }
+
+            return false;
+        }
+
+        if (m_FrameGenerator.Initialise(l_ModelPath.value()))
+        {
+            TR_CORE_INFO("AI frame generator initialised with model '{}'", l_ModelPath->string());
+            m_AiModelMissingWarningIssued = false;
+            m_AiModelInitialiseWarningIssued = false;
+
+            return true;
+        }
+
+        if (!m_AiModelInitialiseWarningIssued)
+        {
+            TR_CORE_WARN("AI frame generator failed to initialise using model '{}'. Future frames will skip AI processing until a valid model is supplied.", l_ModelPath->string());
+            m_AiModelInitialiseWarningIssued = true;
+        }
+
+        return false;
     }
 
     void Renderer::CreateOrResizeReadbackResources()

@@ -80,26 +80,26 @@ void main()
             }
 
             uint l_BufferIndex = uint(pc.BoneOffset + l_BoneIndex);
-            l_SkinMatrix += l_Weight g_Bones.BoneMatrices[l_BufferIndex];
+            l_SkinMatrix += l_Weight * g_Bones.BoneMatrices[l_BufferIndex];
         }
     }
 
-    vec4 l_SkinnedPosition = l_SkinMatrix vec4(inPosition, 1.0);
-    vec3 l_SkinnedNormal = mat3(l_SkinMatrix) inNormal;
-    vec3 l_SkinnedTangent = mat3(l_SkinMatrix) inTangent;
-    vec3 l_SkinnedBitangent = mat3(l_SkinMatrix) inBitangent;
+    vec4 l_SkinnedPosition = l_SkinMatrix * vec4(inPosition, 1.0);
+    vec3 l_SkinnedNormal = mat3(l_SkinMatrix) * inNormal;
+    vec3 l_SkinnedTangent = mat3(l_SkinMatrix) * inTangent;
+    vec3 l_SkinnedBitangent = mat3(l_SkinMatrix) * inBitangent;
 
-    vec4 l_WorldPosition = pc.ModelMatrix l_SkinnedPosition;
+    vec4 l_WorldPosition = pc.ModelMatrix * l_SkinnedPosition;
     outWorldPosition = l_WorldPosition.xyz;
 
     mat3 l_NormalMatrix = transpose(inverse(mat3(pc.ModelMatrix)));
-    outNormal = normalize(l_NormalMatrix l_SkinnedNormal);
-    outTangent = normalize(l_NormalMatrix l_SkinnedTangent);
-    outBitangent = normalize(l_NormalMatrix l_SkinnedBitangent);
+    outNormal = normalize(l_NormalMatrix * l_SkinnedNormal);
+    outTangent = normalize(l_NormalMatrix * l_SkinnedTangent);
+    outBitangent = normalize(l_NormalMatrix * l_SkinnedBitangent);
 
-    vec2 l_TiledTexCoord = (inTexCoord pc.TextureScale pc.TilingFactor) + pc.TextureOffset; // Apply atlas transforms up front.
+    vec2 l_TiledTexCoord = (inTexCoord * pc.TextureScale * pc.TilingFactor) + pc.TextureOffset; // Apply atlas transforms up front.
     outTexCoord = l_TiledTexCoord;
     outVertexColor = inColor;
 
-    gl_Position = g_Global.Projection g_Global.View l_WorldPosition;
+    gl_Position = g_Global.Projection * g_Global.View * l_WorldPosition;
 }
