@@ -466,6 +466,21 @@ def train_model(a_Config: TrainingConfig) -> InterpolationUNet:
     return l_Model
 
 
+class NhwcOnnxExportWrapper(nn.Module):
+    """Adapter that exposes an NHWC interface around the trained NCHW model."""
+
+    def __init__(self, a_Model: InterpolationUNet) -> None:
+        super().__init__()
+        self.m_Model = a_Model
+
+    def forward(self, l_Input: torch.Tensor) -> torch.Tensor:  # type: ignore[override]
+        # Convert the channels-last tensor produced by the renderer into the channel-first
+        # layout expected by the PyTorch model before returning to NHWC for inference output.
+        l_ChannelFirst = l_Input.permute(0, 3, 1, 2).contiguous()
+        l_ChannelFirstOutput = self.m_Model(l_ChannelFirst)
+        return l_ChannelFirstOutput.permute(0, 2, 3, 1)
+
+
 def export_model(a_Model: InterpolationUNet, a_Config: TrainingConfig) -> None:
     """Export the trained model to ONNX so the renderer can load it."""
 
@@ -474,20 +489,25 @@ def export_model(a_Model: InterpolationUNet, a_Config: TrainingConfig) -> None:
     if a_Config.input_channels <= 0:
         raise RuntimeError("Input channel count must be discovered during training before exporting ONNX.")
 
-    # Dummy tensor encodes the renderer readback layout (batch, channels, height, width).
-    l_DummyInput = torch.zeros((1, a_Config.input_channels, a_Config.image_size, a_Config.image_size), device=l_Device)
+    # Wrap the UNet so the exported graph consumes NHWC tensors and surfaces the same layout.
+    l_WrappedModel = NhwcOnnxExportWrapper(a_Model).to(l_Device)
+
+    # Dummy tensor encodes the renderer readback layout (batch, height, width, channels).
+    l_DummyInput = torch.zeros(
+        (1, a_Config.image_size, a_Config.image_size, a_Config.input_channels), device=l_Device
+    )
     l_OutputPath = a_Config.export_path
+
+    # Freeze the tensor shapes so CalculateElementCount can validate bindings without fallback logic.
     torch.onnx.export(
-        a_Model,
+        l_WrappedModel,
         l_DummyInput,
         l_OutputPath,
         input_names=["input"],
         output_names=["output"],
         opset_version=17,
-        dynamic_axes={
-            "input": {0: "batch", 2: "height", 3: "width"},
-            "output": {0: "batch", 2: "height", 3: "width"},
-        },
+        dynamic_axes=None,
+        do_constant_folding=True,
     )
     print(f"Exported ONNX model to {l_OutputPath}")
 
