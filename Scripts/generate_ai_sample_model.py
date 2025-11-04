@@ -10,13 +10,33 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+import base64
+from importlib import import_module, util
+from typing import Optional
 
-import onnx
-from onnx import TensorProto, helper
+l_OnnxSpec = util.find_spec("onnx")
+if l_OnnxSpec is not None:
+    onnx = import_module("onnx")
+    from onnx import TensorProto, helper
+else:
+    onnx = None  # type: ignore[assignment]
+    TensorProto = helper = None  # type: ignore[assignment]
 
 
-def build_identity_model() -> onnx.ModelProto:
+# Precomputed binary for the diagnostic identity network so we can continue without onnx.
+FALLBACK_MODEL_BASE64 = (
+    "CAwSG1RyaWRlbnRTYW1wbGVGcmFtZUdlbmVyYXRvcjqEAQonCgVpbnB1dBIGb3V0cHV0GgxJZGVu"
+    "dGl0eU5vZGUiCElkZW50aXR5EhZGcmFtZUdlbmVyYXRvcklkZW50aXR5Wh8KBWlucHV0EhYKFAgB"
+    "EhAKAggBCgIIAwoCCAIKAggCYiAKBm91dHB1dBIWChQIARIQCgIIAQoCCAMKAggCCgIIAkIECgAQ"
+    "DQ=="
+)
+
+
+def build_identity_model() -> Optional["onnx.ModelProto"]:
     """Create a trivial identity network that exercises the renderer's AI path."""
+
+    if onnx is None:
+        return None
 
     l_Input = helper.make_tensor_value_info("input", TensorProto.FLOAT, [1, 3, 2, 2])
     l_Output = helper.make_tensor_value_info("output", TensorProto.FLOAT, [1, 3, 2, 2])
@@ -30,6 +50,13 @@ def build_identity_model() -> onnx.ModelProto:
     )
     onnx.checker.check_model(l_Model)
     return l_Model
+
+
+def emit_embedded_model(a_OutputPath: Path) -> None:
+    """Write the built-in diagnostic model when the onnx package is unavailable."""
+
+    l_OutputPathBytes = base64.b64decode(FALLBACK_MODEL_BASE64)
+    a_OutputPath.write_bytes(l_OutputPathBytes)
 
 
 def main() -> None:
@@ -46,8 +73,16 @@ def main() -> None:
     l_OutputPath.parent.mkdir(parents=True, exist_ok=True)
 
     l_Model = build_identity_model()
-    onnx.save(l_Model, l_OutputPath)
-    print(f"Wrote sample model to {l_OutputPath}")
+    if l_Model is not None:
+        # onnx is available locally, so we emit a freshly generated model.
+        onnx.save(l_Model, l_OutputPath)
+        print(f"Wrote sample model to {l_OutputPath}")
+    else:
+        # Fall back to the embedded diagnostic asset so the build can still proceed.
+        emit_embedded_model(l_OutputPath)
+        print(
+            "onnx package missing. Wrote embedded diagnostic model instead; install onnx for regenerated assets."
+        )
 
 
 if __name__ == "__main__":
