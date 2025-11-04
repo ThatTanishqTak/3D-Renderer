@@ -202,6 +202,16 @@ namespace Trident
             return m_InputBindings.front().m_Shape;
         }
 
+        std::span<const int64_t> FrameGenerator::GetPrimaryOutputShape() const
+        {
+            if (m_OutputBindings.empty())
+            {
+                return {};
+            }
+
+            return m_OutputBindings.front().m_Shape;
+        }
+
         bool FrameGenerator::CacheModelBindings(const Ort::Session& session)
         {
             Ort::AllocatorWithDefaultOptions l_Allocator;

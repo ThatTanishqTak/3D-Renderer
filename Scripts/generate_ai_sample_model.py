@@ -2,7 +2,8 @@
 
 The renderer expects an ONNX model at Assets/AI/frame_generator.onnx. This helper emits a
 minimal identity network that allows the runtime plumbing to initialise on machines that do
-not yet have a production-quality frame generator available.
+not yet have a production-quality frame generator available. Prefer the trained artifact
+emitted by ``Scripts/train_frame_generator.py`` when packaging builds.
 """
 
 from __future__ import annotations

@@ -13,6 +13,7 @@
 #include "Renderer/Skybox.h"
 #include "Renderer/TextRenderer.h"
 #include "AI/FrameGenerator.h"
+#include "AI/FrameDatasetRecorder.h"
 
 #include "Geometry/Mesh.h"
 #include "Geometry/Material.h"
@@ -433,6 +434,7 @@ namespace Trident
         bool m_AiTextureReady = false;                         ///< Tracks whether the descriptor can point at the GPU texture.
         float m_AiBlendStrength = 0.35f;                       ///< Blend factor used to mix the AI and rasterised frames.
         AiDebugStats m_AiDebugStats{};                         ///< Snapshot of AI metrics surfaced to debug tooling.
+        AI::FrameDatasetRecorder m_FrameDatasetRecorder;           ///< Helper that persists AI training samples for offline pipelines.
 
     private:
         // Core setup

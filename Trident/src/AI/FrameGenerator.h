@@ -73,6 +73,11 @@ namespace Trident
             std::span<const int64_t> GetPrimaryInputShape() const;
 
             /**
+             * @brief Provide callers with the primary output shape expected from the model.
+             */
+            std::span<const int64_t> GetPrimaryOutputShape() const;
+
+            /**
              * @brief Retrieve the most recent inference duration recorded by the worker thread.
              *
              * The timing value is captured immediately after the ONNX runtime completes a Run call. The getter

@@ -197,6 +197,29 @@ namespace Trident
             TR_CORE_WARN("AI frame generator failed to initialise using model '{}'. Future frames will skip AI processing until a valid model is supplied.", l_ModelPath->string());
             m_AiDebugStats.m_ModelInitialised = false;
         }
+
+        // Dataset capture can be toggled via environment variables so tooling scripts enable it on demand.
+        const char* l_EnableCaptureEnv = std::getenv("TRIDENT_DATASET_CAPTURE_ENABLE");
+        if (l_EnableCaptureEnv != nullptr && std::strlen(l_EnableCaptureEnv) > 0)
+        {
+            const char* l_CustomDirectory = std::getenv("TRIDENT_DATASET_CAPTURE_DIR");
+            if (l_CustomDirectory != nullptr && std::strlen(l_CustomDirectory) > 0)
+            {
+                m_FrameDatasetRecorder.SetCaptureDirectory(l_CustomDirectory);
+            }
+            else
+            {
+                const std::filesystem::path l_DefaultDirectory = std::filesystem::current_path() / "DatasetCapture";
+                m_FrameDatasetRecorder.SetCaptureDirectory(l_DefaultDirectory);
+            }
+
+            m_FrameDatasetRecorder.EnableCapture(true);
+            TR_CORE_INFO("Frame dataset capture enabled. Writing samples to '{}'", m_FrameDatasetRecorder.GetCaptureDirectory().string());
+        }
+        else
+        {
+            m_FrameDatasetRecorder.EnableCapture(false);
+        }
     }
 
     Renderer::~Renderer()
@@ -444,6 +467,9 @@ namespace Trident
         std::vector<float> l_CompletedOutput;
         if (m_FrameGenerator.TryConsumeOutput(l_CompletedOutput) && !l_CompletedOutput.empty())
         {
+            // Persist the freshly produced AI tensor alongside the matching rasterised frame for offline training.
+            m_FrameDatasetRecorder.RecordAiOutput(l_CompletedOutput, m_FrameGenerator.GetPrimaryOutputShape());
+
             m_AiInterpolationBuffer = std::move(l_CompletedOutput);
             m_AiTextureDirty = true;
             a_RefreshStats();
@@ -488,6 +514,9 @@ namespace Trident
 
             return;
         }
+
+        // Cache the exact tensor submitted to the AI worker so the dataset stays perfectly synchronised.
+        m_FrameDatasetRecorder.RecordInputFrame(l_FrameReadback, m_FrameReadbackExtent, m_FrameReadbackChannelCount);
 
         a_RefreshStats();
 
