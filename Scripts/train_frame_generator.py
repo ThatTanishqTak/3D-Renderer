@@ -17,7 +17,8 @@ from typing import List, Tuple
 
 import torch
 from torch import nn
-from torch.utils.data import DataLoader, Dataset
+import torch.nn.functional as F
+from torch.utils.data import DataLoader, Dataset, random_split
 from torchvision import transforms
 from PIL import Image
 
@@ -36,6 +37,10 @@ class TrainingConfig:
     checkpoint_path: Path
     image_size: int
     num_workers: int
+    seed: int
+    validation_split: float
+    early_stop_patience: int
+    early_stop_min_delta: float
     input_channels: int = 0
 
 
@@ -100,32 +105,136 @@ class ConsecutiveFrameDataset(Dataset):
         return self.m_Transform(l_Image)
 
 
-class SimpleInterpolationNet(nn.Module):
-    """Small encoder-decoder network for frame interpolation."""
+class ResidualBlock(nn.Module):
+    """Residual building block used throughout the interpolation network."""
 
-    def __init__(self) -> None:
+    def __init__(self, a_Channels: int) -> None:
         super().__init__()
-        self.m_Encoder = nn.Sequential(
-            nn.Conv2d(6, 32, kernel_size=3, padding=1),
+        self.m_Block = nn.Sequential(
+            nn.Conv2d(a_Channels, a_Channels, kernel_size=3, padding=1, bias=False),
+            nn.BatchNorm2d(a_Channels),
             nn.ReLU(inplace=True),
+            nn.Conv2d(a_Channels, a_Channels, kernel_size=3, padding=1, bias=False),
+            nn.BatchNorm2d(a_Channels),
+        )
+        self.m_Activation = nn.ReLU(inplace=True)
+
+    def forward(self, l_Input: torch.Tensor) -> torch.Tensor:
+        l_Output = self.m_Block(l_Input) + l_Input
+        return self.m_Activation(l_Output)
+
+
+class InterpolationUNet(nn.Module):
+    """Residual U-Net style architecture for high quality frame interpolation."""
+
+    def __init__(self, a_InputChannels: int) -> None:
+        super().__init__()
+
+        # Encoder progressively downsamples the spatial resolution while capturing context.
+        self.m_EncoderStage1 = nn.Sequential(
+            nn.Conv2d(a_InputChannels, 32, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            ResidualBlock(32),
+        )
+        self.m_EncoderStage2 = nn.Sequential(
             nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),
             nn.ReLU(inplace=True),
+            ResidualBlock(64),
+        )
+        self.m_EncoderStage3 = nn.Sequential(
             nn.Conv2d(64, 128, kernel_size=3, stride=2, padding=1),
             nn.ReLU(inplace=True),
+            ResidualBlock(128),
         )
-        self.m_Decoder = nn.Sequential(
+
+        # Bottleneck keeps a wide receptive field for temporal reasoning.
+        self.m_Bottleneck = nn.Sequential(
+            ResidualBlock(128),
+            ResidualBlock(128),
+        )
+
+        # Decoder restores the original resolution and merges encoder skip connections.
+        self.m_DecodeStage2 = nn.Sequential(
             nn.ConvTranspose2d(128, 64, kernel_size=4, stride=2, padding=1),
             nn.ReLU(inplace=True),
+            ResidualBlock(64),
+        )
+        self.m_DecodeStage1 = nn.Sequential(
             nn.ConvTranspose2d(64, 32, kernel_size=4, stride=2, padding=1),
             nn.ReLU(inplace=True),
+            ResidualBlock(32),
+        )
+        self.m_OutputLayer = nn.Sequential(
             nn.Conv2d(32, 3, kernel_size=3, padding=1),
             nn.Sigmoid(),
         )
 
     def forward(self, l_Input: torch.Tensor) -> torch.Tensor:
-        l_Feature = self.m_Encoder(l_Input)
-        l_Output = self.m_Decoder(l_Feature)
+        # Downsample while retaining skip tensors for the U-Net structure.
+        l_Skip1 = self.m_EncoderStage1(l_Input)
+        l_Skip2 = self.m_EncoderStage2(l_Skip1)
+        l_BottleneckInput = self.m_EncoderStage3(l_Skip2)
+
+        # Bottleneck performs the heavy lifting for denoising/interpolation.
+        l_BottleneckOutput = self.m_Bottleneck(l_BottleneckInput)
+
+        # Decoder with skip connections for detail preservation.
+        l_Decode2 = self.m_DecodeStage2(l_BottleneckOutput) + l_Skip2
+        l_Decode1 = self.m_DecodeStage1(l_Decode2) + l_Skip1
+        l_Output = self.m_OutputLayer(l_Decode1)
         return l_Output
+
+
+def _build_gaussian_kernel(a_WindowSize: int, a_Sigma: float, a_Channels: int, a_Device: torch.device) -> torch.Tensor:
+    """Create a Gaussian kernel expanded for depth-wise SSIM convolutions."""
+
+    l_Axis = torch.arange(a_WindowSize, dtype=torch.float32, device=a_Device) - a_WindowSize // 2
+    l_Kernel1D = torch.exp(-(l_Axis ** 2) / (2 * (a_Sigma ** 2)))
+    l_Kernel1D = l_Kernel1D / torch.sum(l_Kernel1D)
+    l_Kernel2D = torch.outer(l_Kernel1D, l_Kernel1D)
+    l_Kernel2D = l_Kernel2D.expand(a_Channels, 1, a_WindowSize, a_WindowSize)
+    return l_Kernel2D
+
+
+def compute_psnr(a_Prediction: torch.Tensor, a_Target: torch.Tensor) -> float:
+    """Compute the mean Peak Signal-to-Noise Ratio for a batch of frames."""
+
+    l_Epsilon = 1e-8
+    l_Mse = torch.mean((a_Prediction - a_Target) ** 2, dim=(1, 2, 3))
+    l_Psnr = 10.0 * torch.log10((1.0 ** 2) / (l_Mse + l_Epsilon))
+    return float(l_Psnr.mean().item())
+
+
+def compute_ssim(a_Prediction: torch.Tensor, a_Target: torch.Tensor) -> float:
+    """Compute the Structural Similarity Index (SSIM) for a batch of frames."""
+
+    s_WindowSize = 11
+    s_Sigma = 1.5
+    s_C1 = 0.01 ** 2
+    s_C2 = 0.03 ** 2
+
+    l_Channels = a_Prediction.size(1)
+    l_Device = a_Prediction.device
+    l_Kernel = _build_gaussian_kernel(s_WindowSize, s_Sigma, l_Channels, l_Device)
+
+    l_MuPrediction = F.conv2d(a_Prediction, l_Kernel, padding=s_WindowSize // 2, groups=l_Channels)
+    l_MuTarget = F.conv2d(a_Target, l_Kernel, padding=s_WindowSize // 2, groups=l_Channels)
+
+    l_MuPredictionSq = l_MuPrediction ** 2
+    l_MuTargetSq = l_MuTarget ** 2
+    l_MuPredictionTarget = l_MuPrediction * l_MuTarget
+
+    l_SigmaPrediction = F.conv2d(a_Prediction * a_Prediction, l_Kernel, padding=s_WindowSize // 2, groups=l_Channels) - l_MuPredictionSq
+    l_SigmaTarget = F.conv2d(a_Target * a_Target, l_Kernel, padding=s_WindowSize // 2, groups=l_Channels) - l_MuTargetSq
+    l_SigmaPredictionTarget = (
+        F.conv2d(a_Prediction * a_Target, l_Kernel, padding=s_WindowSize // 2, groups=l_Channels) - l_MuPredictionTarget
+    )
+
+    l_Numerator = (2 * l_MuPredictionTarget + s_C1) * (2 * l_SigmaPredictionTarget + s_C2)
+    l_Denominator = (l_MuPredictionSq + l_MuTargetSq + s_C1) * (l_SigmaPrediction + l_SigmaTarget + s_C2)
+    l_SsimMap = l_Numerator / (l_Denominator + 1e-8)
+    l_Ssim = l_SsimMap.mean()
+    return float(l_Ssim.item())
 
 
 def parse_arguments() -> TrainingConfig:
@@ -157,6 +266,27 @@ def parse_arguments() -> TrainingConfig:
     l_Parser.add_argument(
         "--seed", type=int, default=1234, help="Random seed for reproducibility.", dest="seed"
     )
+    l_Parser.add_argument(
+        "--validation-split",
+        type=float,
+        default=0.1,
+        dest="validation_split",
+        help="Fraction of the dataset to dedicate to validation metrics.",
+    )
+    l_Parser.add_argument(
+        "--early-stop-patience",
+        type=int,
+        default=5,
+        dest="early_stop_patience",
+        help="Number of epochs to wait for validation improvement before stopping early.",
+    )
+    l_Parser.add_argument(
+        "--early-stop-min-delta",
+        type=float,
+        default=0.05,
+        dest="early_stop_min_delta",
+        help="Minimum PSNR improvement required to reset the early stopping counter.",
+    )
     l_Args = l_Parser.parse_args()
 
     random.seed(l_Args.seed)
@@ -173,10 +303,16 @@ def parse_arguments() -> TrainingConfig:
         checkpoint_path=l_Args.checkpoint_path,
         image_size=l_Args.image_size,
         num_workers=l_Args.num_workers,
+        seed=l_Args.seed,
+        validation_split=l_Args.validation_split,
+        early_stop_patience=l_Args.early_stop_patience,
+        early_stop_min_delta=l_Args.early_stop_min_delta,
     )
 
 
-def create_dataloader(a_Config: TrainingConfig) -> DataLoader:
+def create_dataloaders(a_Config: TrainingConfig) -> Tuple[DataLoader, DataLoader]:
+    """Create training and validation data loaders using a configurable split."""
+
     l_Dataset = ConsecutiveFrameDataset(a_Config.dataset_root, a_Config.image_size)
     if len(l_Dataset) == 0:
         raise RuntimeError("Dataset did not yield any samples.")
@@ -185,32 +321,59 @@ def create_dataloader(a_Config: TrainingConfig) -> DataLoader:
     l_SampleInput, _ = l_Dataset[0]
     a_Config.input_channels = l_SampleInput.shape[0]
 
-    l_Loader = DataLoader(
+    l_TotalSamples = len(l_Dataset)
+    l_ValidationSize = max(int(l_TotalSamples * a_Config.validation_split), 1)
+    l_TrainingSize = max(l_TotalSamples - l_ValidationSize, 1)
+    if l_TrainingSize + l_ValidationSize > l_TotalSamples:
+        l_ValidationSize = l_TotalSamples - l_TrainingSize
+
+    # Use a deterministic generator so runs are reproducible with the CLI seed.
+    l_Generator = torch.Generator().manual_seed(a_Config.seed)
+    l_TrainDataset, l_ValidationDataset = random_split(
         l_Dataset,
+        [l_TrainingSize, l_ValidationSize],
+        generator=l_Generator,
+    )
+
+    l_TrainLoader = DataLoader(
+        l_TrainDataset,
         batch_size=a_Config.batch_size,
         shuffle=True,
         num_workers=a_Config.num_workers,
         pin_memory=a_Config.device == "cuda",
     )
-    return l_Loader
+    l_ValidationLoader = DataLoader(
+        l_ValidationDataset,
+        batch_size=a_Config.batch_size,
+        shuffle=False,
+        num_workers=a_Config.num_workers,
+        pin_memory=a_Config.device == "cuda",
+    )
+    return l_TrainLoader, l_ValidationLoader
 
 
-def train_model(a_Config: TrainingConfig) -> SimpleInterpolationNet:
+def train_model(a_Config: TrainingConfig) -> InterpolationUNet:
     """Train the interpolation network and periodically persist checkpoints."""
 
     l_Device = torch.device(a_Config.device)
-    l_Model = SimpleInterpolationNet().to(l_Device)
+    l_TrainLoader, l_ValidationLoader = create_dataloaders(a_Config)
+    l_Model = InterpolationUNet(a_Config.input_channels).to(l_Device)
     l_Criterion = nn.L1Loss()
     l_Optimizer = torch.optim.Adam(l_Model.parameters(), lr=a_Config.learning_rate)
 
-    l_Loader = create_dataloader(a_Config)
     a_Config.checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
     a_Config.export_path.parent.mkdir(parents=True, exist_ok=True)
+
+    l_BestValidationPsnr = float("-inf")
+    l_EpochsWithoutImprovement = 0
+    l_BestModelState = None
 
     for l_Epoch in range(1, a_Config.epochs + 1):
         l_Model.train()
         l_RunningLoss = 0.0
-        for l_BatchIndex, (l_Input, l_Target) in enumerate(l_Loader):
+        l_RunningPsnr = 0.0
+        l_RunningSsim = 0.0
+        for l_BatchIndex, (l_Input, l_Target) in enumerate(l_TrainLoader):
             l_Input = l_Input.to(l_Device)
             l_Target = l_Target.to(l_Device)
 
@@ -223,6 +386,8 @@ def train_model(a_Config: TrainingConfig) -> SimpleInterpolationNet:
             l_Optimizer.step()
 
             l_RunningLoss += l_Loss.item()
+            l_RunningPsnr += compute_psnr(l_Prediction.detach(), l_Target)
+            l_RunningSsim += compute_ssim(l_Prediction.detach(), l_Target)
 
             if (l_BatchIndex + 1) % 10 == 0:
                 print(
@@ -231,12 +396,55 @@ def train_model(a_Config: TrainingConfig) -> SimpleInterpolationNet:
                             "epoch": l_Epoch,
                             "batch": l_BatchIndex + 1,
                             "loss": l_Loss.item(),
+                            "psnr": l_RunningPsnr / (l_BatchIndex + 1),
+                            "ssim": l_RunningSsim / (l_BatchIndex + 1),
                         }
                     )
                 )
 
-        l_EpochLoss = l_RunningLoss / max(len(l_Loader), 1)
-        print(json.dumps({"epoch": l_Epoch, "average_loss": l_EpochLoss}))
+        l_EpochLoss = l_RunningLoss / max(len(l_TrainLoader), 1)
+        l_EpochPsnr = l_RunningPsnr / max(len(l_TrainLoader), 1)
+        l_EpochSsim = l_RunningSsim / max(len(l_TrainLoader), 1)
+
+        l_ValidationLoss = 0.0
+        l_ValidationPsnr = 0.0
+        l_ValidationSsim = 0.0
+        l_Model.eval()
+        with torch.no_grad():
+            for l_Input, l_Target in l_ValidationLoader:
+                l_Input = l_Input.to(l_Device)
+                l_Target = l_Target.to(l_Device)
+                l_Prediction = l_Model(l_Input)
+                l_Loss = l_Criterion(l_Prediction, l_Target)
+                l_ValidationLoss += l_Loss.item()
+                l_ValidationPsnr += compute_psnr(l_Prediction, l_Target)
+                l_ValidationSsim += compute_ssim(l_Prediction, l_Target)
+
+        l_ValidationLoss /= max(len(l_ValidationLoader), 1)
+        l_ValidationPsnr /= max(len(l_ValidationLoader), 1)
+        l_ValidationSsim /= max(len(l_ValidationLoader), 1)
+
+        print(
+            json.dumps(
+                {
+                    "epoch": l_Epoch,
+                    "train_loss": l_EpochLoss,
+                    "train_psnr": l_EpochPsnr,
+                    "train_ssim": l_EpochSsim,
+                    "val_loss": l_ValidationLoss,
+                    "val_psnr": l_ValidationPsnr,
+                    "val_ssim": l_ValidationSsim,
+                }
+            )
+        )
+
+        l_HasImproved = l_ValidationPsnr > (l_BestValidationPsnr + a_Config.early_stop_min_delta)
+        if l_HasImproved:
+            l_BestValidationPsnr = l_ValidationPsnr
+            l_EpochsWithoutImprovement = 0
+            l_BestModelState = {it_Key: it_Value.detach().cpu().clone() for it_Key, it_Value in l_Model.state_dict().items()}
+        else:
+            l_EpochsWithoutImprovement += 1
 
         if l_Epoch % a_Config.checkpoint_interval == 0:
             l_CheckpointFile = a_Config.checkpoint_path.with_name(
@@ -246,10 +454,19 @@ def train_model(a_Config: TrainingConfig) -> SimpleInterpolationNet:
             torch.save({"model_state": l_Model.state_dict(), "epoch": l_Epoch}, l_CheckpointFile)
             print(f"Saved checkpoint to {l_CheckpointFile}")
 
+        if l_EpochsWithoutImprovement >= a_Config.early_stop_patience:
+            print(
+                f"Early stopping triggered after {l_EpochsWithoutImprovement} epochs without validation PSNR improvement."
+            )
+            break
+
+    if l_BestModelState is not None:
+        l_Model.load_state_dict(l_BestModelState)
+
     return l_Model
 
 
-def export_model(a_Model: SimpleInterpolationNet, a_Config: TrainingConfig) -> None:
+def export_model(a_Model: InterpolationUNet, a_Config: TrainingConfig) -> None:
     """Export the trained model to ONNX so the renderer can load it."""
 
     a_Model.eval()
