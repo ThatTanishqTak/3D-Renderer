@@ -434,6 +434,8 @@ namespace Trident
         bool m_AiTextureReady = false;                         ///< Tracks whether the descriptor can point at the GPU texture.
         float m_AiBlendStrength = 0.35f;                       ///< Blend factor used to mix the AI and rasterised frames.
         AiDebugStats m_AiDebugStats{};                         ///< Snapshot of AI metrics surfaced to debug tooling.
+        bool m_AiInputLayoutVerified = false;                  ///< Ensures tensor layout validation logs only trigger once.
+        bool m_AiOutputLayoutVerified = false;                 ///< Ensures output layout validation does not spam the console.
         AI::FrameDatasetRecorder m_FrameDatasetRecorder;           ///< Helper that persists AI training samples for offline pipelines.
 
     private:

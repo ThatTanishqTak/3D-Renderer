@@ -9,6 +9,7 @@
 #include <limits>
 #include <numeric>
 #include <sstream>
+#include <string_view>
 #include <system_error>
 
 namespace Trident
@@ -38,7 +39,7 @@ namespace Trident
             m_NextSampleIndex = 0;
         }
 
-        void FrameDatasetRecorder::RecordInputFrame(std::span<const float> frameData, VkExtent2D extent, uint32_t channelCount)
+        void FrameDatasetRecorder::RecordInputFrame(std::span<const float> frameData, VkExtent2D extent, uint32_t channelCount, std::span<const int64_t> tensorShape)
         {
             if (!m_CaptureEnabled)
             {
@@ -64,20 +65,23 @@ namespace Trident
             const std::filesystem::path l_InputPath = BuildInputPath(l_Index);
             const std::filesystem::path l_MetadataPath = BuildMetadataPath(l_Index);
 
-            const std::array<int64_t, 3> l_Shape =
+            // Ensure the persisted tensor always reflects the canonical NHWC layout with an explicit batch dimension.
+            std::array<int64_t, 4> l_DefaultShape =
             {
+                1,
                 static_cast<int64_t>(extent.height),
                 static_cast<int64_t>(extent.width),
                 static_cast<int64_t>(channelCount)
             };
+            const std::span<const int64_t> l_ShapeSpan = tensorShape.empty() ? std::span<const int64_t>{ l_DefaultShape } : tensorShape;
 
-            if (!WriteNpyFile(l_InputPath, frameData, l_Shape))
+            if (!WriteNpyFile(l_InputPath, frameData, l_ShapeSpan))
             {
                 TR_CORE_ERROR("FrameDatasetRecorder failed to persist frame input '{}'", l_InputPath.string());
                 return;
             }
 
-            WriteMetadataFile(l_MetadataPath, extent, channelCount);
+            WriteMetadataFile(l_MetadataPath, extent, channelCount, l_ShapeSpan, "BGRA", true);
 
             PendingSample l_Pending{};
             l_Pending.m_Index = l_Index;
@@ -116,6 +120,20 @@ namespace Trident
             else
             {
                 l_Shape = { static_cast<int64_t>(outputData.size()) };
+            }
+
+            // Normalise the output tensor shape so offline tooling can rely on an explicit batch dimension and channels-last layout.
+            if (l_Shape.size() == 3)
+            {
+                l_Shape.insert(l_Shape.begin(), 1);
+            }
+            else if (l_Shape.size() >= 4)
+            {
+                l_Shape[0] = (l_Shape[0] <= 0) ? 1 : l_Shape[0];
+            }
+            else if (l_Shape.size() == 1)
+            {
+                l_Shape = { 1, l_Shape[0], 1, 1 };
             }
 
             const std::filesystem::path l_OutputPath = BuildOutputPath(l_Pending.m_Index);
@@ -279,7 +297,8 @@ namespace Trident
             return true;
         }
 
-        void FrameDatasetRecorder::WriteMetadataFile(const std::filesystem::path& path, VkExtent2D extent, uint32_t channelCount) const
+        void FrameDatasetRecorder::WriteMetadataFile(const std::filesystem::path& path, VkExtent2D extent, uint32_t channelCount, std::span<const int64_t> tensorShape,
+            std::string_view colorOrder, bool normalised) const
         {
             std::ofstream l_Stream(path, std::ios::trunc);
             if (!l_Stream.is_open())
@@ -293,7 +312,14 @@ namespace Trident
             l_Stream << "{\n";
             l_Stream << "  \"width\": " << extent.width << ",\n";
             l_Stream << "  \"height\": " << extent.height << ",\n";
-            l_Stream << "  \"channels\": " << channelCount << "\n";
+            l_Stream << "  \"channels\": " << channelCount << ",\n";
+            if (!tensorShape.empty())
+            {
+                l_Stream << "  \"layout\": \"" << BuildShapeString(tensorShape) << "\",\n";
+            }
+            l_Stream << "  \"channelsLast\": true,\n";
+            l_Stream << "  \"colorOrder\": \"" << colorOrder << "\",\n";
+            l_Stream << "  \"normalised\": " << (normalised ? "true" : "false") << "\n";
             l_Stream << "}\n";
         }
     }

@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <vulkan/vulkan.h>
@@ -49,7 +50,7 @@ namespace Trident
             /**
              * @brief Record the frame that is about to be submitted to the AI system.
              */
-            void RecordInputFrame(std::span<const float> frameData, VkExtent2D extent, uint32_t channelCount);
+            void RecordInputFrame(std::span<const float> frameData, VkExtent2D extent, uint32_t channelCount, std::span<const int64_t> tensorShape = {});
 
             /**
              * @brief Record the AI output tensor that corresponds to the next pending frame capture.
@@ -74,7 +75,8 @@ namespace Trident
             void EnsureDirectoryReady();
             std::string BuildShapeString(std::span<const int64_t> shape) const;
             bool WriteNpyFile(const std::filesystem::path& path, std::span<const float> data, std::span<const int64_t> shape) const;
-            void WriteMetadataFile(const std::filesystem::path& path, VkExtent2D extent, uint32_t channelCount) const;
+            void WriteMetadataFile(const std::filesystem::path& path, VkExtent2D extent, uint32_t channelCount, std::span<const int64_t> tensorShape, 
+                std::string_view colorOrder, bool normalised) const;
         };
     }
 }

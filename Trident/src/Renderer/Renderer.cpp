@@ -35,6 +35,7 @@
 #include <cassert>
 #include <iterator>
 #include <utility>
+#include <span>
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/matrix_inverse.hpp>
@@ -50,6 +51,20 @@ namespace
         uint32_t m_ChannelCount = 0;  ///< Number of colour channels represented by the format.
     };
 
+    /**
+     * @brief Lightweight description of the primary tensor layout exposed by the ONNX model.
+     */
+    struct TensorShapeInfo
+    {
+        bool m_IsValid = false;              ///< Signals whether the provided shape matched the expected NHWC layout.
+        bool m_HasExplicitBatch = false;     ///< Tracks whether the model declared the batch dimension explicitly.
+        bool m_IsChannelsLast = false;       ///< Indicates that the tensor arranges colour channels in the final dimension.
+        int64_t m_Batch = 1;                 ///< Batch dimension reported by the model (defaulting to one sample).
+        int64_t m_Height = -1;               ///< Height component extracted from the tensor shape.
+        int64_t m_Width = -1;                ///< Width component extracted from the tensor shape.
+        int64_t m_Channels = -1;             ///< Channel count derived from the tensor shape.
+    };
+
     SwapchainFormatInfo QuerySwapchainFormatInfo(VkFormat format)
     {
         // Extendable helper that converts the swapchain format into a CPU-friendly description.
@@ -62,6 +77,161 @@ namespace
             return { 4u, 4u };
         default:
             return {};
+        }
+    }
+
+    /**
+ * @brief Extract the NHWC layout information from the model supplied tensor shape.
+ */
+    TensorShapeInfo ParseTensorShapeNhwc(std::span<const int64_t> a_Shape)
+    {
+        TensorShapeInfo l_Info{};
+        if (a_Shape.empty())
+        {
+            return l_Info;
+        }
+
+        if (a_Shape.size() == 4)
+        {
+            l_Info.m_IsValid = true;
+            l_Info.m_HasExplicitBatch = true;
+            l_Info.m_IsChannelsLast = true;
+            l_Info.m_Batch = a_Shape[0];
+            l_Info.m_Height = a_Shape[1];
+            l_Info.m_Width = a_Shape[2];
+            l_Info.m_Channels = a_Shape[3];
+        }
+        else if (a_Shape.size() == 3)
+        {
+            l_Info.m_IsValid = true;
+            l_Info.m_HasExplicitBatch = false;
+            l_Info.m_IsChannelsLast = true;
+            l_Info.m_Batch = 1;
+            l_Info.m_Height = a_Shape[0];
+            l_Info.m_Width = a_Shape[1];
+            l_Info.m_Channels = a_Shape[2];
+        }
+
+        return l_Info;
+    }
+
+    /**
+     * @brief Replace dynamic tensor dimensions with a sensible runtime fallback.
+     */
+    int64_t ResolveTensorDimension(int64_t a_Value, int64_t a_Fallback)
+    {
+        if (a_Value <= 0)
+        {
+            return a_Fallback;
+        }
+
+        return a_Value;
+    }
+
+    /**
+     * @brief Build a canonical NHWC shape so downstream systems can treat the tensor consistently.
+     */
+    std::array<int64_t, 4> BuildCanonicalNhwcShape(const TensorShapeInfo& a_Shape, VkExtent2D a_FallbackExtent, uint32_t a_FallbackChannels)
+    {
+        const int64_t l_Height = ResolveTensorDimension(a_Shape.m_Height, static_cast<int64_t>(a_FallbackExtent.height));
+        const int64_t l_Width = ResolveTensorDimension(a_Shape.m_Width, static_cast<int64_t>(a_FallbackExtent.width));
+        const int64_t l_Channels = ResolveTensorDimension(a_Shape.m_Channels, static_cast<int64_t>(a_FallbackChannels));
+
+        return
+        {
+            1,
+            std::max<int64_t>(l_Height, 0),
+            std::max<int64_t>(l_Width, 0),
+            std::max<int64_t>(l_Channels, 0)
+        };
+    }
+
+    /**
+     * @brief Convert a raw tensor shape into a debug-friendly string representation.
+     */
+    std::string BuildShapeDebugString(std::span<const int64_t> a_Shape)
+    {
+        if (a_Shape.empty())
+        {
+            return "[]";
+        }
+
+        std::ostringstream l_Stream;
+        l_Stream << '[';
+        for (size_t it_Index = 0; it_Index < a_Shape.size(); ++it_Index)
+        {
+            l_Stream << a_Shape[it_Index];
+            const bool l_IsLast = (it_Index + 1) == a_Shape.size();
+            if (!l_IsLast)
+            {
+                l_Stream << ", ";
+            }
+        }
+        l_Stream << ']';
+
+        return l_Stream.str();
+    }
+
+    /**
+     * @brief Convert the AI output tensor into normalised BGRA data that matches the swapchain format.
+     */
+    void NormaliseAndReorderAiOutput(std::vector<float>& a_Data, const TensorShapeInfo& a_Shape,
+        VkExtent2D a_FallbackExtent, uint32_t a_FallbackChannels)
+    {
+        if (a_Data.empty())
+        {
+            return;
+        }
+
+        const std::array<int64_t, 4> l_CanonicalShape = BuildCanonicalNhwcShape(a_Shape, a_FallbackExtent, a_FallbackChannels);
+        const int64_t l_ChannelCount64 = l_CanonicalShape[3];
+        if (l_ChannelCount64 <= 0)
+        {
+            TR_CORE_WARN("AI output tensor reported an invalid channel count ({}).", l_ChannelCount64);
+            return;
+        }
+
+        const size_t l_ChannelCount = static_cast<size_t>(l_ChannelCount64);
+        if (l_ChannelCount == 0)
+        {
+            return;
+        }
+
+        if (a_Data.size() % l_ChannelCount != 0)
+        {
+            TR_CORE_WARN("AI output tensor element count ({}) did not align with the channel count ({}).", a_Data.size(), l_ChannelCount);
+            return;
+        }
+
+        const size_t l_PixelCount = a_Data.size() / l_ChannelCount;
+
+        const auto [l_MinIt, l_MaxIt] = std::minmax_element(a_Data.begin(), a_Data.end());
+        const float l_MinValue = *l_MinIt;
+        const float l_MaxValue = *l_MaxIt;
+        constexpr float s_Tolerance = 1.0e-3f;
+        const bool l_NeedsScaling = (l_MaxValue > 1.0f + s_Tolerance) || (l_MinValue < -s_Tolerance);
+        const float l_Scale = l_NeedsScaling ? (1.0f / 255.0f) : 1.0f;
+
+        if (l_Scale != 1.0f)
+        {
+            for (float& l_Value : a_Data)
+            {
+                l_Value *= l_Scale;
+            }
+        }
+
+        if (l_ChannelCount >= 3)
+        {
+            for (size_t it_Pixel = 0; it_Pixel < l_PixelCount; ++it_Pixel)
+            {
+                const size_t l_BaseIndex = it_Pixel * l_ChannelCount;
+                std::swap(a_Data[l_BaseIndex], a_Data[l_BaseIndex + 2]);
+            }
+        }
+
+        for (float& l_Value : a_Data)
+        {
+            l_Value = std::clamp(l_Value, 0.0f, 1.0f);
         }
     }
 
@@ -463,12 +633,46 @@ namespace Trident
 
         a_RefreshStats();
 
+        const std::span<const int64_t> l_PrimaryInputShape = m_FrameGenerator.GetPrimaryInputShape();
+        const TensorShapeInfo l_InputShapeInfo = ParseTensorShapeNhwc(l_PrimaryInputShape);
+        if (!m_AiInputLayoutVerified && !l_PrimaryInputShape.empty())
+        {
+            if (!l_InputShapeInfo.m_IsValid || !l_InputShapeInfo.m_IsChannelsLast)
+            {
+                TR_CORE_ERROR("AI input tensor is expected to follow the [1, height, width, channels] layout. The reported shape was {}.", BuildShapeDebugString(l_PrimaryInputShape));
+                return;
+            }
+
+            if (l_InputShapeInfo.m_HasExplicitBatch && l_InputShapeInfo.m_Batch > 1)
+            {
+                TR_CORE_WARN("AI model declared a batch size of {}. The renderer currently feeds a single frame per submission.", l_InputShapeInfo.m_Batch);
+            }
+
+            m_AiInputLayoutVerified = true;
+        }
+
+        const std::span<const int64_t> l_PrimaryOutputShape = m_FrameGenerator.GetPrimaryOutputShape();
+        const TensorShapeInfo l_OutputShapeInfo = ParseTensorShapeNhwc(l_PrimaryOutputShape);
+        if (!m_AiOutputLayoutVerified && !l_PrimaryOutputShape.empty())
+        {
+            if (!l_OutputShapeInfo.m_IsValid || !l_OutputShapeInfo.m_IsChannelsLast)
+            {
+                TR_CORE_ERROR("AI output tensor must expose the channels-last layout so dataset capture stays consistent. The reported shape was {}.", BuildShapeDebugString(l_PrimaryOutputShape));
+                return;
+            }
+
+            m_AiOutputLayoutVerified = true;
+        }
+
         // Poll for completed AI tensors before scheduling new work so post-processing can react immediately.
         std::vector<float> l_CompletedOutput;
         if (m_FrameGenerator.TryConsumeOutput(l_CompletedOutput) && !l_CompletedOutput.empty())
         {
+            NormaliseAndReorderAiOutput(l_CompletedOutput, l_OutputShapeInfo, m_FrameReadbackExtent, m_FrameReadbackChannelCount);
+            const std::array<int64_t, 4> l_OutputCaptureShape = BuildCanonicalNhwcShape(l_OutputShapeInfo, m_FrameReadbackExtent, m_FrameReadbackChannelCount);
+
             // Persist the freshly produced AI tensor alongside the matching rasterised frame for offline training.
-            m_FrameDatasetRecorder.RecordAiOutput(l_CompletedOutput, m_FrameGenerator.GetPrimaryOutputShape());
+            m_FrameDatasetRecorder.RecordAiOutput(l_CompletedOutput, l_OutputCaptureShape);
 
             m_AiInterpolationBuffer = std::move(l_CompletedOutput);
             m_AiTextureDirty = true;
@@ -477,26 +681,19 @@ namespace Trident
 
         UploadAiInterpolationToGpu();
 
-        const std::span<const int64_t> l_PrimaryShape = m_FrameGenerator.GetPrimaryInputShape();
-        size_t l_ExpectedElements = 0;
-        if (!l_PrimaryShape.empty())
-        {
-            l_ExpectedElements = static_cast<size_t>(std::accumulate(l_PrimaryShape.begin(), l_PrimaryShape.end(), int64_t{ 1 },
-                [](int64_t a_Lhs, int64_t a_Rhs)
-                {
-                    const int64_t l_SafeLhs = std::max<int64_t>(a_Lhs, 1);
-                    const int64_t l_SafeRhs = std::max<int64_t>(a_Rhs, 1);
-
-                    return l_SafeLhs * l_SafeRhs;
-                }));
-        }
-
         std::vector<float> l_FrameReadback;
         if (!TryAcquireRenderedFrame(l_FrameReadback))
         {
             // No fresh GPU readback is available. This occurs when the viewport resolution changes or the frame has not
             // completed yet; the AI helper simply reuses the previous output in that scenario.
             return;
+        }
+
+        const std::array<int64_t, 4> l_InputCaptureShape = BuildCanonicalNhwcShape(l_InputShapeInfo, m_FrameReadbackExtent, m_FrameReadbackChannelCount);
+        size_t l_ExpectedElements = 0;
+        if (l_InputCaptureShape[1] > 0 && l_InputCaptureShape[2] > 0 && l_InputCaptureShape[3] > 0)
+        {
+            l_ExpectedElements = static_cast<size_t>(l_InputCaptureShape[1]) * static_cast<size_t>(l_InputCaptureShape[2]) * static_cast<size_t>(l_InputCaptureShape[3]);
         }
 
         if (l_ExpectedElements > 0 && l_FrameReadback.size() != l_ExpectedElements)
@@ -516,7 +713,7 @@ namespace Trident
         }
 
         // Cache the exact tensor submitted to the AI worker so the dataset stays perfectly synchronised.
-        m_FrameDatasetRecorder.RecordInputFrame(l_FrameReadback, m_FrameReadbackExtent, m_FrameReadbackChannelCount);
+        m_FrameDatasetRecorder.RecordInputFrame(l_FrameReadback, m_FrameReadbackExtent, m_FrameReadbackChannelCount, l_InputCaptureShape);
 
         a_RefreshStats();
 
