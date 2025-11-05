@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -85,6 +86,8 @@ namespace Trident
             ~OnnxRuntimeContext() = default;
 
             std::filesystem::path SanitizeModelPath(const std::filesystem::path& modelPath) const;
+            bool HandleModelLoadFailure(const std::filesystem::path& modelPath, const Ort::Exception& runtimeError) const;
+            std::optional<uint64_t> ReadOnnxIrVersion(const std::filesystem::path& modelPath) const;
 
             Ort::Env m_Environment;
             Ort::SessionOptions m_DefaultSessionOptions;

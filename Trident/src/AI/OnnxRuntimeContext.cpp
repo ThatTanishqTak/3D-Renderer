@@ -1,8 +1,11 @@
 #include "AI/OnnxRuntimeContext.h"
 
 #include <algorithm>
+#include <fstream>
 #include <functional>
 #include <numeric>
+#include <optional>
+#include <sstream>
 #include <stdexcept>
 
 namespace Trident
@@ -53,10 +56,40 @@ namespace Trident
 
 #ifdef _WIN32
             const std::wstring l_ModelPath = l_SanitizedPath.wstring();
-            auto a_NewSession = std::make_shared<Ort::Session>(m_Environment, l_ModelPath.c_str(), m_DefaultSessionOptions);
+            std::shared_ptr<Ort::Session> a_NewSession;
+
+            try
+            {
+                // Attempt to create the ONNX session for the requested model. The runtime may
+                // throw if the model targets a newer IR/opset than the bundled runtime supports,
+                // so we catch that case to provide a more actionable diagnostic downstream.
+                a_NewSession = std::make_shared<Ort::Session>(m_Environment, l_ModelPath.c_str(), m_DefaultSessionOptions);
+            }
+            catch (const Ort::Exception& l_Exception)
+            {
+                if (!HandleModelLoadFailure(l_SanitizedPath, l_Exception))
+                {
+                    throw;
+                }
+            }
 #else
             const std::string l_ModelPath = l_SanitizedPath.string();
-            auto a_NewSession = std::make_shared<Ort::Session>(m_Environment, l_ModelPath.c_str(), m_DefaultSessionOptions);
+            std::shared_ptr<Ort::Session> a_NewSession;
+
+            try
+            {
+                // Attempt to create the ONNX session for the requested model. The runtime may
+                // throw if the model targets a newer IR/opset than the bundled runtime supports,
+                // so we catch that case to provide a more actionable diagnostic downstream.
+                a_NewSession = std::make_shared<Ort::Session>(m_Environment, l_ModelPath.c_str(), m_DefaultSessionOptions);
+            }
+            catch (const Ort::Exception& l_Exception)
+            {
+                if (!HandleModelLoadFailure(l_SanitizedPath, l_Exception))
+                {
+                    throw;
+                }
+            }
 #endif
 
             std::scoped_lock l_Lock{ m_SessionMutex };
@@ -140,6 +173,80 @@ namespace Trident
             }
 
             return modelPath;
+        }
+
+        bool OnnxRuntimeContext::HandleModelLoadFailure(const std::filesystem::path& modelPath, const Ort::Exception& runtimeError) const
+        {
+            const std::string l_RuntimeMessage{ runtimeError.what() };
+            const bool l_IsIrMismatch = l_RuntimeMessage.find("Unsupported model IR version") != std::string::npos;
+
+            if (!l_IsIrMismatch)
+            {
+                return false;
+            }
+
+            // Compose a friendlier diagnostic that explains why the runtime rejected the model and
+            // how the developer can resolve the mismatch.
+            std::ostringstream l_Stream;
+            //l_Stream << "ONNX Runtime " << Ort::GetApi().GetVersionString()
+            //    << " rejected model '" << modelPath.string()
+            //    << "' because it targets a newer IR version than the bundled runtime understands.";
+
+            if (const std::optional<uint64_t> l_ModelIr = ReadOnnxIrVersion(modelPath))
+            {
+                l_Stream << " Detected model IR version " << *l_ModelIr << '.';
+            }
+
+            l_Stream << " Update the packaged onnxruntime binaries or re-export the model with an older opset to continue.";
+
+            throw Ort::Exception(l_Stream.str().c_str(), runtimeError.GetOrtErrorCode());
+        }
+
+        std::optional<uint64_t> OnnxRuntimeContext::ReadOnnxIrVersion(const std::filesystem::path& modelPath) const
+        {
+            std::ifstream l_Stream{ modelPath, std::ios::binary };
+            if (!l_Stream)
+            {
+                return std::nullopt;
+            }
+
+            // The ONNX file format begins with field #1 (ir_version) encoded as a protobuf varint.
+            // We only need the first field to inform the error message, so a tiny parser suffices.
+            const int l_KeyByte = l_Stream.get();
+            if (l_KeyByte == EOF)
+            {
+                return std::nullopt;
+            }
+
+            constexpr uint8_t s_IrVersionKey = static_cast<uint8_t>((1 << 3) | 0); // field=1, wire=varint
+            if (static_cast<uint8_t>(l_KeyByte) != s_IrVersionKey)
+            {
+                return std::nullopt;
+            }
+
+            uint64_t l_Version = 0;
+            int l_Shift = 0;
+
+            while (l_Shift < 64)
+            {
+                const int l_RawByte = l_Stream.get();
+                if (l_RawByte == EOF)
+                {
+                    return std::nullopt;
+                }
+
+                const uint8_t l_Byte = static_cast<uint8_t>(l_RawByte);
+                l_Version |= static_cast<uint64_t>(l_Byte & 0x7F) << l_Shift;
+
+                if ((l_Byte & 0x80U) == 0U)
+                {
+                    return l_Version;
+                }
+
+                l_Shift += 7;
+            }
+
+            return std::nullopt;
         }
     }
 }
