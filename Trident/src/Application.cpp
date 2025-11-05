@@ -122,7 +122,7 @@ namespace Trident
     void Application::OnEvent(Events& event)
     {
         const std::string l_EventDescription = event.ToString();
-        TR_CORE_TRACE("Received event: {}", l_EventDescription);
+        //TR_CORE_TRACE("Received event: {}", l_EventDescription);
 
         // Dispatch events by type so only the relevant handler executes and other listeners remain extendable.
         EventDispatcher l_Dispatcher(event);
