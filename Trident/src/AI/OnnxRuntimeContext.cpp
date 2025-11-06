@@ -29,8 +29,7 @@ namespace Trident
 
         void OnnxRuntimeContext::ConfigureThreading(uint32_t interOpThreads, uint32_t intraOpThreads)
         {
-            // The ONNX runtime expects non-zero values; guard against invalid input while leaving
-            // room for future heuristics such as querying hardware concurrency.
+            // The ONNX runtime expects non-zero values; guard against invalid input while leaving room for future heuristics such as querying hardware concurrency.
             const uint32_t l_InterOp = std::max<uint32_t>(1, interOpThreads);
             const uint32_t l_IntraOp = std::max<uint32_t>(1, intraOpThreads);
 
@@ -187,9 +186,9 @@ namespace Trident
             // Compose a friendlier diagnostic that explains why the runtime rejected the model and
             // how the developer can resolve the mismatch.
             std::ostringstream l_Stream;
-            //l_Stream << "ONNX Runtime " << Ort::GetApi().GetVersionString()
-            //    << " rejected model '" << modelPath.string()
-            //    << "' because it targets a newer IR version than the bundled runtime understands.";
+            l_Stream << "ONNX Runtime 1.23.2 (expects ONNX IR 12+/opset 21) rejected model '"
+                << modelPath.string()
+                << "' because it targets a newer IR version than the bundled runtime understands.";
 
             if (const std::optional<uint64_t> l_ModelIr = ReadOnnxIrVersion(modelPath))
             {

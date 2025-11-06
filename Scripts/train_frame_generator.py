@@ -505,7 +505,7 @@ def export_model(a_Model: InterpolationUNet, a_Config: TrainingConfig) -> None:
         l_OutputPath,
         input_names=["input"],
         output_names=["output"],
-        opset_version=17,
+        opset_version=21,
         dynamic_axes=None,
         do_constant_folding=True,
     )
