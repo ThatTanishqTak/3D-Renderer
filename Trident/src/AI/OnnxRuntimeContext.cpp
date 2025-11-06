@@ -15,12 +15,11 @@ namespace Trident
         OnnxRuntimeContext& OnnxRuntimeContext::Get()
         {
             static OnnxRuntimeContext s_Instance;
+
             return s_Instance;
         }
 
-        OnnxRuntimeContext::OnnxRuntimeContext()
-            : m_Environment{ s_DefaultLogLevel, "TridentOnnx" }
-            , m_DefaultSessionOptions{}
+        OnnxRuntimeContext::OnnxRuntimeContext() : m_Environment{ s_DefaultLogLevel, "TridentOnnx" }, m_DefaultSessionOptions{}
         {
             // Configure a predictable baseline that we can tweak via ConfigureThreading.
             m_DefaultSessionOptions.SetInterOpNumThreads(s_DefaultInterOpThreads);
