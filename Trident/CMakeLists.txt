@@ -94,3 +94,14 @@ if(TRIDENT_ENABLE_LOADER_REGRESSION_CHECKS)
 endif()
 
 message(STATUS "Vulkan SDK Path: ${VULKAN_SDK_PATH}")
+
+add_executable(trident_onnx_validator tools/ValidateOnnxAsset.cpp)
+target_link_libraries(trident_onnx_validator PRIVATE ${PROJECT_NAME})
+target_include_directories(trident_onnx_validator PRIVATE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>)
+target_compile_definitions(trident_onnx_validator PRIVATE
+  TRIDENT_DEFAULT_MODEL_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../Assets/AI/frame_generator.onnx"
+  TRIDENT_MAX_ONNX_IR=11)
+
+add_test(NAME TridentValidateOnnxRuntimeCompatibility
+  COMMAND trident_onnx_validator
+  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..)

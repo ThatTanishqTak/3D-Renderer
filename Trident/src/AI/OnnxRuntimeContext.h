@@ -81,13 +81,18 @@ namespace Trident
              */ 
             const Ort::Env& GetEnvironment() const;
 
+            /**
+             * Lightweight helper to read the encoded IR version from an ONNX
+             * file without invoking the runtime.
+             */
+            static std::optional<uint64_t> ReadOnnxIrVersion(const std::filesystem::path& modelPath);
+
         private:
             OnnxRuntimeContext();
             ~OnnxRuntimeContext() = default;
 
             std::filesystem::path SanitizeModelPath(const std::filesystem::path& modelPath) const;
             bool HandleModelLoadFailure(const std::filesystem::path& modelPath, const Ort::Exception& runtimeError) const;
-            std::optional<uint64_t> ReadOnnxIrVersion(const std::filesystem::path& modelPath) const;
             std::optional<uint64_t> ParseMaxSupportedIrVersion(std::string_view runtimeMessage) const;
 
             Ort::Env m_Environment;

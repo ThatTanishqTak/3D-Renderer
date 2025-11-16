@@ -207,7 +207,7 @@ namespace Trident
             throw Ort::Exception(l_Stream.str().c_str(), runtimeError.GetOrtErrorCode());
         }
 
-        std::optional<uint64_t> OnnxRuntimeContext::ReadOnnxIrVersion(const std::filesystem::path& modelPath) const
+        std::optional<uint64_t> OnnxRuntimeContext::ReadOnnxIrVersion(const std::filesystem::path& modelPath)
         {
             std::ifstream l_Stream{ modelPath, std::ios::binary };
             if (!l_Stream)

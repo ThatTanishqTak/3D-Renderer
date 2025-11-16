@@ -64,20 +64,18 @@ if(NOT ort_sdk_POPULATED)
   FetchContent_Populate(ort_sdk)
 endif()
 
-set(ORT_ROOT    "${ort_sdk_SOURCE_DIR}")
+set(ORT_ROOT    "${CMAKE_SOURCE_DIR}/Trident/vendor/onnxruntime")
 set(ORT_INCLUDE "${ORT_ROOT}/include")
+message("${ort_sdk_SOURCE_DIR}")
 
 # The Windows zip layout has evolved: older builds placed everything
 # under lib/, while newer NuGet-style drops use runtimes/win-x64/native.
 # Probe the common locations so we stay compatible with future bumps.
 set(ORT_LIB_CANDIDATES
   "${ORT_ROOT}/lib/onnxruntime.lib"
-  "${ORT_ROOT}/runtimes/win-x64/native/onnxruntime.lib"
 )
 set(ORT_DLL_CANDIDATES
   "${ORT_ROOT}/lib/onnxruntime.dll"
-  "${ORT_ROOT}/bin/onnxruntime.dll"
-  "${ORT_ROOT}/runtimes/win-x64/native/onnxruntime.dll"
 )
 
 find_file(ORT_LIB NAMES onnxruntime.lib PATHS ${ORT_LIB_CANDIDATES})
