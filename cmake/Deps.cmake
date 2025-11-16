@@ -45,9 +45,11 @@ target_include_directories(imgui PUBLIC
 target_link_libraries(imgui PUBLIC glfw Vulkan::Vulkan)
 
 # -------------------------------------------------
-# ONNX Runtime v1.23.2 – Pre-built CPU (x64 Windows)
+# ONNX Runtime (pre-built CPU, x64 Windows)
 # -------------------------------------------------
-set(ORT_VERSION "1.23.2")
+# We pin to the latest stable that ships ONNX IR 12+ support and can
+# be consumed from Visual Studio 2022 / MSVC in C++20 mode.
+set(ORT_VERSION "1.23.2" CACHE STRING "ONNX Runtime version")
 set(ORT_PACKAGE "onnxruntime-win-x64-${ORT_VERSION}")
 
 FetchContent_Declare(
@@ -64,18 +66,32 @@ endif()
 
 set(ORT_ROOT    "${ort_sdk_SOURCE_DIR}")
 set(ORT_INCLUDE "${ORT_ROOT}/include")
-set(ORT_LIB     "${ORT_ROOT}/lib/onnxruntime.lib")
-set(ORT_DLL     "${ORT_ROOT}/lib/onnxruntime.dll")
+
+# The Windows zip layout has evolved: older builds placed everything
+# under lib/, while newer NuGet-style drops use runtimes/win-x64/native.
+# Probe the common locations so we stay compatible with future bumps.
+set(ORT_LIB_CANDIDATES
+  "${ORT_ROOT}/lib/onnxruntime.lib"
+  "${ORT_ROOT}/runtimes/win-x64/native/onnxruntime.lib"
+)
+set(ORT_DLL_CANDIDATES
+  "${ORT_ROOT}/lib/onnxruntime.dll"
+  "${ORT_ROOT}/bin/onnxruntime.dll"
+  "${ORT_ROOT}/runtimes/win-x64/native/onnxruntime.dll"
+)
+
+find_file(ORT_LIB NAMES onnxruntime.lib PATHS ${ORT_LIB_CANDIDATES})
+find_file(ORT_DLL NAMES onnxruntime.dll PATHS ${ORT_DLL_CANDIDATES})
 
 # Verify files
 if(NOT EXISTS "${ORT_INCLUDE}/onnxruntime_cxx_api.h")
   message(FATAL_ERROR "ONNX Runtime headers missing! Expected: ${ORT_INCLUDE}/onnxruntime_cxx_api.h")
 endif()
-if(NOT EXISTS "${ORT_LIB}")
-  message(FATAL_ERROR "ONNX Runtime import library missing! Expected: ${ORT_LIB}")
+if(NOT ORT_LIB OR ORT_LIB MATCHES "NOTFOUND")
+  message(FATAL_ERROR "ONNX Runtime import library missing! Checked: ${ORT_LIB_CANDIDATES}")
 endif()
-if(NOT EXISTS "${ORT_DLL}")
-  message(FATAL_ERROR "ONNX Runtime DLL missing! Expected: ${ORT_DLL}")
+if(NOT ORT_DLL OR ORT_DLL MATCHES "NOTFOUND")
+  message(FATAL_ERROR "ONNX Runtime DLL missing! Checked: ${ORT_DLL_CANDIDATES}")
 endif()
 
 # -------------------------------------------------
