@@ -66,6 +66,19 @@ set(ORT_DLL_CANDIDATES
 find_file(ORT_LIB NAMES onnxruntime.lib PATHS ${ORT_LIB_CANDIDATES})
 find_file(ORT_DLL NAMES onnxruntime.dll PATHS ${ORT_DLL_CANDIDATES})
 
+# Detect Git LFS pointer files early so developers get actionable guidance
+# instead of confusing CMake errors about missing libraries.
+function(trident_assert_not_lfs_pointer a_Path a_Label)
+  # A valid Windows import library or DLL will be much larger than a pointer.
+  file(SIZE "${a_Path}" l_PossiblePointerSize)
+  if(l_PossiblePointerSize LESS 1024)
+    file(READ "${a_Path}" l_PossiblePointerHeader LIMIT 256)
+    if(l_PossiblePointerHeader MATCHES "version https://git-lfs.github.com/spec/v1")
+      message(FATAL_ERROR "${a_Label} looks like a Git LFS placeholder. Please run 'git lfs pull' to fetch the real binaries.")
+    endif()
+  endif()
+endfunction()
+
 # Verify files
 if(NOT EXISTS "${ORT_INCLUDE}/onnxruntime_cxx_api.h")
   message(FATAL_ERROR "ONNX Runtime headers missing! Expected: ${ORT_INCLUDE}/onnxruntime_cxx_api.h")
@@ -76,6 +89,9 @@ endif()
 if(NOT EXISTS "${ORT_ROOT}/lib/onnxruntime.dll")
   message(FATAL_ERROR "ONNX Runtime DLL missing! Checked: ${ORT_DLL_CANDIDATES}")
 endif()
+
+trident_assert_not_lfs_pointer("${ORT_LIB}" "ONNX Runtime import library")
+trident_assert_not_lfs_pointer("${ORT_DLL}" "ONNX Runtime DLL")
 
 # -------------------------------------------------
 # Imported targets (modern CMake)
