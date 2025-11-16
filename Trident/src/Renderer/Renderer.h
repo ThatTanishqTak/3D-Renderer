@@ -222,6 +222,11 @@ namespace Trident
          */
         ImTextureID GetAiTextureDescriptor() const;
 
+        /**
+         * @brief Query whether the renderer has already completed shutdown.
+         */
+        bool IsShutdown() const { return m_Shutdown; }
+
         bool m_Shutdown = false;
 
     private:

@@ -84,6 +84,10 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
   onnxruntime::headers
 )
 
+# Surface the expected ONNX Runtime version to the code so we can verify
+# the loaded DLL matches the vendored SDK during startup.
+target_compile_definitions(${PROJECT_NAME} PUBLIC TRIDENT_ORT_VERSION="${ORT_VERSION}")
+
 # Options ----------------------------------------------------------
 option(TRIDENT_ENABLE_VALIDATION "Enable Vulkan Validation Layers" ON)
 if(TRIDENT_ENABLE_VALIDATION)

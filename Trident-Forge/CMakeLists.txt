@@ -64,9 +64,11 @@ add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
 # -----------------------------------------------------------------
 # Copy ONNX Runtime DLL next to the executable
 # -----------------------------------------------------------------
+set(ONNXRUNTIME_BUNDLED_DLL "${CMAKE_SOURCE_DIR}/Trident/vendor/onnxruntime/lib/onnxruntime.dll")
+
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${ONNXRUNTIME_DLL_PATH}"
-            "$<TARGET_FILE_DIR:${PROJECT_NAME}>"
-    COMMENT "Copying onnxruntime.dll -> output"
+            "${ONNXRUNTIME_BUNDLED_DLL}"
+            "$<TARGET_FILE_DIR:${PROJECT_NAME}>/onnxruntime.dll"
+    COMMENT "Copying bundled onnxruntime.dll -> output"
 )

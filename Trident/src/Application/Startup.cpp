@@ -81,6 +81,20 @@ namespace Trident
 #endif
         if (m_Instance != VK_NULL_HANDLE)
         {
+            // Validate that all surfaces have been destroyed before tearing down the instance.
+            for (const VkSurfaceKHR it_Surface : m_TrackedSurfaces)
+            {
+                if (it_Surface != VK_NULL_HANDLE)
+                {
+                    TR_CORE_CRITICAL("VkSurfaceKHR leak detected during instance destruction. Ensure all auxiliary viewports are cleaned up.");
+                }
+            }
+
+            if (m_Surface != VK_NULL_HANDLE)
+            {
+                TR_CORE_CRITICAL("Primary window surface was not destroyed prior to vkDestroyInstance");
+            }
+
             vkDestroyInstance(m_Instance, nullptr);
 
             m_Instance = VK_NULL_HANDLE;
@@ -187,6 +201,9 @@ namespace Trident
         {
             TR_CORE_CRITICAL("Failed to create window surface");
         }
+
+        // Track the primary window surface so shutdown can validate every surface is destroyed before the instance.
+        m_TrackedSurfaces.push_back(m_Surface);
 
         TR_CORE_TRACE("Window Surface Created");
     }
