@@ -1,6 +1,7 @@
 #include "AI/OnnxRuntimeContext.h"
 
 #include <algorithm>
+#include <charconv>
 #include <fstream>
 #include <functional>
 #include <numeric>
@@ -58,8 +59,7 @@ namespace Trident
 
             try
             {
-                // Attempt to create the ONNX session for the requested model. The runtime may
-                // throw if the model targets a newer IR/opset than the bundled runtime supports,
+                // Attempt to create the ONNX session for the requested model. The runtime may throw if the model targets a newer IR/opset than the bundled runtime supports,
                 // so we catch that case to provide a more actionable diagnostic downstream.
                 a_NewSession = std::make_shared<Ort::Session>(m_Environment, l_ModelPath.c_str(), m_DefaultSessionOptions);
             }
@@ -76,8 +76,7 @@ namespace Trident
 
             try
             {
-                // Attempt to create the ONNX session for the requested model. The runtime may
-                // throw if the model targets a newer IR/opset than the bundled runtime supports,
+                // Attempt to create the ONNX session for the requested model. The runtime may throw if the model targets a newer IR/opset than the bundled runtime supports,
                 // so we catch that case to provide a more actionable diagnostic downstream.
                 a_NewSession = std::make_shared<Ort::Session>(m_Environment, l_ModelPath.c_str(), m_DefaultSessionOptions);
             }
@@ -89,7 +88,6 @@ namespace Trident
                 }
             }
 #endif
-
             std::scoped_lock l_Lock{ m_SessionMutex };
             const auto [l_Iterator, l_Inserted] = m_Sessions.emplace(l_Key, std::move(a_NewSession));
             if (!l_Inserted)
@@ -107,9 +105,7 @@ namespace Trident
             m_Sessions.erase(l_Key);
         }
 
-        std::vector<Ort::Value> OnnxRuntimeContext::Run(std::string_view modelName,
-            std::span<const char* const> inputNames,
-            std::span<const Ort::Value> inputs,
+        std::vector<Ort::Value> OnnxRuntimeContext::Run(std::string_view modelName, std::span<const char* const> inputNames, std::span<const Ort::Value> inputs,
             std::span<const char* const> outputNames)
         {
             if (inputNames.size() != inputs.size())
@@ -142,8 +138,7 @@ namespace Trident
 
         Ort::Value OnnxRuntimeContext::CreateTensorFloat(std::span<const float> values, std::span<const int64_t> shape) const
         {
-            // Copy the incoming data into a runtime-managed buffer. Later we can optimise this by
-            // allowing callers to supply their own allocator or use OrtValue::CreateTensor with
+            // Copy the incoming data into a runtime-managed buffer. Later we can optimise this by allowing callers to supply their own allocator or use OrtValue::CreateTensor with
             // custom release callbacks.
             const size_t l_ElementCount = std::accumulate(shape.begin(), shape.end(), size_t{ 1 }, std::multiplies<size_t>{});
             if (l_ElementCount != values.size())
@@ -155,6 +150,7 @@ namespace Trident
             auto a_Tensor = Ort::Value::CreateTensor<float>(l_Allocator, shape.data(), shape.size());
             float* l_Data = a_Tensor.GetTensorMutableData<float>();
             std::copy(values.begin(), values.end(), l_Data);
+
             return a_Tensor;
         }
 
@@ -183,19 +179,30 @@ namespace Trident
                 return false;
             }
 
-            // Compose a friendlier diagnostic that explains why the runtime rejected the model and
-            // how the developer can resolve the mismatch.
-            std::ostringstream l_Stream;
-            l_Stream << "ONNX Runtime 1.23.2 (expects ONNX IR 12+/opset 21) rejected model '"
-                << modelPath.string()
-                << "' because it targets a newer IR version than the bundled runtime understands.";
+            // Compose a friendlier diagnostic that explains why the runtime rejected the model and how the developer can resolve the mismatch.
+            // how the developer can resolve the mismatch. Dynamically include the runtime version
+            // and (where available) its maximum supported IR to avoid misleading users when the
+            // bundled binaries lag behind the model exporter.
+            const std::string l_RuntimeVersion{ Ort::GetVersionString() };
+            const std::optional<uint64_t> l_ModelIr = ReadOnnxIrVersion(modelPath);
+            const std::optional<uint64_t> l_MaxSupportedIr = ParseMaxSupportedIrVersion(l_RuntimeMessage);
 
-            if (const std::optional<uint64_t> l_ModelIr = ReadOnnxIrVersion(modelPath))
+            std::ostringstream l_Stream;
+            l_Stream << "ONNX Runtime " << l_RuntimeVersion << " rejected model '"
+                << modelPath.string()
+                << "' because it targets an ONNX IR version newer than the bundled runtime understands.";
+
+            if (l_ModelIr)
             {
                 l_Stream << " Detected model IR version " << *l_ModelIr << '.';
             }
 
-            l_Stream << " Update the packaged onnxruntime binaries or re-export the model with an older opset to continue.";
+            if (l_MaxSupportedIr)
+            {
+                l_Stream << " Maximum supported IR version in this build: " << *l_MaxSupportedIr << '.';
+            }
+
+            l_Stream << " Update the packaged onnxruntime binaries or re-export the model with an older opset compatible with the deployed runtime.";
 
             throw Ort::Exception(l_Stream.str().c_str(), runtimeError.GetOrtErrorCode());
         }
@@ -245,6 +252,36 @@ namespace Trident
             }
 
             return std::nullopt;
+        }
+
+        std::optional<uint64_t> OnnxRuntimeContext::ParseMaxSupportedIrVersion(std::string_view runtimeMessage) const
+        {
+            // The runtime emits messages such as "Unsupported model IR version: 14, max supported IR version: 12".
+            // Parse the tail end to surface the runtime's capability in our higher-level exception.
+            constexpr std::string_view s_Token = "max supported IR version";
+            const size_t l_TokenPos = runtimeMessage.find(s_Token);
+            if (l_TokenPos == std::string::npos)
+            {
+                return std::nullopt;
+            }
+
+            const size_t l_NumberPos = runtimeMessage.find_first_of("0123456789", l_TokenPos + s_Token.size());
+            if (l_NumberPos == std::string::npos)
+            {
+                return std::nullopt;
+            }
+
+            uint64_t l_MaxSupportedIr = 0;
+            const char* l_Begin = runtimeMessage.data() + l_NumberPos;
+            const char* l_End = runtimeMessage.data() + runtimeMessage.size();
+            const std::from_chars_result l_Result = std::from_chars(l_Begin, l_End, l_MaxSupportedIr);
+
+            if (l_Result.ec != std::errc{})
+            {
+                return std::nullopt;
+            }
+
+            return l_MaxSupportedIr;
         }
     }
 }

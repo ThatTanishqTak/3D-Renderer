@@ -1,18 +1,36 @@
 @echo off
-echo Running build script...
+rem ============================================================================
+rem Build-WIndow.bat
+rem ----------------------------------------------------------------------------
+rem Purpose: Configure the Visual Studio 2022 solution for the renderer project
+rem          using MSVC with C++20 support. The script now focuses solely on
+rem          project generation so asset/model creation can be handled by
+rem          dedicated tooling.
+rem ============================================================================
 
 set SCRIPT_DIR=%~dp0
-set MODEL_PATH=%SCRIPT_DIR%..\bin\Assets\AI\frame_generator.onnx
+set SOURCE_DIR=%SCRIPT_DIR%..\
+set BUILD_DIR=%SCRIPT_DIR%..\Build
 
-if exist "%MODEL_PATH%" (
-    echo Using trained frame generator located at %MODEL_PATH%.
-) else (
-    echo Trained frame generator not found. Generating diagnostic identity model instead.
-    python "%SCRIPT_DIR%generate_ai_sample_model.py" --output "%MODEL_PATH%"
+rem Ensure the build directory exists before invoking CMake.
+if not exist "%BUILD_DIR%" (
+    echo Creating build directory at %BUILD_DIR%.
+    mkdir "%BUILD_DIR%"
 )
 
-rem Configure the project using explicit source/binary folders to avoid quoting issues.
-cmake -S "%SCRIPT_DIR%..\" -B "%SCRIPT_DIR%..\Build"
+rem Generate the Visual Studio 2022 project files targeting the MSVC toolset
+rem with C++20 language features enabled.
+cmake -S "%SOURCE_DIR%" -B "%BUILD_DIR%" ^
+    -G "Visual Studio 17 2022" ^
+    -A x64 ^
+    -DCMAKE_CXX_STANDARD=20 ^
+    -DCMAKE_CXX_STANDARD_REQUIRED=ON
 
-echo Build generation completed. Press any key to exit.
-pause >nul
+if errorlevel 1 (
+    echo Project generation failed. Please review the output above for details.
+    pase
+    exit /b 1
+)
+
+echo Project generation completed successfully.
+pause
