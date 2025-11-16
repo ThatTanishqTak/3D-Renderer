@@ -57,10 +57,18 @@ set(ORT_INCLUDE "${ORT_ROOT}/include")
 # under include/ and binaries under lib/. Probe the common locations so we
 # surface clear errors if the committed SDK is incomplete.
 set(ORT_LIB_CANDIDATES
-  "${ORT_ROOT}/lib/onnxruntime.lib"
+  # Default vendored layout that mirrors the official Windows zip structure.
+  "${ORT_ROOT}/lib"
+  # Optional override if developers unpack the SDK elsewhere while keeping the
+  # same folder naming.
+  "$ENV{ORT_ROOT}/lib"
 )
 set(ORT_DLL_CANDIDATES
-  "${ORT_ROOT}/lib/onnxruntime.dll"
+  # Default vendored layout that mirrors the official Windows zip structure.
+  "${ORT_ROOT}/lib"
+  # Optional override if developers unpack the SDK elsewhere while keeping the
+  # same folder naming.
+  "$ENV{ORT_ROOT}/lib"
 )
 
 find_file(ORT_LIB NAMES onnxruntime.lib PATHS ${ORT_LIB_CANDIDATES})
