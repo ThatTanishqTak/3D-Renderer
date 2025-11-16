@@ -13,7 +13,7 @@ import json
 import random
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 import torch
 from torch import nn
@@ -27,7 +27,7 @@ from PIL import Image
 class TrainingConfig:
     """Container describing the training hyper-parameters."""
 
-    dataset_root: Path
+    dataset_root: Optional[Path]
     batch_size: int
     epochs: int
     learning_rate: float
@@ -42,6 +42,9 @@ class TrainingConfig:
     early_stop_patience: int
     early_stop_min_delta: float
     input_channels: int = 0
+    skip_training: bool = False
+    opset_version: int = 17
+    ir_version: int = 11
 
 
 class ConsecutiveFrameDataset(Dataset):
@@ -241,7 +244,7 @@ def parse_arguments() -> TrainingConfig:
     """Parse CLI arguments into a TrainingConfig."""
 
     l_Parser = argparse.ArgumentParser(description=__doc__)
-    l_Parser.add_argument("dataset", type=Path, help="Root directory containing consecutive frame folders.")
+    l_Parser.add_argument("dataset", type=Path, nargs="?", help="Root directory containing consecutive frame folders.")
     l_Parser.add_argument("--batch-size", type=int, default=8, dest="batch_size")
     l_Parser.add_argument("--epochs", type=int, default=20)
     l_Parser.add_argument("--learning-rate", type=float, default=1e-4, dest="learning_rate")
@@ -287,7 +290,36 @@ def parse_arguments() -> TrainingConfig:
         dest="early_stop_min_delta",
         help="Minimum PSNR improvement required to reset the early stopping counter.",
     )
+    l_Parser.add_argument(
+        "--skip-training",
+        action="store_true",
+        help="Skip dataset loading and emit an untrained export (useful for CI asset refreshes).",
+    )
+    l_Parser.add_argument(
+        "--input-channels",
+        type=int,
+        default=6,
+        dest="input_channels",
+        help="Input channel count to use when skipping training (defaults to two RGB frames).",
+    )
+    l_Parser.add_argument(
+        "--opset-version",
+        type=int,
+        default=17,
+        dest="opset_version",
+        help="Target ONNX opset version compatible with the bundled runtime (IR 11).",
+    )
+    l_Parser.add_argument(
+        "--ir-version",
+        type=int,
+        default=11,
+        dest="ir_version",
+        help="Explicit ONNX IR version to stamp on the exported model for MSVC/VS2022 builds.",
+    )
     l_Args = l_Parser.parse_args()
+
+    if not l_Args.skip_training and l_Args.dataset is None:
+        raise SystemExit("Dataset path is required unless --skip-training is supplied.")
 
     random.seed(l_Args.seed)
     torch.manual_seed(l_Args.seed)
@@ -307,11 +339,18 @@ def parse_arguments() -> TrainingConfig:
         validation_split=l_Args.validation_split,
         early_stop_patience=l_Args.early_stop_patience,
         early_stop_min_delta=l_Args.early_stop_min_delta,
+        skip_training=l_Args.skip_training,
+        input_channels=l_Args.input_channels,
+        opset_version=l_Args.opset_version,
+        ir_version=l_Args.ir_version,
     )
 
 
 def create_dataloaders(a_Config: TrainingConfig) -> Tuple[DataLoader, DataLoader]:
     """Create training and validation data loaders using a configurable split."""
+
+    if a_Config.dataset_root is None:
+        raise RuntimeError("Dataset root must be provided when training is enabled.")
 
     l_Dataset = ConsecutiveFrameDataset(a_Config.dataset_root, a_Config.image_size)
     if len(l_Dataset) == 0:
@@ -489,6 +528,8 @@ def export_model(a_Model: InterpolationUNet, a_Config: TrainingConfig) -> None:
     if a_Config.input_channels <= 0:
         raise RuntimeError("Input channel count must be discovered during training before exporting ONNX.")
 
+    a_Config.export_path.parent.mkdir(parents=True, exist_ok=True)
+
     # Wrap the UNet so the exported graph consumes NHWC tensors and surfaces the same layout.
     l_WrappedModel = NhwcOnnxExportWrapper(a_Model).to(l_Device)
 
@@ -499,23 +540,48 @@ def export_model(a_Model: InterpolationUNet, a_Config: TrainingConfig) -> None:
     l_OutputPath = a_Config.export_path
 
     # Freeze the tensor shapes so CalculateElementCount can validate bindings without fallback logic.
+    # Export with a conservative opset so the bundled MSVC/VS2022 runtime (IR 11)
+    # can parse the graph. If the runtime is upgraded we can revisit the cap to
+    # take advantage of newer operator kernels.
     torch.onnx.export(
         l_WrappedModel,
         l_DummyInput,
         l_OutputPath,
         input_names=["input"],
         output_names=["output"],
-        opset_version=21,
+        opset_version=a_Config.opset_version,
         dynamic_axes=None,
         do_constant_folding=True,
     )
-    print(f"Exported ONNX model to {l_OutputPath}")
+    try:
+        import onnx
+
+        l_Model = onnx.load(l_OutputPath)
+        l_Model.ir_version = a_Config.ir_version
+        for it_OpSet in l_Model.opset_import:
+            it_OpSet.version = a_Config.opset_version
+
+        onnx.save(l_Model, l_OutputPath)
+    except ImportError:
+        print(
+            "onnx package not available; exported model may not carry the explicit IR cap expected by the runtime."
+        )
+
+    print(
+        f"Exported ONNX model to {l_OutputPath} with opset {a_Config.opset_version} and IR {a_Config.ir_version}"
+    )
 
 
 def main() -> None:
     l_Config = parse_arguments()
     print(json.dumps({"config": l_Config.__dict__}, default=str))
-    l_Model = train_model(l_Config)
+    if l_Config.skip_training:
+        if l_Config.input_channels <= 0:
+            raise SystemExit("Provide --input-channels when skipping training so export layout is well defined.")
+
+        l_Model = InterpolationUNet(l_Config.input_channels)
+    else:
+        l_Model = train_model(l_Config)
     export_model(l_Model, l_Config)
 
 
