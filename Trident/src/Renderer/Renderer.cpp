@@ -4344,78 +4344,95 @@ namespace Trident
                 l_OffscreenScissor.extent = l_Target.m_Extent;
                 vkCmdSetScissor(l_CommandBuffer, 0, 1, &l_OffscreenScissor);
 
+                const VkPipeline l_SkyboxPipeline = m_Pipeline.GetSkyboxPipeline();
                 const bool l_HasSkyboxDescriptors = imageIndex < m_SkyboxDescriptorSets.size() && m_SkyboxDescriptorSets[imageIndex] != VK_NULL_HANDLE;
-                if (l_HasSkyboxDescriptors && m_Pipeline.GetSkyboxPipeline() != VK_NULL_HANDLE)
+                if (l_HasSkyboxDescriptors && l_SkyboxPipeline != VK_NULL_HANDLE)
                 {
-                    vkCmdBindPipeline(l_CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline.GetSkyboxPipeline());
+                    // Guard the skybox bind so a missing pipeline during hot-reload does not poison the command buffer.
+                    vkCmdBindPipeline(l_CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, l_SkyboxPipeline);
                     m_Skybox.Record(l_CommandBuffer, m_Pipeline.GetSkyboxPipelineLayout(), m_SkyboxDescriptorSets.data(), imageIndex);
                 }
-
-                vkCmdBindPipeline(l_CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline.GetPipeline());
-
-                const bool l_HasDescriptorSet = imageIndex < m_DescriptorSets.size();
-                if (l_HasDescriptorSet)
+                else if (l_HasSkyboxDescriptors && l_SkyboxPipeline == VK_NULL_HANDLE)
                 {
-                    vkCmdBindDescriptorSets(l_CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline.GetPipelineLayout(), 0, 1, &m_DescriptorSets[imageIndex], 0, nullptr);
+                    // Warn once the pipeline disappears so hot-reload issues surface quickly while keeping the pass valid.
+                    TR_CORE_WARN("Skybox pipeline missing; skipping skybox draw for viewport {} until the pipeline is rebuilt.", context.m_Info.ViewportID);
                 }
 
-                if (m_VertexBuffer != VK_NULL_HANDLE && m_IndexBuffer != VK_NULL_HANDLE && !m_MeshDrawInfo.empty() && !m_MeshDrawCommands.empty() && l_HasDescriptorSet)
+                const VkPipeline l_RenderPipeline = m_Pipeline.GetPipeline();
+                const bool l_CanRender = l_RenderPipeline != VK_NULL_HANDLE;
+                if (l_CanRender)
                 {
-                    VkBuffer l_VertexBuffers[] = { m_VertexBuffer };
-                    VkDeviceSize l_Offsets[] = { 0 };
-                    vkCmdBindVertexBuffers(l_CommandBuffer, 0, 1, l_VertexBuffers, l_Offsets);
-                    vkCmdBindIndexBuffer(l_CommandBuffer, m_IndexBuffer, 0, VK_INDEX_TYPE_UINT32);
+                    // Avoid binding a null pipeline so command recording stays valid if hot-reload briefly invalidates pipelines.
+                    vkCmdBindPipeline(l_CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, l_RenderPipeline);
 
-                    for (const MeshDrawCommand& l_Command : m_MeshDrawCommands)
+                    const bool l_HasDescriptorSet = imageIndex < m_DescriptorSets.size();
+                    if (l_HasDescriptorSet)
                     {
-                        if (!l_Command.m_Component)
-                        {
-                            continue;
-                        }
-
-                        const MeshComponent& l_Component = *l_Command.m_Component;
-                        if (l_Component.m_MeshIndex >= m_MeshDrawInfo.size())
-                        {
-                            continue;
-                        }
-
-                        const MeshDrawInfo& l_DrawInfo = m_MeshDrawInfo[l_Component.m_MeshIndex];
-                        if (l_DrawInfo.m_IndexCount == 0)
-                        {
-                            continue;
-                        }
-
-                        RenderablePushConstant l_PushConstant{};
-                        l_PushConstant.m_ModelMatrix = l_Command.m_ModelMatrix;
-                        int32_t l_MaterialIndex = l_DrawInfo.m_MaterialIndex;
-                        int32_t l_TextureSlot = 0;
-                        if (l_Command.m_TextureComponent != nullptr && l_Command.m_TextureComponent->m_TextureSlot >= 0)
-                        {
-                            // Prefer the entity supplied texture slot so material overrides remain reactive in-editor.
-                            l_TextureSlot = l_Command.m_TextureComponent->m_TextureSlot;
-                        }
-                        else if (l_MaterialIndex >= 0 && static_cast<size_t>(l_MaterialIndex) < m_Materials.size())
-                        {
-                            l_TextureSlot = m_Materials[l_MaterialIndex].BaseColorTextureSlot;
-                        }
-
-                        l_PushConstant.m_TextureSlot = l_TextureSlot;
-                        l_PushConstant.m_MaterialIndex = l_MaterialIndex;
-                        l_PushConstant.m_BoneOffset = static_cast<int32_t>(l_Command.m_BoneOffset);
-                        l_PushConstant.m_BoneCount = static_cast<int32_t>(l_Command.m_BoneCount);
-                        vkCmdPushConstants(l_CommandBuffer, m_Pipeline.GetPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0,
-                            sizeof(RenderablePushConstant), &l_PushConstant);
-
-                        vkCmdDrawIndexed(l_CommandBuffer, l_DrawInfo.m_IndexCount, 1, l_DrawInfo.m_FirstIndex, l_DrawInfo.m_BaseVertex, 0);
+                        vkCmdBindDescriptorSets(l_CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline.GetPipelineLayout(), 0, 1, &m_DescriptorSets[imageIndex], 0, nullptr);
                     }
-                }
 
-                if (l_HasDescriptorSet)
+                    if (m_VertexBuffer != VK_NULL_HANDLE && m_IndexBuffer != VK_NULL_HANDLE && !m_MeshDrawInfo.empty() && !m_MeshDrawCommands.empty() && l_HasDescriptorSet)
+                    {
+                        VkBuffer l_VertexBuffers[] = { m_VertexBuffer };
+                        VkDeviceSize l_Offsets[] = { 0 };
+                        vkCmdBindVertexBuffers(l_CommandBuffer, 0, 1, l_VertexBuffers, l_Offsets);
+                        vkCmdBindIndexBuffer(l_CommandBuffer, m_IndexBuffer, 0, VK_INDEX_TYPE_UINT32);
+
+                        for (const MeshDrawCommand& l_Command : m_MeshDrawCommands)
+                        {
+                            if (!l_Command.m_Component)
+                            {
+                                continue;
+                            }
+
+                            const MeshComponent& l_Component = *l_Command.m_Component;
+                            if (l_Component.m_MeshIndex >= m_MeshDrawInfo.size())
+                            {
+                                continue;
+                            }
+
+                            const MeshDrawInfo& l_DrawInfo = m_MeshDrawInfo[l_Component.m_MeshIndex];
+                            if (l_DrawInfo.m_IndexCount == 0)
+                            {
+                                continue;
+                            }
+
+                            RenderablePushConstant l_PushConstant{};
+                            l_PushConstant.m_ModelMatrix = l_Command.m_ModelMatrix;
+                            int32_t l_MaterialIndex = l_DrawInfo.m_MaterialIndex;
+                            int32_t l_TextureSlot = 0;
+                            if (l_Command.m_TextureComponent != nullptr && l_Command.m_TextureComponent->m_TextureSlot >= 0)
+                            {
+                                // Prefer the entity supplied texture slot so material overrides remain reactive in-editor.
+                                l_TextureSlot = l_Command.m_TextureComponent->m_TextureSlot;
+                            }
+                            else if (l_MaterialIndex >= 0 && static_cast<size_t>(l_MaterialIndex) < m_Materials.size())
+                            {
+                                l_TextureSlot = m_Materials[l_MaterialIndex].BaseColorTextureSlot;
+                            }
+
+                            l_PushConstant.m_TextureSlot = l_TextureSlot;
+                            l_PushConstant.m_MaterialIndex = l_MaterialIndex;
+                            l_PushConstant.m_BoneOffset = static_cast<int32_t>(l_Command.m_BoneOffset);
+                            l_PushConstant.m_BoneCount = static_cast<int32_t>(l_Command.m_BoneCount);
+                            vkCmdPushConstants(l_CommandBuffer, m_Pipeline.GetPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0,
+                                sizeof(RenderablePushConstant), &l_PushConstant);
+
+                            vkCmdDrawIndexed(l_CommandBuffer, l_DrawInfo.m_IndexCount, 1, l_DrawInfo.m_FirstIndex, l_DrawInfo.m_BaseVertex, 0);
+                        }
+                    }
+
+                    if (l_HasDescriptorSet)
+                    {
+                        DrawSprites(l_CommandBuffer, imageIndex);
+                    }
+
+                    m_TextRenderer.RecordViewport(l_CommandBuffer, imageIndex, context.m_Info.ViewportID, l_Target.m_Extent);
+                }
+                else
                 {
-                    DrawSprites(l_CommandBuffer, imageIndex);
+                    TR_CORE_WARN("Primary render pipeline missing; skipping offscreen draw for viewport {} until pipelines are rebuilt.", context.m_Info.ViewportID);
                 }
-
-                m_TextRenderer.RecordViewport(l_CommandBuffer, imageIndex, context.m_Info.ViewportID, l_Target.m_Extent);
 
                 vkCmdEndRenderPass(l_CommandBuffer);
 
@@ -4750,69 +4767,92 @@ namespace Trident
         {
             // Legacy rendering path: draw directly to the back buffer when the editor viewport is hidden.
             const bool l_HasSkyboxDescriptors = imageIndex < m_SkyboxDescriptorSets.size() && m_SkyboxDescriptorSets[imageIndex] != VK_NULL_HANDLE;
-            if (l_HasSkyboxDescriptors && m_Pipeline.GetSkyboxPipeline() != VK_NULL_HANDLE)
+            const VkPipeline l_SkyboxPipeline = m_Pipeline.GetSkyboxPipeline();
+            if (l_HasSkyboxDescriptors && l_SkyboxPipeline != VK_NULL_HANDLE)
             {
-                vkCmdBindPipeline(l_CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline.GetSkyboxPipeline());
+                // Skip skybox recording when the pipeline is unavailable to keep the command buffer consistent during rebuilds.
+                vkCmdBindPipeline(l_CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, l_SkyboxPipeline);
                 m_Skybox.Record(l_CommandBuffer, m_Pipeline.GetSkyboxPipelineLayout(), m_SkyboxDescriptorSets.data(), imageIndex);
             }
-
-            vkCmdBindPipeline(l_CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline.GetPipeline());
-
-            const bool l_HasDescriptorSet = imageIndex < m_DescriptorSets.size();
-            if (l_HasDescriptorSet)
+            else if (l_HasSkyboxDescriptors && l_SkyboxPipeline == VK_NULL_HANDLE)
             {
-                vkCmdBindDescriptorSets(l_CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline.GetPipelineLayout(), 0, 1, &m_DescriptorSets[imageIndex], 0, nullptr);
+                TR_CORE_WARN("Skybox pipeline missing; skipping swapchain skybox draw until the pipeline is rebuilt.");
             }
 
-            GatherMeshDraws();
-
-            if (m_VertexBuffer != VK_NULL_HANDLE && m_IndexBuffer != VK_NULL_HANDLE && !m_MeshDrawInfo.empty() && !m_MeshDrawCommands.empty() && l_HasDescriptorSet)
+            const VkPipeline l_RenderPipeline = m_Pipeline.GetPipeline();
+            const bool l_CanRender = l_RenderPipeline != VK_NULL_HANDLE;
+            if (l_CanRender)
             {
-                VkBuffer l_VertexBuffers[] = { m_VertexBuffer };
-                VkDeviceSize l_Offsets[] = { 0 };
-                vkCmdBindVertexBuffers(l_CommandBuffer, 0, 1, l_VertexBuffers, l_Offsets);
-                vkCmdBindIndexBuffer(l_CommandBuffer, m_IndexBuffer, 0, VK_INDEX_TYPE_UINT32);
+                vkCmdBindPipeline(l_CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, l_RenderPipeline);
 
-                for (const MeshDrawCommand& l_Command : m_MeshDrawCommands)
+                const bool l_HasDescriptorSet = imageIndex < m_DescriptorSets.size();
+                if (l_HasDescriptorSet)
                 {
-                    if (!l_Command.m_Component)
+                    vkCmdBindDescriptorSets(l_CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline.GetPipelineLayout(), 0, 1, &m_DescriptorSets[imageIndex], 0, nullptr);
+                }
+
+                GatherMeshDraws();
+
+                if (m_VertexBuffer != VK_NULL_HANDLE && m_IndexBuffer != VK_NULL_HANDLE && !m_MeshDrawInfo.empty() && !m_MeshDrawCommands.empty() && l_HasDescriptorSet)
+                {
+                    VkBuffer l_VertexBuffers[] = { m_VertexBuffer };
+                    VkDeviceSize l_Offsets[] = { 0 };
+                    vkCmdBindVertexBuffers(l_CommandBuffer, 0, 1, l_VertexBuffers, l_Offsets);
+                    vkCmdBindIndexBuffer(l_CommandBuffer, m_IndexBuffer, 0, VK_INDEX_TYPE_UINT32);
+
+                    for (const MeshDrawCommand& l_Command : m_MeshDrawCommands)
                     {
-                        continue;
+                        if (!l_Command.m_Component)
+                        {
+                            continue;
+                        }
+
+                        const MeshComponent& l_Component = *l_Command.m_Component;
+                        if (l_Component.m_MeshIndex >= m_MeshDrawInfo.size())
+                        {
+                            continue;
+                        }
+
+                        const MeshDrawInfo& l_DrawInfo = m_MeshDrawInfo[l_Component.m_MeshIndex];
+                        if (l_DrawInfo.m_IndexCount == 0)
+                        {
+                            continue;
+                        }
+
+                        RenderablePushConstant l_PushConstant{};
+                        l_PushConstant.m_ModelMatrix = l_Command.m_ModelMatrix;
+                        int32_t l_MaterialIndex = l_DrawInfo.m_MaterialIndex;
+                        int32_t l_TextureSlot = 0;
+                        if (l_Command.m_TextureComponent != nullptr && l_Command.m_TextureComponent->m_TextureSlot >= 0)
+                        {
+                            // Prefer the entity supplied texture slot so material overrides remain reactive in-editor.
+                            l_TextureSlot = l_Command.m_TextureComponent->m_TextureSlot;
+                        }
+                        else if (l_MaterialIndex >= 0 && static_cast<size_t>(l_MaterialIndex) < m_Materials.size())
+                        {
+                            l_TextureSlot = m_Materials[l_MaterialIndex].BaseColorTextureSlot;
+                        }
+
+                        l_PushConstant.m_TextureSlot = l_TextureSlot;
+                        l_PushConstant.m_MaterialIndex = l_MaterialIndex;
+                        l_PushConstant.m_BoneOffset = static_cast<int32_t>(l_Command.m_BoneOffset);
+                        l_PushConstant.m_BoneCount = static_cast<int32_t>(l_Command.m_BoneCount);
+                        vkCmdPushConstants(l_CommandBuffer, m_Pipeline.GetPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0,
+                            sizeof(RenderablePushConstant), &l_PushConstant);
+
+                        vkCmdDrawIndexed(l_CommandBuffer, l_DrawInfo.m_IndexCount, 1, l_DrawInfo.m_FirstIndex, l_DrawInfo.m_BaseVertex, 0);
                     }
+                }
 
-                    const MeshComponent& l_Component = *l_Command.m_Component;
-                    if (l_Component.m_MeshIndex >= m_MeshDrawInfo.size())
-                    {
-                        continue;
-                    }
-
-                    const MeshDrawInfo& l_DrawInfo = m_MeshDrawInfo[l_Component.m_MeshIndex];
-                    if (l_DrawInfo.m_IndexCount == 0)
-                    {
-                        continue;
-                    }
-
-                    RenderablePushConstant l_PushConstant{};
-                    l_PushConstant.m_ModelMatrix = l_Command.m_ModelMatrix;
-                    int32_t l_MaterialIndex = l_DrawInfo.m_MaterialIndex;
-                    int32_t l_TextureSlot = 0;
-                    if (l_MaterialIndex >= 0 && static_cast<size_t>(l_MaterialIndex) < m_Materials.size())
-                    {
-                        l_TextureSlot = m_Materials[l_MaterialIndex].BaseColorTextureSlot;
-                    }
-
-                    l_PushConstant.m_TextureSlot = l_TextureSlot;
-                    l_PushConstant.m_MaterialIndex = l_MaterialIndex;
-                    vkCmdPushConstants(l_CommandBuffer, m_Pipeline.GetPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0,
-                        sizeof(RenderablePushConstant), &l_PushConstant);
-
-                    vkCmdDrawIndexed(l_CommandBuffer, l_DrawInfo.m_IndexCount, 1, l_DrawInfo.m_FirstIndex, l_DrawInfo.m_BaseVertex, 0);
+                if (l_HasDescriptorSet)
+                {
+                    DrawSprites(l_CommandBuffer, imageIndex);
                 }
             }
-
-            if (l_HasDescriptorSet)
+            else
             {
-                DrawSprites(l_CommandBuffer, imageIndex);
+                // Keep the render pass balanced while avoiding invalid binds when the pipeline is unavailable.
+                TR_CORE_WARN("Primary render pipeline missing; skipping swapchain draw until pipelines are rebuilt.");
             }
         }
         else
