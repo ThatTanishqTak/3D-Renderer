@@ -191,16 +191,39 @@ namespace Trident
 
         void ImGuiLayer::Dockspace()
         {
-            const ImGuiID l_DockspaceID = ImGui::DockSpaceOverViewport();
+            // Build a dedicated full-screen host window so docking always has a stable root.
+            // Without this, the dock node can vanish when panels are dragged between viewports,
+            // causing the user-facing windows to disappear until a restart.
+            ImGuiViewport* l_MainViewport = ImGui::GetMainViewport();
+            ImGui::SetNextWindowPos(l_MainViewport->WorkPos);
+            ImGui::SetNextWindowSize(l_MainViewport->WorkSize);
+            ImGui::SetNextWindowViewport(l_MainViewport->ID);
 
-            //vkDeviceWaitIdle(Application::GetDevice());
+            ImGuiWindowFlags l_WindowFlags = ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse |
+                ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoBringToFrontOnFocus |
+                ImGuiWindowFlags_NoNavFocus | ImGuiWindowFlags_NoBackground;
 
-            if (m_DockspaceInitialized)
+            // Remove padding so the dockspace consumes the entire viewport.
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+
+            // Always keep the dockspace window alive; there is no close button for the user to accidentally hide it.
+            const bool l_DockspaceWindowOpen = true;
+            ImGui::Begin("###TridentDockspace", const_cast<bool*>(&l_DockspaceWindowOpen), l_WindowFlags);
+            ImGui::PopStyleVar();
+
+            const ImGuiID l_DockspaceID = ImGui::GetID("TridentDockspaceID");
+            const ImGuiDockNodeFlags l_DockFlags = ImGuiDockNodeFlags_PassthruCentralNode;
+            ImGui::DockSpace(l_DockspaceID, ImVec2(0.0f, 0.0f), l_DockFlags);
+
+            ImGui::End();
+
+            // vkDeviceWaitIdle(Application::GetDevice());
+
+            if (!m_DockspaceInitialized)
             {
-                return;
+                // This flag remains for future layout bootstrap logic once a custom default is added.
+                m_DockspaceInitialized = true;
             }
-
-            m_DockspaceInitialized = true;
         }
 
         void ImGuiLayer::EndFrame()
