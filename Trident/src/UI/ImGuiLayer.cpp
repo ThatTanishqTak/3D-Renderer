@@ -209,40 +209,15 @@ namespace Trident
             if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
             {
                 ImGui::UpdatePlatformWindows();
+
+                // Ensure additional platform windows render and present their swapchains so detached panels stay responsive.
+                ImGui::RenderPlatformWindowsDefault();
             }
         }
 
         void ImGuiLayer::Render(VkCommandBuffer commandBuffer)
         {
             ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);
-
-            ImGuiIO& l_IO = ImGui::GetIO();
-            if (!(l_IO.ConfigFlags & ImGuiConfigFlags_ViewportsEnable))
-            {
-                return;
-            }
-
-            // Multi-viewport windows are submitted after the main viewport so they share the same Vulkan synchronization and present path. The renderer callbacks installed by
-            // the Vulkan backend handle swap chain acquisition/resizing and command buffer recording for each platform window.
-            ImGuiPlatformIO& l_PlatformIO = ImGui::GetPlatformIO();
-            ImGuiViewport* l_MainViewport = ImGui::GetMainViewport();
-            for (ImGuiViewport* l_Viewport : l_PlatformIO.Viewports)
-            {
-                if (l_Viewport == l_MainViewport)
-                {
-                    continue;
-                }
-
-                if (l_PlatformIO.Renderer_RenderWindow != nullptr && l_Viewport->DrawData != nullptr)
-                {
-                    l_PlatformIO.Renderer_RenderWindow(l_Viewport, l_Viewport->RendererUserData);
-                }
-
-                if (l_PlatformIO.Renderer_SwapBuffers != nullptr)
-                {
-                    l_PlatformIO.Renderer_SwapBuffers(l_Viewport, l_Viewport->RendererUserData);
-                }
-            }
         }
 
         bool ImGuiLayer::SaveLayoutToDisk() const
