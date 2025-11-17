@@ -447,6 +447,10 @@ namespace Trident
     {
         TR_CORE_TRACE("Shutting Down Renderer");
 
+        // Block until all GPU work completes so that pipelines, descriptor pools and swapchain-backed
+        // images are no longer referenced by in-flight command buffers before teardown begins.
+        vkDeviceWaitIdle(Startup::GetDevice());
+
         m_Commands.Cleanup();
         m_TextRenderer.Shutdown();
 

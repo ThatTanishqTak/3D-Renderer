@@ -18,6 +18,10 @@ namespace Trident
     {
         const VkDevice l_Device = Startup::GetDevice();
 
+        // Wait for all submitted command buffers to retire so we do not destroy semaphores or fences
+        // that may still be referenced by work queued on the device.
+        vkDeviceWaitIdle(l_Device);
+
         // Tear down per-image semaphores before pool destruction so presentation never observes recycled handles mid-teardown.
         for (VkSemaphore l_RenderFinished : m_RenderFinishedSemaphoresPerImage)
         {
@@ -68,6 +72,10 @@ namespace Trident
     void Commands::Recreate(uint32_t commandBufferCount)
     {
         const VkDevice l_Device = Startup::GetDevice();
+
+        // Ensure any in-flight frames referencing the old command pool are completed before releasing
+        // synchronization primitives and recycling command buffers for the refreshed swapchain.
+        vkDeviceWaitIdle(l_Device);
 
         for (VkSemaphore l_RenderFinished : m_RenderFinishedSemaphoresPerImage)
         {
