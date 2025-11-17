@@ -33,6 +33,7 @@ namespace Trident
         static VkQueue GetGraphicsQueue() { return Get().m_GraphicsQueue; }
         static VkQueue GetPresentQueue() { return Get().m_PresentQueue; }
         static QueueFamilyIndices GetQueueFamilyIndices() { return Get().m_QueueFamilyIndices; }
+        static bool SupportsTimelineSemaphores() { return Get().m_TimelineSemaphoreSupported; }
         static Window& GetWindow() { return Get().m_Window; }
         static Renderer& GetRenderer() { return Get().m_Renderer; }
         static Renderer* TryGetRenderer()
@@ -74,6 +75,7 @@ namespace Trident
         VkQueue m_GraphicsQueue = VK_NULL_HANDLE;
         VkQueue m_PresentQueue = VK_NULL_HANDLE;
         QueueFamilyIndices m_QueueFamilyIndices;
+        bool m_TimelineSemaphoreSupported = false;
 
         static Startup* s_Instance;
     };

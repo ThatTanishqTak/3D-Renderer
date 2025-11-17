@@ -7,6 +7,8 @@ namespace Trident
 {
     void Commands::Init(uint32_t commandBufferCount)
     {
+        m_TimelineSemaphoreSupported = Startup::SupportsTimelineSemaphores();
+
         CreateCommandPool();
         CreateCommandBuffers(commandBufferCount);
         CreateSyncObjects(commandBufferCount);
@@ -47,6 +49,13 @@ namespace Trident
             }
         }
 
+        if (m_FrameTimelineSemaphore != VK_NULL_HANDLE)
+        {
+            vkDestroySemaphore(l_Device, m_FrameTimelineSemaphore, nullptr);
+
+            m_FrameTimelineSemaphore = VK_NULL_HANDLE;
+        }
+
         if (!m_CommandBuffers.empty())
         {
             vkFreeCommandBuffers(Startup::GetDevice(), m_CommandPool, static_cast<uint32_t>(m_CommandBuffers.size()), m_CommandBuffers.data());
@@ -67,6 +76,7 @@ namespace Trident
         m_RenderFinishedSemaphoresPerImage.clear();
         m_InFlightFences.clear();
         m_ImagesInFlight.clear();
+        m_TimelineValues.clear();
     }
 
     void Commands::Recreate(uint32_t commandBufferCount)
@@ -101,10 +111,18 @@ namespace Trident
             }
         }
 
+        if (m_FrameTimelineSemaphore != VK_NULL_HANDLE)
+        {
+            vkDestroySemaphore(l_Device, m_FrameTimelineSemaphore, nullptr);
+
+            m_FrameTimelineSemaphore = VK_NULL_HANDLE;
+        }
+
         m_ImageAvailableSemaphoresPerImage.clear();
         m_RenderFinishedSemaphoresPerImage.clear();
         m_InFlightFences.clear();
         m_ImagesInFlight.clear();
+        m_TimelineValues.clear();
 
         m_CurrentFrame = 0;
 
@@ -202,6 +220,12 @@ namespace Trident
         VkFenceCreateInfo fenceInfo{ VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
         fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
+        VkSemaphoreTypeCreateInfo l_TimelineCreateInfo{ VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO };
+        l_TimelineCreateInfo.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE;
+        l_TimelineCreateInfo.initialValue = 0;
+        VkSemaphoreCreateInfo l_TimelineSemaphoreInfo{ VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
+        l_TimelineSemaphoreInfo.pNext = &l_TimelineCreateInfo;
+
         for (size_t i = 0; i < swapchainImageCount; ++i)
         {
             if (vkCreateSemaphore(Startup::GetDevice(), &semaphoreInfo, nullptr, &m_ImageAvailableSemaphoresPerImage[i]) != VK_SUCCESS ||
@@ -219,9 +243,25 @@ namespace Trident
             }
         }
 
+        if (m_TimelineSemaphoreSupported)
+        {
+            // Timeline semaphores keep a single handle alive for frame pacing, avoiding the binary fence reset churn when drivers
+            // support Vulkan 1.2 or VK_KHR_timeline_semaphore.
+            if (vkCreateSemaphore(Startup::GetDevice(), &l_TimelineSemaphoreInfo, nullptr, &m_FrameTimelineSemaphore) != VK_SUCCESS)
+            {
+                TR_CORE_CRITICAL("Failed to create frame timeline semaphore");
+
+                m_TimelineSemaphoreSupported = false;
+            }
+            else
+            {
+                m_TimelineValues.assign(l_FrameCount, 0);
+            }
+        }
+
         TR_CORE_TRACE("Sync Objects Created ({})", swapchainImageCount);
 
-        // Future improvement: adopt VK_KHR_timeline_semaphore or VK_EXT_swapchain_maintenance1 when driver coverage improves.
+        // Future improvement: explore VK_EXT_swapchain_maintenance1 to let presentation release images earlier and further
+        // reduce latency once driver coverage improves.
     }
-
 }

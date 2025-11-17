@@ -543,7 +543,26 @@ namespace Trident
         }
 
         VkFence l_InFlightFence = m_Commands.GetInFlightFence(m_Commands.CurrentFrame());
-        vkWaitForFences(Startup::GetDevice(), 1, &l_InFlightFence, VK_TRUE, UINT64_MAX);
+        if (m_Commands.SupportsTimelineSemaphores())
+        {
+            // With timeline semaphores available we can reuse a single handle and just wait for the next counter value instead
+            // of resetting the binary fence every frame. This keeps command submission lightweight while preserving correctness.
+            const uint64_t l_TargetValue = m_Commands.GetTimelineValue(m_Commands.CurrentFrame());
+            if (l_TargetValue > 0)
+            {
+                VkSemaphore l_WaitSemaphore = m_Commands.GetFrameTimelineSemaphore();
+                VkSemaphoreWaitInfo l_WaitInfo{ VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO };
+                l_WaitInfo.semaphoreCount = 1;
+                l_WaitInfo.pSemaphores = &l_WaitSemaphore;
+                l_WaitInfo.pValues = &l_TargetValue;
+
+                vkWaitSemaphores(Startup::GetDevice(), &l_WaitInfo, UINT64_MAX);
+            }
+        }
+        else
+        {
+            vkWaitForFences(Startup::GetDevice(), 1, &l_InFlightFence, VK_TRUE, UINT64_MAX);
+        }
 
         uint32_t l_ImageIndex = 0;
         if (!AcquireNextImage(l_ImageIndex, l_InFlightFence))
@@ -558,7 +577,11 @@ namespace Trident
 
         UpdateUniformBuffer(l_ImageIndex);
 
-        vkResetFences(Startup::GetDevice(), 1, &l_InFlightFence);
+        if (!m_Commands.SupportsTimelineSemaphores())
+        {
+            // Binary fences still guard swapchain image reuse on platforms without timeline semaphore support.
+            vkResetFences(Startup::GetDevice(), 1, &l_InFlightFence);
+        }
 
         if (!RecordCommandBuffer(l_ImageIndex))
         {
@@ -4918,15 +4941,36 @@ namespace Trident
         // 3. Signal the image-scoped render-finished semaphore so presentation waits on the exact same handle when that image is presented.
         VkSemaphore l_WaitSemaphores[] = { m_Commands.GetImageAvailableSemaphorePerImage(l_CurrentFrame) };
         VkPipelineStageFlags l_WaitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
-        VkSemaphore l_SignalSemaphores[] = { m_Commands.GetRenderFinishedSemaphoreForImage(imageIndex) };
+        VkSemaphore l_SignalSemaphores[] = { m_Commands.GetRenderFinishedSemaphoreForImage(imageIndex), m_Commands.GetFrameTimelineSemaphore() };
+        uint64_t l_WaitValues[] = { 0 };
+        uint64_t l_SignalValues[] = { 0, 0 };
+
+        VkTimelineSemaphoreSubmitInfo l_TimelineSubmitInfo{ VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO };
+        if (m_Commands.SupportsTimelineSemaphores())
+        {
+            // Increment the timeline value for this frame so the CPU can wait on a monotonically increasing counter instead
+            // of a pool of binary fences. This improves swapchain recycling on drivers that implement VK_KHR_timeline_semaphore.
+            uint64_t& l_FrameTimelineValue = m_Commands.TimelineValue(l_CurrentFrame);
+            l_FrameTimelineValue++;
+
+            l_WaitValues[0] = 0;
+            l_SignalValues[0] = 0; // Binary semaphore still signals render completion for presentation.
+            l_SignalValues[1] = l_FrameTimelineValue;
+
+            l_TimelineSubmitInfo.waitSemaphoreValueCount = 1;
+            l_TimelineSubmitInfo.pWaitSemaphoreValues = l_WaitValues;
+            l_TimelineSubmitInfo.signalSemaphoreValueCount = 2;
+            l_TimelineSubmitInfo.pSignalSemaphoreValues = l_SignalValues;
+        }
 
         VkSubmitInfo l_SubmitInfo{ VK_STRUCTURE_TYPE_SUBMIT_INFO };
+        l_SubmitInfo.pNext = m_Commands.SupportsTimelineSemaphores() ? &l_TimelineSubmitInfo : nullptr;
         l_SubmitInfo.waitSemaphoreCount = 1;
         l_SubmitInfo.pWaitSemaphores = l_WaitSemaphores;
         l_SubmitInfo.pWaitDstStageMask = l_WaitStages;
         l_SubmitInfo.commandBufferCount = 1;
         l_SubmitInfo.pCommandBuffers = &l_CommandBuffer;
-        l_SubmitInfo.signalSemaphoreCount = 1;
+        l_SubmitInfo.signalSemaphoreCount = m_Commands.SupportsTimelineSemaphores() ? 2 : 1;
         l_SubmitInfo.pSignalSemaphores = l_SignalSemaphores;
 
         if (vkQueueSubmit(Startup::GetGraphicsQueue(), 1, &l_SubmitInfo, inFlightFence) != VK_SUCCESS)

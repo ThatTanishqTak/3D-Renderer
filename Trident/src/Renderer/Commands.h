@@ -25,6 +25,11 @@ namespace Trident
 
         void SetImageInFlight(size_t index, VkFence fence) { m_ImagesInFlight[index] = fence; }
 
+        bool SupportsTimelineSemaphores() const { return m_TimelineSemaphoreSupported; }
+        VkSemaphore GetFrameTimelineSemaphore() const { return m_FrameTimelineSemaphore; }
+        uint64_t GetTimelineValue(size_t index) const { return m_TimelineValues[index]; }
+        uint64_t& TimelineValue(size_t index) { return m_TimelineValues[index]; }
+
         size_t GetFrameCount() const { return m_ImageAvailableSemaphoresPerImage.size(); }
         size_t& CurrentFrame() { return m_CurrentFrame; }
         size_t CurrentFrame() const { return m_CurrentFrame; }
@@ -52,5 +57,8 @@ namespace Trident
         std::vector<VkFence> m_ImagesInFlight;
         size_t m_CurrentFrame = 0;
         CommandBufferPool m_OneTimePool;
+        bool m_TimelineSemaphoreSupported = false;
+        VkSemaphore m_FrameTimelineSemaphore = VK_NULL_HANDLE;
+        std::vector<uint64_t> m_TimelineValues;
     };
 }

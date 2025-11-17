@@ -315,6 +315,10 @@ namespace Trident
         l_EnabledVulkan12Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
         l_EnabledVulkan12Features.runtimeDescriptorArray = VK_TRUE;
         l_EnabledVulkan12Features.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
+        // Timeline semaphores reduce CPU-GPU latency when recycling swapchain slots. Enable them when available so the renderer
+        // can progress without resetting fences every frame.
+        m_TimelineSemaphoreSupported = l_AvailableVulkan12Features.timelineSemaphore == VK_TRUE;
+        l_EnabledVulkan12Features.timelineSemaphore = m_TimelineSemaphoreSupported ? VK_TRUE : VK_FALSE;
 
         VkDeviceCreateInfo l_DeviceCreateInfo{};
 
