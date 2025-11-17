@@ -577,11 +577,10 @@ namespace Trident
 
         UpdateUniformBuffer(l_ImageIndex);
 
-        if (!m_Commands.SupportsTimelineSemaphores())
-        {
-            // Binary fences still guard swapchain image reuse on platforms without timeline semaphore support.
-            vkResetFences(Startup::GetDevice(), 1, &l_InFlightFence);
-        }
+        // Reset the submission fence before queuing work so validation never sees a previously signaled handle, regardless of
+        // whether timeline semaphores cover CPU/GPU pacing on this platform. Keeping the fence unsignaled avoids warnings when
+        // vkQueueSubmit is given a fence that was already satisfied.
+        vkResetFences(Startup::GetDevice(), 1, &l_InFlightFence);
 
         if (!RecordCommandBuffer(l_ImageIndex))
         {
