@@ -547,7 +547,7 @@ namespace Trident
         {
             // With timeline semaphores available we can reuse a single handle and just wait for the next counter value instead
             // of resetting the binary fence every frame. This keeps command submission lightweight while preserving correctness.
-            const uint64_t l_TargetValue = m_Commands.GetTimelineValue(m_Commands.CurrentFrame());
+            const uint64_t l_TargetValue = m_Commands.GetTimelineValue();
             if (l_TargetValue > 0)
             {
                 VkSemaphore l_WaitSemaphore = m_Commands.GetFrameTimelineSemaphore();
@@ -4947,14 +4947,12 @@ namespace Trident
         VkTimelineSemaphoreSubmitInfo l_TimelineSubmitInfo{ VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO };
         if (m_Commands.SupportsTimelineSemaphores())
         {
-            // Increment the timeline value for this frame so the CPU can wait on a monotonically increasing counter instead
-            // of a pool of binary fences. This improves swapchain recycling on drivers that implement VK_KHR_timeline_semaphore.
-            uint64_t& l_FrameTimelineValue = m_Commands.TimelineValue(l_CurrentFrame);
-            l_FrameTimelineValue++;
+            // Increment the shared timeline so each queue submission signals a unique, increasing value across all frames.
+            const uint64_t l_NextTimelineValue = m_Commands.IncrementTimelineValue();
 
             l_WaitValues[0] = 0;
             l_SignalValues[0] = 0; // Binary semaphore still signals render completion for presentation.
-            l_SignalValues[1] = l_FrameTimelineValue;
+            l_SignalValues[1] = l_NextTimelineValue;
 
             l_TimelineSubmitInfo.waitSemaphoreValueCount = 1;
             l_TimelineSubmitInfo.pWaitSemaphoreValues = l_WaitValues;

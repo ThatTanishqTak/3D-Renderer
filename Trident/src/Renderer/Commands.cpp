@@ -76,7 +76,7 @@ namespace Trident
         m_RenderFinishedSemaphoresPerImage.clear();
         m_InFlightFences.clear();
         m_ImagesInFlight.clear();
-        m_TimelineValues.clear();
+        m_TimelineValue = 0;
     }
 
     void Commands::Recreate(uint32_t commandBufferCount)
@@ -122,7 +122,7 @@ namespace Trident
         m_RenderFinishedSemaphoresPerImage.clear();
         m_InFlightFences.clear();
         m_ImagesInFlight.clear();
-        m_TimelineValues.clear();
+        m_TimelineValue = 0;
 
         m_CurrentFrame = 0;
 
@@ -161,6 +161,15 @@ namespace Trident
         vkQueueWaitIdle(Startup::GetGraphicsQueue());
 
         m_OneTimePool.Release(l_CommandBuffer);
+    }
+
+    uint64_t Commands::IncrementTimelineValue()
+    {
+        // Advance the global timeline counter so every submission signals a unique, monotonically increasing value across frames.
+        // This keeps waits simple while preserving ordering guarantees when frames are recycled.
+        m_TimelineValue++;
+
+        return m_TimelineValue;
     }
 
     void Commands::CreateCommandPool()
@@ -255,7 +264,7 @@ namespace Trident
             }
             else
             {
-                m_TimelineValues.assign(l_FrameCount, 0);
+                m_TimelineValue = 0;
             }
         }
 
