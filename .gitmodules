@@ -22,3 +22,7 @@
 [submodule "Trident/vendor/nanosvg"]
 	path = Trident/vendor/nanosvg
 	url = https://github.com/ThatTanishqTak/nanosvg.git
+[submodule "Trident/vendor/imgui"]
+	path = Trident/vendor/imgui
+	url = https://github.com/ThatTanishqTak/imgui.git
+	branch = docking
