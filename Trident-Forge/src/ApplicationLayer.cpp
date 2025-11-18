@@ -179,6 +179,15 @@ void ApplicationLayer::Update()
 void ApplicationLayer::Render()
 {
     RenderMainMenuBar();
+    ImGuiIO& io = ImGui::GetIO();
+    if (io.ConfigFlags & ImGuiConfigFlags_DockingEnable)
+    {
+        constexpr ImGuiDockNodeFlags dockspace_flags = ImGuiDockNodeFlags_None;
+        ImGui::DockSpaceOverViewport((ImGuiID)ImGui::GetMainViewport(), 0);
+    }
+
+    RenderMainMenuBar();
+
     RenderSceneToolbar();
     HandleSceneFileDialogs();
 
