@@ -40,11 +40,13 @@ namespace EditorPanels
 
     void SceneViewportPanel::SubmitViewportTexture(const ImVec2& viewportSize)
     {
-        const ImTextureID l_TextureId = Trident::RenderCommand::GetViewportTexture((ImTextureID)m_ViewportInfo.ViewportID);
+        const VkDescriptorSet l_DescriptorSet = Trident::RenderCommand::GetViewportTexture(m_ViewportInfo.ViewportID);
+        const ImTextureID l_TextureId = reinterpret_cast<ImTextureID>(l_DescriptorSet);
 
         // Swapchain-aware: leave sizing to ImGui while ensuring the Vulkan image view stays bound for the frame's
-        // command buffer. This keeps us aligned with the ImGuiLayer render pass submission order handled by Renderer.
-        if (l_TextureId != nullptr && viewportSize.x > 0.0f && viewportSize.y > 0.0f)
+        // command buffer. Comparing against an explicit zero sentinel keeps the check valid whether ImTextureID is a
+        // pointer or integer, matching the expectations documented in https://github.com/ocornut/imgui/wiki/Image-Loading-and-Displaying-Examples.
+        if (l_TextureId != ImTextureID{ 0 } && viewportSize.x > 0.0f && viewportSize.y > 0.0f)
         {
             ImGui::Image(l_TextureId, viewportSize, ImVec2(0, 0), ImVec2(1, 1));
         }

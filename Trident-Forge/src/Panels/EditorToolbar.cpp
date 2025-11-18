@@ -53,7 +53,7 @@ namespace EditorPanels
                 m_IsPerformanceCaptureEnabled = l_NewCaptureState;
 
                 // Update the renderer capture mode to keep swapchain command buffer lifetime correct per the LunarG guides.
-                RenderCommand::SetPerformanceCaptureEnabled(l_NewCaptureState);
+                Trident::RenderCommand::SetPerformanceCaptureEnabled(l_NewCaptureState);
 
                 if (m_OnCaptureToggle)
                 {

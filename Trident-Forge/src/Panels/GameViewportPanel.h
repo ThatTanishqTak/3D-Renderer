@@ -20,6 +20,6 @@ namespace EditorPanels
         void SubmitViewportTexture(const ImVec2& viewportSize);
 
     private:
-        ViewportInfo m_ViewportInfo{};
+        Trident::ViewportInfo m_ViewportInfo{};
     };
 }
