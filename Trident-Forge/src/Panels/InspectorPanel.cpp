@@ -20,12 +20,13 @@ namespace EditorPanels
 
     void InspectorPanel::Render()
     {
-        if (ImGui::Begin("Inspector"))
-        {
-            ImGui::Text("Selection: %s", m_SelectedLabel.c_str());
-            ImGui::Separator();
-            ImGui::TextUnformatted("Component editing UI will appear here.");
-        }
+        const bool l_WindowVisible = ImGui::Begin("Inspector");
+        (void)l_WindowVisible;
+        // Submit inspector contents unconditionally so dockspace tests retain the node regardless of collapse.
+
+        ImGui::Text("Selection: %s", m_SelectedLabel.c_str());
+        ImGui::Separator();
+        ImGui::TextUnformatted("Component editing UI will appear here.");
 
         ImGui::End();
     }

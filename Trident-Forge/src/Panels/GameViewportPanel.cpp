@@ -13,11 +13,9 @@ namespace EditorPanels
 
     void GameViewportPanel::Render()
     {
-        if (!ImGui::Begin("Game Viewport"))
-        {
-            ImGui::End();
-            return;
-        }
+        const bool l_WindowVisible = ImGui::Begin("Game Viewport");
+        (void)l_WindowVisible;
+        // Keep submission unconditional so dockspace stress tests retain the runtime viewport node consistently.
 
         const ImVec2 l_Available = ImGui::GetContentRegionAvail();
         m_ViewportInfo.Size = { l_Available.x, l_Available.y };

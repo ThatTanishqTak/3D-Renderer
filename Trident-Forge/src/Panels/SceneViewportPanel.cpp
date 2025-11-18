@@ -13,11 +13,9 @@ namespace EditorPanels
 
     void SceneViewportPanel::Render()
     {
-        if (!ImGui::Begin("Scene Viewport"))
-        {
-            ImGui::End();
-            return;
-        }
+        const bool l_WindowVisible = ImGui::Begin("Scene Viewport");
+        (void)l_WindowVisible;
+        // Always render viewport internals so dockspace and viewport tests see consistent submission even when collapsed.
 
         const ImVec2 l_Available = ImGui::GetContentRegionAvail();
         m_ViewportInfo.Size = { l_Available.x, l_Available.y };

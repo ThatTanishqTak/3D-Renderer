@@ -25,11 +25,9 @@ namespace EditorPanels
 
     void AnimationGraphPanel::Render()
     {
-        if (!ImGui::Begin("Animation Graph"))
-        {
-            ImGui::End();
-            return;
-        }
+        const bool l_WindowVisible = ImGui::Begin("Animation Graph");
+        (void)l_WindowVisible;
+        // Submit the window every frame so dockspace validation sees consistent nodes even when collapsed.
 
         ImGui::TextUnformatted("Animation Graph Overview");
         ImGui::Separator();

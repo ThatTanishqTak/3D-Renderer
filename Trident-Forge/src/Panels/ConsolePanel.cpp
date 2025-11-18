@@ -25,11 +25,9 @@ namespace EditorPanels
 
     void ConsolePanel::Render()
     {
-        if (!ImGui::Begin("Console"))
-        {
-            ImGui::End();
-            return;
-        }
+        const bool l_WindowVisible = ImGui::Begin("Console");
+        (void)l_WindowVisible;
+        // Submit unconditionally so dockspace coverage includes the console window even when collapsed.
 
         // Level visibility toggles mirror the configuration used by the layer.
         for (auto& [l_Level, l_IsVisible] : m_LevelVisibility)

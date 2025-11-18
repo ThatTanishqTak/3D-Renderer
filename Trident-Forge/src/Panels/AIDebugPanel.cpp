@@ -25,11 +25,9 @@ namespace EditorPanels
 
     void AIDebugPanel::Render()
     {
-        if (!ImGui::Begin("AI Debug"))
-        {
-            ImGui::End();
-            return;
-        }
+        const bool l_WindowVisible = ImGui::Begin("AI Debug");
+        (void)l_WindowVisible;
+        // Keep the window submission unconditional so dockspace layouts stay stable when toggling visibility.
 
         ImGui::TextUnformatted("AI Diagnostics");
         ImGui::Separator();

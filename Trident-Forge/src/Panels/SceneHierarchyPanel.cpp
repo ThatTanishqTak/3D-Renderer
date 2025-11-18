@@ -20,60 +20,61 @@ namespace EditorPanels
 
     void SceneHierarchyPanel::Render()
     {
-        if (ImGui::Begin("Scene Hierarchy"))
+        const bool l_WindowVisible = ImGui::Begin("Scene Hierarchy");
+        (void)l_WindowVisible;
+        // Always submit hierarchy content so dockspace layouts see the node regardless of collapse state.
+
+        ImGui::TextUnformatted(m_StatusMessage.c_str());
+        ImGui::TextUnformatted("Hierarchy population will be driven by the active registry.");
+
+        if (m_Registry != nullptr)
         {
-            ImGui::TextUnformatted(m_StatusMessage.c_str());
-            ImGui::TextUnformatted("Hierarchy population will be driven by the active registry.");
-
-            if (m_Registry != nullptr)
+            for (Trident::ECS::Entity it_Entity : m_Registry->GetEntities())
             {
-                for (Trident::ECS::Entity it_Entity : m_Registry->GetEntities())
+                const bool l_IsSelected = it_Entity == m_SelectedEntity;
+                const std::string l_Label = "Entity " + std::to_string(it_Entity);
+                if (ImGui::Selectable(l_Label.c_str(), l_IsSelected))
                 {
-                    const bool l_IsSelected = it_Entity == m_SelectedEntity;
-                    const std::string l_Label = "Entity " + std::to_string(it_Entity);
-                    if (ImGui::Selectable(l_Label.c_str(), l_IsSelected))
-                    {
-                        m_SelectedEntity = it_Entity;
-                    }
+                    m_SelectedEntity = it_Entity;
+                }
+            }
+        }
+
+        if (ImGui::BeginPopupContextWindow("HierarchyContext", ImGuiPopupFlags_MouseButtonRight))
+        {
+            if (ImGui::MenuItem("Create Empty"))
+            {
+                if (m_OnCreateEmpty)
+                {
+                    m_OnCreateEmpty();
                 }
             }
 
-            if (ImGui::BeginPopupContextWindow("HierarchyContext", ImGuiPopupFlags_MouseButtonRight))
+            if (ImGui::MenuItem("Create Cube"))
             {
-                if (ImGui::MenuItem("Create Empty"))
+                if (m_OnCreateCube)
                 {
-                    if (m_OnCreateEmpty)
-                    {
-                        m_OnCreateEmpty();
-                    }
+                    m_OnCreateCube();
                 }
-
-                if (ImGui::MenuItem("Create Cube"))
-                {
-                    if (m_OnCreateCube)
-                    {
-                        m_OnCreateCube();
-                    }
-                }
-
-                if (ImGui::MenuItem("Create Sphere"))
-                {
-                    if (m_OnCreateSphere)
-                    {
-                        m_OnCreateSphere();
-                    }
-                }
-
-                if (ImGui::MenuItem("Create Quad"))
-                {
-                    if (m_OnCreateQuad)
-                    {
-                        m_OnCreateQuad();
-                    }
-                }
-
-                ImGui::EndPopup();
             }
+
+            if (ImGui::MenuItem("Create Sphere"))
+            {
+                if (m_OnCreateSphere)
+                {
+                    m_OnCreateSphere();
+                }
+            }
+
+            if (ImGui::MenuItem("Create Quad"))
+            {
+                if (m_OnCreateQuad)
+                {
+                    m_OnCreateQuad();
+                }
+            }
+
+            ImGui::EndPopup();
         }
 
         ImGui::End();

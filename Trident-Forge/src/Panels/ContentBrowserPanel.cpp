@@ -11,11 +11,12 @@ namespace EditorPanels
 
     void ContentBrowserPanel::Render()
     {
-        if (ImGui::Begin("Content Browser"))
-        {
-            ImGui::Text("Current directory: %s", m_CurrentDirectory.c_str());
-            ImGui::TextUnformatted("Asset listing will be populated once the import pipeline is wired up.");
-        }
+        const bool l_WindowVisible = ImGui::Begin("Content Browser");
+        (void)l_WindowVisible;
+        // Keep submission unconditional so dockspace layouts exercise the window presence every frame.
+
+        ImGui::Text("Current directory: %s", m_CurrentDirectory.c_str());
+        ImGui::TextUnformatted("Asset listing will be populated once the import pipeline is wired up.");
 
         ImGui::End();
     }

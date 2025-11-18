@@ -9,60 +9,60 @@ namespace EditorPanels
     void EditorToolbar::Render()
     {
         const ImGuiWindowFlags l_WindowFlags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar;
+        const bool l_WindowVisible = ImGui::Begin("##EditorToolbar", nullptr, l_WindowFlags);
+        (void)l_WindowVisible;
+        // Always push toolbar contents so dockspace validation sees this fixed-position tool strip even when hidden.
 
-        if (ImGui::Begin("##EditorToolbar", nullptr, l_WindowFlags))
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f, 4.0f));
+
+        const bool l_SceneClicked = RenderToolbarButton("Scene", true);
+        if (l_SceneClicked && m_OnSceneReset)
         {
-            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f, 4.0f));
-
-            const bool l_SceneClicked = RenderToolbarButton("Scene", true);
-            if (l_SceneClicked && m_OnSceneReset)
-            {
-                m_OnSceneReset();
-            }
-
-            ImGui::SameLine();
-
-            const bool l_PlayClicked = RenderToolbarButton("Play", m_PlaybackState != PlaybackState::Playing);
-            if (l_PlayClicked && m_OnPlayRequested)
-            {
-                m_OnPlayRequested();
-            }
-
-            ImGui::SameLine();
-
-            const bool l_PauseClicked = RenderToolbarButton("Pause", m_PlaybackState == PlaybackState::Playing);
-            if (l_PauseClicked && m_OnPauseRequested)
-            {
-                m_OnPauseRequested();
-            }
-
-            ImGui::SameLine();
-
-            const bool l_StopClicked = RenderToolbarButton("Stop", m_PlaybackState != PlaybackState::Edit);
-            if (l_StopClicked && m_OnStopRequested)
-            {
-                m_OnStopRequested();
-            }
-
-            ImGui::SameLine();
-
-            const bool l_PerfClicked = RenderToolbarButton("Performance Capture", true);
-            if (l_PerfClicked)
-            {
-                const bool l_NewCaptureState = !m_IsPerformanceCaptureEnabled;
-                m_IsPerformanceCaptureEnabled = l_NewCaptureState;
-
-                // Update the renderer capture mode to keep swapchain command buffer lifetime correct per the LunarG guides.
-                Trident::RenderCommand::SetPerformanceCaptureEnabled(l_NewCaptureState);
-
-                if (m_OnCaptureToggle)
-                {
-                    m_OnCaptureToggle(l_NewCaptureState);
-                }
-            }
-
-            ImGui::PopStyleVar();
+            m_OnSceneReset();
         }
+
+        ImGui::SameLine();
+
+        const bool l_PlayClicked = RenderToolbarButton("Play", m_PlaybackState != PlaybackState::Playing);
+        if (l_PlayClicked && m_OnPlayRequested)
+        {
+            m_OnPlayRequested();
+        }
+
+        ImGui::SameLine();
+
+        const bool l_PauseClicked = RenderToolbarButton("Pause", m_PlaybackState == PlaybackState::Playing);
+        if (l_PauseClicked && m_OnPauseRequested)
+        {
+            m_OnPauseRequested();
+        }
+
+        ImGui::SameLine();
+
+        const bool l_StopClicked = RenderToolbarButton("Stop", m_PlaybackState != PlaybackState::Edit);
+        if (l_StopClicked && m_OnStopRequested)
+        {
+            m_OnStopRequested();
+        }
+
+        ImGui::SameLine();
+
+        const bool l_PerfClicked = RenderToolbarButton("Performance Capture", true);
+        if (l_PerfClicked)
+        {
+            const bool l_NewCaptureState = !m_IsPerformanceCaptureEnabled;
+            m_IsPerformanceCaptureEnabled = l_NewCaptureState;
+
+            // Update the renderer capture mode to keep swapchain command buffer lifetime correct per the LunarG guides.
+            Trident::RenderCommand::SetPerformanceCaptureEnabled(l_NewCaptureState);
+
+            if (m_OnCaptureToggle)
+            {
+                m_OnCaptureToggle(l_NewCaptureState);
+            }
+        }
+
+        ImGui::PopStyleVar();
 
         ImGui::End();
     }

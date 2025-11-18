@@ -317,106 +317,106 @@ void ApplicationLayer::RenderSceneToolbar()
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 6.0f));
     const ImGuiWindowFlags l_WindowFlags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
         ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoNavFocus;
+    const bool l_WindowVisible = ImGui::Begin("Scene Transport", nullptr, l_WindowFlags);
+    (void)l_WindowVisible;
+    // Submit transport controls every frame so dockspace testing can observe consistent layout even when collapsed.
 
-    if (ImGui::Begin("Scene Transport", nullptr, l_WindowFlags))
+    const bool l_HasScene = m_ActiveScene != nullptr;
+    const bool l_IsPlaying = l_HasScene && m_ActiveScene->IsPlaying();
+
+    // Primary play/pause/stop widgets remain centred in this transport strip.
+
+    ImGui::BeginDisabled(!l_HasScene);
+    if (l_HasScene)
     {
-        const bool l_HasScene = m_ActiveScene != nullptr;
-        const bool l_IsPlaying = l_HasScene && m_ActiveScene->IsPlaying();
-
-        // Primary play/pause/stop widgets remain centred in this transport strip.
-
-        ImGui::BeginDisabled(!l_HasScene);
-        if (l_HasScene)
+        if (l_IsPlaying)
         {
-            if (l_IsPlaying)
-            {
-                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.13f, 0.59f, 0.30f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.16f, 0.66f, 0.34f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.11f, 0.52f, 0.27f, 1.0f));
-            }
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.13f, 0.59f, 0.30f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.16f, 0.66f, 0.34f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.11f, 0.52f, 0.27f, 1.0f));
+        }
 
-            if (ImGui::Button("Play"))
+        if (ImGui::Button("Play"))
+        {
+            if (!l_IsPlaying)
             {
-                if (!l_IsPlaying)
-                {
-                    // Promote the editor registry into a runtime clone so gameplay code can run against isolated data.
-                    m_ActiveScene->Play();
-                    Trident::RenderCommand::SetActiveRegistry(&m_ActiveScene->GetActiveRegistry());
-                    RefreshRuntimeCameraBinding();
-                }
-            }
-
-            if (l_IsPlaying)
-            {
-                ImGui::PopStyleColor(3);
+                // Promote the editor registry into a runtime clone so gameplay code can run against isolated data.
+                m_ActiveScene->Play();
+                Trident::RenderCommand::SetActiveRegistry(&m_ActiveScene->GetActiveRegistry());
+                RefreshRuntimeCameraBinding();
             }
         }
-        else
+
+        if (l_IsPlaying)
         {
-            ImGui::Button("Play");
+            ImGui::PopStyleColor(3);
         }
-        ImGui::EndDisabled();
-
-        ImGui::SameLine();
-
-        ImGui::BeginDisabled(true);
-        if (ImGui::Button("Pause"))
-        {
-        }
-        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-        {
-            ImGui::SetTooltip("Pause will activate once the runtime exposes time scaling. This toolbar is the hand-off point.");
-        }
-        ImGui::EndDisabled();
-
-        ImGui::SameLine();
-
-        ImGui::BeginDisabled(!l_HasScene || !l_IsPlaying);
-        if (ImGui::Button("Stop"))
-        {
-            // Restore the editor registry and notify the renderer so authored data is visible again.
-            m_ActiveScene->Stop();
-            Trident::RenderCommand::SetActiveRegistry(&m_ActiveScene->GetEditorRegistry());
-            RefreshRuntimeCameraBinding();
-        }
-        ImGui::EndDisabled();
-
-        ImGui::SameLine();
-        const char* l_StatusLabel = l_IsPlaying ? "Playing" : "Editing";
-        ImGui::Text("Scene State: %s", l_StatusLabel);
-        if (!m_SceneIoTooltip.empty() && ImGui::IsItemHovered())
-        {
-            // Preserve scene IO feedback as a tooltip so save/load results remain easy to discover.
-            ImGui::SetTooltip("%s", m_SceneIoTooltip.c_str());
-        }
-
-        ImGui::Separator();
-
-        // Mirror renderer performance capture controls so teams can trigger recordings from the editor toolbar.
-        const bool l_IsCapturing = Trident::RenderCommand::IsPerformanceCaptureEnabled();
-        const size_t l_CaptureSamples = Trident::RenderCommand::GetPerformanceCaptureSampleCount();
-        const char* l_CaptureLabel = l_IsCapturing ? "Stop Performance Capture" : "Start Performance Capture";
-        if (ImGui::Button(l_CaptureLabel))
-        {
-            // Toggling the flag automatically starts or exports the capture through the renderer's existing logic.
-            Trident::RenderCommand::SetPerformanceCaptureEnabled(!l_IsCapturing);
-        }
-
-        ImGui::SameLine();
-        ImGui::Text("Captured Samples: %zu", l_CaptureSamples);
-        if (ImGui::IsItemHovered())
-        {
-            ImGui::SetTooltip("Samples export automatically when capture stops. Future tooling can expand analytics here.");
-        }
-
-        if (l_IsCapturing)
-        {
-            ImGui::SameLine();
-            ImGui::TextColored(ImVec4(0.85f, 0.25f, 0.25f, 1.0f), "Recording...");
-        }
-
-        // Future improvement: swap text buttons for icons, add hotkeys, and explore docking-friendly layout tweaks.
     }
+    else
+    {
+        ImGui::Button("Play");
+    }
+    ImGui::EndDisabled();
+
+    ImGui::SameLine();
+
+    ImGui::BeginDisabled(true);
+    if (ImGui::Button("Pause"))
+    {
+    }
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+    {
+        ImGui::SetTooltip("Pause will activate once the runtime exposes time scaling. This toolbar is the hand-off point.");
+    }
+    ImGui::EndDisabled();
+
+    ImGui::SameLine();
+
+    ImGui::BeginDisabled(!l_HasScene || !l_IsPlaying);
+    if (ImGui::Button("Stop"))
+    {
+        // Restore the editor registry and notify the renderer so authored data is visible again.
+        m_ActiveScene->Stop();
+        Trident::RenderCommand::SetActiveRegistry(&m_ActiveScene->GetEditorRegistry());
+        RefreshRuntimeCameraBinding();
+    }
+    ImGui::EndDisabled();
+
+    ImGui::SameLine();
+    const char* l_StatusLabel = l_IsPlaying ? "Playing" : "Editing";
+    ImGui::Text("Scene State: %s", l_StatusLabel);
+    if (!m_SceneIoTooltip.empty() && ImGui::IsItemHovered())
+    {
+        // Preserve scene IO feedback as a tooltip so save/load results remain easy to discover.
+        ImGui::SetTooltip("%s", m_SceneIoTooltip.c_str());
+    }
+
+    ImGui::Separator();
+
+    // Mirror renderer performance capture controls so teams can trigger recordings from the editor toolbar.
+    const bool l_IsCapturing = Trident::RenderCommand::IsPerformanceCaptureEnabled();
+    const size_t l_CaptureSamples = Trident::RenderCommand::GetPerformanceCaptureSampleCount();
+    const char* l_CaptureLabel = l_IsCapturing ? "Stop Performance Capture" : "Start Performance Capture";
+    if (ImGui::Button(l_CaptureLabel))
+    {
+        // Toggling the flag automatically starts or exports the capture through the renderer's existing logic.
+        Trident::RenderCommand::SetPerformanceCaptureEnabled(!l_IsCapturing);
+    }
+
+    ImGui::SameLine();
+    ImGui::Text("Captured Samples: %zu", l_CaptureSamples);
+    if (ImGui::IsItemHovered())
+    {
+        ImGui::SetTooltip("Samples export automatically when capture stops. Future tooling can expand analytics here.");
+    }
+
+    if (l_IsCapturing)
+    {
+        ImGui::SameLine();
+        ImGui::TextColored(ImVec4(0.85f, 0.25f, 0.25f, 1.0f), "Recording...");
+    }
+
+    // Future improvement: swap text buttons for icons, add hotkeys, and explore docking-friendly layout tweaks.
     ImGui::End();
     ImGui::PopStyleVar();
 }
