@@ -112,6 +112,7 @@ namespace Trident
             l_InitInfo.Queue = m_GraphicsQueue;
             l_InitInfo.PipelineCache = VK_NULL_HANDLE;
             l_InitInfo.DescriptorPool = m_ImGuiDescriptorPool;
+            l_InitInfo.PipelineInfoMain.RenderPass = m_RenderPass;
             l_InitInfo.PipelineInfoMain.Subpass = 0;
             l_InitInfo.MinImageCount = m_ImageCount;
             l_InitInfo.ImageCount = m_ImageCount;
