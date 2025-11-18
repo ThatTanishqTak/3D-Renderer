@@ -14,7 +14,7 @@ struct ApplicationSpecifications
 #include "Application/Startup.h"
 #include "Layer/Layer.h"
 #include "Events/Events.h"
-#include "UI/ImGuiLayer.h"
+#include "Layer/ImGuiLayer.h"
 
 namespace Trident
 {

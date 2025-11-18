@@ -12,7 +12,6 @@
 #include "Application/Input.h"
 #include "Events/KeyCodes.h"
 #include "Events/MouseCodes.h"
-#include "UI/FileDialog.h"
 
 #include <spdlog/spdlog.h>
 #include <imgui.h>
@@ -480,18 +479,6 @@ void ApplicationLayer::HandleSceneFileDialogs()
     {
         ImGui::OpenPopup("Load Scene");
         m_OpenLoadScenePopup = false;
-    }
-
-    std::string l_SavePath = m_CurrentScenePath.empty() ? std::string{} : m_CurrentScenePath.string();
-    if (Trident::UI::FileDialog::Save("Save Scene As", l_SavePath, ".trident"))
-    {
-        SaveScene(l_SavePath);
-    }
-
-    std::string l_LoadPath = m_CurrentScenePath.empty() ? std::string{} : m_CurrentScenePath.string();
-    if (Trident::UI::FileDialog::Open("Load Scene", l_LoadPath, ".trident"))
-    {
-        LoadScene(l_LoadPath);
     }
 }
 
