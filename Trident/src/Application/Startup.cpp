@@ -53,11 +53,7 @@ namespace Trident
     {
         TR_CORE_TRACE("Shutting down Vulkan");
 
-        if (m_Device != VK_NULL_HANDLE)
-        {
-            // Ensure all queued GPU work is completed before tearing down device-bound resources.
-            vkDeviceWaitIdle(m_Device);
-        }
+        vkDeviceWaitIdle(m_Device);
 
         if (m_Surface != VK_NULL_HANDLE)
         {

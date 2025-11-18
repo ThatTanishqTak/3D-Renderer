@@ -165,6 +165,8 @@ namespace Trident
 
         m_HasShutdown = true;
 
+        vkDeviceWaitIdle(Startup::GetDevice());
+
         // Ask the active layer to release its resources while the renderer context is still valid.
         if (m_ActiveLayer)
         {
