@@ -26,11 +26,16 @@ namespace EditorPanels
         void Update();
         void Render();
 
-        void SetRegistry(Trident::ECS::Registry** registry);
+        /**
+         * @brief Bind the panel to the active registry without taking ownership.
+         *
+         * The registry is owned and swapped by the application layer when entering or leaving play mode.
+         */
+        void SetRegistry(Trident::ECS::Registry* registry);
         void SetSelectedEntity(Trident::ECS::Entity entity);
 
     private:
-        Trident::ECS::Registry** m_Registry = nullptr;
+        Trident::ECS::Registry* m_Registry = nullptr;
         Trident::ECS::Entity m_SelectedEntity = std::numeric_limits<Trident::ECS::Entity>::max();
         std::string m_StatusText = "No animation data";
     };

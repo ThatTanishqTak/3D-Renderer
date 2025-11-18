@@ -38,8 +38,9 @@ namespace EditorPanels
         ImGui::End();
     }
 
-    void AIDebugPanel::SetRegistry(Trident::ECS::Registry** registry)
+    void AIDebugPanel::SetRegistry(Trident::ECS::Registry* registry)
     {
+        // Non-owning: the application layer manages registry lifetime and swaps it when play mode toggles.
         m_Registry = registry;
     }
 

@@ -120,8 +120,8 @@ void ApplicationLayer::Initialize()
     m_SceneHierarchyPanel.SetRegistry(l_RegistryForPanels);
     m_InspectorPanel.SetRegistry(l_RegistryForPanels);
     m_ViewportPanel.SetRegistry(l_RegistryForPanels);
-    m_AIDebugPanel.SetRegistry(&l_RegistryForPanels);
-    m_AnimationGraphPanel.SetRegistry(&l_RegistryForPanels);
+    m_AIDebugPanel.SetRegistry(l_RegistryForPanels);
+    m_AnimationGraphPanel.SetRegistry(l_RegistryForPanels);
 
     // Initialize Unity-like target state and pivot/distance
     m_TargetYawDegrees = m_EditorYawDegrees;

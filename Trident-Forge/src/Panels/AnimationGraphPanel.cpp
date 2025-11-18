@@ -38,8 +38,9 @@ namespace EditorPanels
         ImGui::End();
     }
 
-    void AnimationGraphPanel::SetRegistry(Trident::ECS::Registry** registry)
+    void AnimationGraphPanel::SetRegistry(Trident::ECS::Registry* registry)
     {
+        // Non-owning: the application layer retains control of registry allocation and lifetime.
         m_Registry = registry;
     }
 

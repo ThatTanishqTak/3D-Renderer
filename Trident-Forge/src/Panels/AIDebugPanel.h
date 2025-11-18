@@ -23,11 +23,16 @@ namespace EditorPanels
         void Update();
         void Render();
 
-        void SetRegistry(Trident::ECS::Registry** registry);
+        /**
+         * @brief Bind the panel to the active registry without taking ownership.
+         *
+         * The pointer remains valid as long as the application layer keeps the registry alive.
+         */
+        void SetRegistry(Trident::ECS::Registry* registry);
         void SetSelectedEntity(Trident::ECS::Entity entity);
 
     private:
-        Trident::ECS::Registry** m_Registry = nullptr;
+        Trident::ECS::Registry* m_Registry = nullptr;
         Trident::ECS::Entity m_SelectedEntity = 0;
         std::string m_DebugSummary = "No selection";
     };
