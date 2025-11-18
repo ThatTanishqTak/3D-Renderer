@@ -5,15 +5,12 @@
 #include "Renderer/Camera/EditorCamera.h"
 #include "Renderer/Camera/RuntimeCamera.h"
 
-#include "Panels/ViewportPanel.h"
+#include "Panels/SceneViewportPanel.h"
 #include "Panels/GameViewportPanel.h"
 #include "Panels/ContentBrowserPanel.h"
 #include "Panels/SceneHierarchyPanel.h"
 #include "Panels/InspectorPanel.h"
-#include "Panels/GizmoState.h"
-#include "Panels/ConsolePanel.h"
-#include "Panels/AnimationGraphPanel.h"
-#include "Panels/AIDebugPanel.h"
+
 #include "ECS/Scene.h"
 #include "Animation/AnimationData.h"
 
@@ -83,15 +80,11 @@ private:
     std::string MakeUniqueName(const std::string& baseName) const;
 
 private:
-    GizmoState m_GizmoState;
-    ViewportPanel m_ViewportPanel;
-    GameViewportPanel m_GameViewportPanel;
-    ContentBrowserPanel m_ContentBrowserPanel;
-    SceneHierarchyPanel m_SceneHierarchyPanel;
-    InspectorPanel m_InspectorPanel;
-    ConsolePanel m_ConsolePanel;
-    AnimationGraphPanel m_AnimationGraphPanel;
-    AIDebugPanel m_AIDebugPanel;
+    EditorPanels::SceneViewportPanel m_ViewportPanel;
+    EditorPanels::GameViewportPanel m_GameViewportPanel;
+    EditorPanels::ContentBrowserPanel m_ContentBrowserPanel;
+    EditorPanels::SceneHierarchyPanel m_SceneHierarchyPanel;
+    EditorPanels::InspectorPanel m_InspectorPanel;
 
     std::unique_ptr<Trident::Scene> m_ActiveScene;   ///< Owns the scene bridge responsible for play/edit registry swaps.
 
