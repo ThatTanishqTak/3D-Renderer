@@ -13,6 +13,7 @@
 #include "Panels/InspectorPanel.h"
 #include "Panels/AIDebugPanel.h"
 #include "Panels/AnimationGraphPanel.h"
+#include "Panels/GizmoState.h"
 
 #include "ECS/Scene.h"
 #include "Animation/AnimationData.h"
@@ -91,6 +92,7 @@ private:
     EditorPanels::ConsolePanel m_ConsolePanel;
     EditorPanels::AIDebugPanel m_AIDebugPanel;
     EditorPanels::AnimationGraphPanel m_AnimationGraphPanel;
+    Trident::GizmoState m_GizmoState{}; ///< Shared gizmo configuration propagated across viewport/inspector panels.
 
     std::unique_ptr<Trident::Scene> m_ActiveScene;   ///< Owns the scene bridge responsible for play/edit registry swaps.
 

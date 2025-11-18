@@ -10,6 +10,7 @@ namespace EditorPanels
     class ContentBrowserPanel
     {
     public:
+        void Update();
         void Render();
 
     private:

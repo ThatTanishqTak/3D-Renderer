@@ -4,6 +4,11 @@
 
 namespace EditorPanels
 {
+    void ContentBrowserPanel::Update()
+    {
+        // Placeholder hook for future asset indexing or selection caching logic.
+    }
+
     void ContentBrowserPanel::Render()
     {
         if (ImGui::Begin("Content Browser"))
