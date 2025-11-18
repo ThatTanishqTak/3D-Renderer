@@ -60,6 +60,9 @@ namespace Trident
         m_ImGuiLayer->Init(m_Window->GetNativeWindow(), Startup::GetInstance(), Startup::GetPhysicalDevice(), Startup::GetDevice(), l_QueueFamilyIndices.GraphicsFamily.value(),
             l_GraphicsQueue, Startup::GetRenderer().GetRenderPass(), static_cast<uint32_t>(Startup::GetRenderer().GetImageCount()), Startup::GetRenderer().GetCommandPool());
 
+        // Fully initialises ImGui so renderer-side texture registration calls do not trip assertions about missing contexts.
+        m_ImGuiLayer->Initialize();
+
         // Share the ImGui layer with the renderer so it can route draw commands and lifetime events appropriately.
         Startup::GetRenderer().SetImGuiLayer(m_ImGuiLayer.get());
 
