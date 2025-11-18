@@ -129,8 +129,15 @@ namespace Trident
                 return;
             }
 
+            VkResult l_WaitResult = vkDeviceWaitIdle(m_Device);
+            if (l_WaitResult != VK_SUCCESS)
+            {
+                TR_CORE_CRITICAL("vkDeviceWaitIdle failed during ImGui shutdown: {}", static_cast<int>(l_WaitResult));
+            }
+
             ImGui_ImplVulkan_Shutdown();
             ImGui_ImplGlfw_Shutdown();
+            ImGui::DestroyPlatformWindows();
             ImGui::DestroyContext();
 
             DestroyDescriptorPool();
