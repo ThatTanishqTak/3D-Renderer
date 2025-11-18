@@ -211,6 +211,14 @@ namespace Trident
             return;
         }
 
+        if (m_Pipeline == VK_NULL_HANDLE)
+        {
+            // Avoid recording invalid commands when the text pipeline is still compiling or has been destroyed by a hot-reload.
+            TR_CORE_WARN("TextRenderer pipeline missing; skipping text draw for frame {}.", frameIndex);
+            // TODO: Track pipeline rebuild progress so we can surface more helpful diagnostics in the editor overlay.
+            return;
+        }
+
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline);
 
         if (frameIndex < m_DescriptorSets.size())
