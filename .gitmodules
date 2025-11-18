@@ -4,10 +4,6 @@
 [submodule "Trident/vendor/spdlog"]
 	path = Trident/vendor/spdlog
 	url = https://github.com/ThatTanishqTak/spdlog.git
-[submodule "Trident/vendor/imgui"]
-	path = Trident/vendor/imgui
-	url = https://github.com/ThatTanishqTak/imgui.git
-	branch = docking
 [submodule "Trident/vendor/stb"]
 	path = Trident/vendor/stb
 	url = https://github.com/ThatTanishqTak/stb.git
