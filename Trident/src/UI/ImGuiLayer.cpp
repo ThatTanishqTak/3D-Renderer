@@ -42,10 +42,9 @@ namespace Trident
             ImGui::CreateContext();
 
             ImGuiIO& l_IO = ImGui::GetIO();
+            // Enable docking and multi-viewports once during initialisation so subsequent modules only read the flags.
             l_IO.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-#ifdef TRIDENT_IMGUI_VIEWPORTS
             l_IO.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
-#endif // TRIDENT_IMGUI_VIEWPORTS
 
             // Apply a consistent editor visual style and enable key ImGui features.
             m_StyleManager.ApplyStyle(l_IO);
@@ -99,16 +98,9 @@ namespace Trident
                 return;
             }
 
-            // Finalise draw data. The renderer will submit the command buffer via Render().
+            // Finalise draw data. The renderer will submit the command buffer via Render(). Additional platform
+            // windows are handled separately after the main swapchain submission to keep the frame ordering clear.
             ImGui::Render();
-
-            ImGuiIO& l_IO = ImGui::GetIO();
-            if (l_IO.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
-            {
-                // Multi-viewport support renders additional platform windows outside the primary swapchain.
-                ImGui::UpdatePlatformWindows();
-                ImGui::RenderPlatformWindowsDefault();
-            }
         }
 
         void ImGuiLayer::Render(VkCommandBuffer commandBuffer)
@@ -120,6 +112,24 @@ namespace Trident
 
             // The renderer has already begun the render pass. Feed ImGui's draw data into the command buffer.
             ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);
+        }
+
+        void ImGuiLayer::RenderAdditionalViewports()
+        {
+            if (!m_Initialised)
+            {
+                return;
+            }
+
+            ImGuiIO& l_IO = ImGui::GetIO();
+            if (l_IO.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
+            {
+                // Render additional platform windows after the main swapchain presentation. The ImGui backend records and
+                // submits its own command buffers for these windows, so keeping this step here avoids conflicting with the
+                // engine's primary render pass.
+                ImGui::UpdatePlatformWindows();
+                ImGui::RenderPlatformWindowsDefault();
+            }
         }
 
         void ImGuiLayer::Shutdown()

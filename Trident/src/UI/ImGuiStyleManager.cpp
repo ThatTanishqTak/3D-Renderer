@@ -11,11 +11,8 @@ namespace Trident
 
         void ImGuiStyleManager::ApplyStyle(ImGuiIO& io)
         {
-            // Ensure the editor supports modern docking workflows.
-            io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-
-            // Allow ImGui to create multi-viewport windows so tool panels can detach.
-            io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
+            // Styling assumes docking/viewports are enabled by ImGuiLayer initialisation; keep the config flags owned there
+            // so feature toggles remain centralised.
 
             // Start from ImGui's stock dark palette so custom tweaks have a predictable base.
             ImGui::StyleColorsDark();

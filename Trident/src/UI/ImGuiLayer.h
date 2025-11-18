@@ -42,6 +42,9 @@ namespace Trident
             // Record ImGui draw data into the provided command buffer. The caller must have begun a render pass.
             void Render(VkCommandBuffer commandBuffer);
 
+            // Render platform windows (multi-viewport) after the main swapchain submission has completed.
+            void RenderAdditionalViewports();
+
             // Tear down ImGui and release Vulkan resources.
             void Shutdown();
 

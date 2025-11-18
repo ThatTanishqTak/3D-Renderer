@@ -117,6 +117,12 @@ namespace Trident
         }
 
         RenderCommand::DrawFrame();
+
+        // After the main swapchain submission, render any detached ImGui platform windows so they remain visible.
+        if (m_ImGuiLayer)
+        {
+            m_ImGuiLayer->RenderAdditionalViewports();
+        }
     }
 
     void Application::OnEvent(Events& event)
