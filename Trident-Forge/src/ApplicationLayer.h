@@ -5,11 +5,14 @@
 #include "Renderer/Camera/EditorCamera.h"
 #include "Renderer/Camera/RuntimeCamera.h"
 
+#include "Panels/ConsolePanel.h"
 #include "Panels/SceneViewportPanel.h"
 #include "Panels/GameViewportPanel.h"
 #include "Panels/ContentBrowserPanel.h"
 #include "Panels/SceneHierarchyPanel.h"
 #include "Panels/InspectorPanel.h"
+#include "Panels/AIDebugPanel.h"
+#include "Panels/AnimationGraphPanel.h"
 
 #include "ECS/Scene.h"
 #include "Animation/AnimationData.h"
@@ -85,6 +88,9 @@ private:
     EditorPanels::ContentBrowserPanel m_ContentBrowserPanel;
     EditorPanels::SceneHierarchyPanel m_SceneHierarchyPanel;
     EditorPanels::InspectorPanel m_InspectorPanel;
+    EditorPanels::ConsolePanel m_ConsolePanel;
+    EditorPanels::AIDebugPanel m_AIDebugPanel;
+    EditorPanels::AnimationGraphPanel m_AnimationGraphPanel;
 
     std::unique_ptr<Trident::Scene> m_ActiveScene;   ///< Owns the scene bridge responsible for play/edit registry swaps.
 
