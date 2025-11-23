@@ -38,21 +38,31 @@ static inline float DegToRad(float deg) { return deg * 0.017453292519943295769f;
 void ApplicationLayer::Initialize()
 {
     // Initialize editor panels before wiring cross-panel dependencies so their local state is ready.
-    //m_ConsolePanel.Initialize();
+    m_ConsolePanel.Initialize();
     m_AIDebugPanel.Initialize();
-    //m_AnimationGraphPanel.Initialize();
+    m_AnimationGraphPanel.Initialize();
 
     // Wire up the gizmo state so the viewport and inspector remain in sync.
     m_ViewportPanel.SetGizmoState(&m_GizmoState);
     m_InspectorPanel.SetGizmoState(&m_GizmoState);
 
     // Ensure the console mirrors Unity-style defaults by surfacing info/warning/error output immediately.
-    //m_ConsolePanel.SetLevelVisibility(spdlog::level::trace, false);
-    //m_ConsolePanel.SetLevelVisibility(spdlog::level::debug, false);
-    //m_ConsolePanel.SetLevelVisibility(spdlog::level::info, true);
-    //m_ConsolePanel.SetLevelVisibility(spdlog::level::warn, true);
-    //m_ConsolePanel.SetLevelVisibility(spdlog::level::err, true);
-    //m_ConsolePanel.SetLevelVisibility(spdlog::level::critical, true);
+    m_ConsolePanel.SetLevelVisibility(spdlog::level::trace, false);
+    m_ConsolePanel.SetLevelVisibility(spdlog::level::debug, false);
+    m_ConsolePanel.SetLevelVisibility(spdlog::level::info, true);
+    m_ConsolePanel.SetLevelVisibility(spdlog::level::warn, true);
+    m_ConsolePanel.SetLevelVisibility(spdlog::level::err, true);
+    m_ConsolePanel.SetLevelVisibility(spdlog::level::critical, true);
+
+    // Configure content browser root and hook into the existing import pipeline.
+    m_ContentBrowserPanel.SetRootDirectory("Assets");
+    m_ContentBrowserPanel.SetOnAssetActivated([this](const std::filesystem::path& assetPath)
+        {
+            // Reuse the same import path as OS file-drops / viewport drops.
+            std::vector<std::string> l_Paths;
+            l_Paths.emplace_back(assetPath.string());
+            ImportDroppedAssets(l_Paths);
+        });
 
     // Route drag-and-drop payloads originating inside the editor back into the shared import path.
     m_ViewportPanel.SetAssetDropHandler([this](const std::vector<std::string>& droppedPaths)
@@ -202,7 +212,7 @@ void ApplicationLayer::Render()
     m_SceneHierarchyPanel.Render();
     m_InspectorPanel.Render();
     m_AnimationGraphPanel.Render();
-    // m_ConsolePanel.Render(); // still optional
+    m_ConsolePanel.Render(); // still optional
     m_AIDebugPanel.Render();
 }
 
