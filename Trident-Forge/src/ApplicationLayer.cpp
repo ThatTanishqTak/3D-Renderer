@@ -185,29 +185,24 @@ void ApplicationLayer::Update()
 
 void ApplicationLayer::Render()
 {
-    RenderMainMenuBar();
     ImGuiIO& io = ImGui::GetIO();
+
     if (io.ConfigFlags & ImGuiConfigFlags_DockingEnable)
     {
-        constexpr ImGuiDockNodeFlags dockspace_flags = ImGuiDockNodeFlags_None;
-        ImGui::DockSpaceOverViewport((ImGuiID)ImGui::GetMainViewport(), 0);
+        ImGui::DockSpaceOverViewport((ImGuiID)ImGui::GetMainViewport(), 0, ImGuiDockNodeFlags_None);
     }
 
     RenderMainMenuBar();
-
     RenderSceneToolbar();
     HandleSceneFileDialogs();
 
-    // The editor viewport always renders with the editor camera so gizmos and transform tools remain deterministic.
     m_ViewportPanel.Render();
-    // Surface the runtime viewport directly after the scene so future play/pause widgets can live alongside it.
-    // The game viewport now presents the runtime camera feed, keeping simulation visuals separate from authoring tools.
     m_GameViewportPanel.Render();
     m_ContentBrowserPanel.Render();
     m_SceneHierarchyPanel.Render();
     m_InspectorPanel.Render();
     m_AnimationGraphPanel.Render();
-    //m_ConsolePanel.Render();
+    // m_ConsolePanel.Render(); // still optional
     m_AIDebugPanel.Render();
 }
 
@@ -260,70 +255,13 @@ void ApplicationLayer::RenderMainMenuBar()
 
 void ApplicationLayer::RenderSceneToolbar()
 {
-    // Anchor the transport window relative to the viewport row so it floats centrally above Scene/Game.
-    ImGuiViewport* l_MainViewport = ImGui::GetMainViewport();
-    ImGuiViewport* l_TargetViewport = l_MainViewport;
-
-    bool l_HasViewportBounds = false;
-    ImVec2 l_BoundsMin{};
-    ImVec2 l_BoundsMax{};
-
-    const auto a_AccumulateBounds = [&](ImGuiWindow* a_Window)
-        {
-            if (a_Window == nullptr || a_Window->Hidden)
-            {
-                return;
-            }
-
-            const ImVec2 l_WindowMin = a_Window->Pos;
-            const ImVec2 l_WindowMax = ImVec2(a_Window->Pos.x + a_Window->Size.x, a_Window->Pos.y + a_Window->Size.y);
-
-            if (!l_HasViewportBounds)
-            {
-                l_BoundsMin = l_WindowMin;
-                l_BoundsMax = l_WindowMax;
-                if (a_Window->Viewport != nullptr)
-                {
-                    l_TargetViewport = a_Window->Viewport;
-                }
-                l_HasViewportBounds = true;
-            }
-            else
-            {
-                l_BoundsMin.x = std::min(l_BoundsMin.x, l_WindowMin.x);
-                l_BoundsMin.y = std::min(l_BoundsMin.y, l_WindowMin.y);
-                l_BoundsMax.x = std::max(l_BoundsMax.x, l_WindowMax.x);
-                l_BoundsMax.y = std::max(l_BoundsMax.y, l_WindowMax.y);
-            }
-        };
-
-    a_AccumulateBounds(ImGui::FindWindowByName("Scene"));
-    a_AccumulateBounds(ImGui::FindWindowByName("Game"));
-
-    if (!l_HasViewportBounds)
-    {
-        l_BoundsMin = l_MainViewport->Pos;
-        l_BoundsMax = ImVec2(l_MainViewport->Pos.x + l_MainViewport->Size.x, l_MainViewport->Pos.y + l_MainViewport->Size.y);
-    }
-
-    const float l_VerticalOffset = 12.0f; // Leaves breathing room above the viewport row while keeping the toolbar close.
-    const float l_CenterX = (l_BoundsMin.x + l_BoundsMax.x) * 0.5f;
-    const float l_AnchorY = l_BoundsMin.y - l_VerticalOffset;
-
-    ImGui::SetNextWindowViewport(l_TargetViewport->ID);
-    ImGui::SetNextWindowPos(ImVec2(l_CenterX, l_AnchorY), ImGuiCond_Always, ImVec2(0.5f, 1.0f));
-
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 6.0f));
-    const ImGuiWindowFlags l_WindowFlags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
-        ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoNavFocus;
-    const bool l_WindowVisible = ImGui::Begin("Scene Transport", nullptr, l_WindowFlags);
-    (void)l_WindowVisible;
-    // Submit transport controls every frame so dockspace testing can observe consistent layout even when collapsed.
-
-    const bool l_HasScene = m_ActiveScene != nullptr;
+    const bool l_HasScene = (m_ActiveScene != nullptr);
     const bool l_IsPlaying = l_HasScene && m_ActiveScene->IsPlaying();
 
-    // Primary play/pause/stop widgets remain centred in this transport strip.
+    // A simple dockable window. No viewport anchoring, no magic positioning.
+    ImGui::Begin("Scene Controls", nullptr,
+        ImGuiWindowFlags_NoCollapse |
+        ImGuiWindowFlags_NoSavedSettings);
 
     ImGui::BeginDisabled(!l_HasScene);
     if (l_HasScene)
@@ -339,7 +277,6 @@ void ApplicationLayer::RenderSceneToolbar()
         {
             if (!l_IsPlaying)
             {
-                // Promote the editor registry into a runtime clone so gameplay code can run against isolated data.
                 m_ActiveScene->Play();
                 Trident::RenderCommand::SetActiveRegistry(&m_ActiveScene->GetActiveRegistry());
                 RefreshRuntimeCameraBinding();
@@ -360,12 +297,10 @@ void ApplicationLayer::RenderSceneToolbar()
     ImGui::SameLine();
 
     ImGui::BeginDisabled(true);
-    if (ImGui::Button("Pause"))
-    {
-    }
+    ImGui::Button("Pause");
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
     {
-        ImGui::SetTooltip("Pause will activate once the runtime exposes time scaling. This toolbar is the hand-off point.");
+        ImGui::SetTooltip("Pause will be wired once time scaling exists.");
     }
     ImGui::EndDisabled();
 
@@ -374,7 +309,6 @@ void ApplicationLayer::RenderSceneToolbar()
     ImGui::BeginDisabled(!l_HasScene || !l_IsPlaying);
     if (ImGui::Button("Stop"))
     {
-        // Restore the editor registry and notify the renderer so authored data is visible again.
         m_ActiveScene->Stop();
         Trident::RenderCommand::SetActiveRegistry(&m_ActiveScene->GetEditorRegistry());
         RefreshRuntimeCameraBinding();
@@ -382,42 +316,9 @@ void ApplicationLayer::RenderSceneToolbar()
     ImGui::EndDisabled();
 
     ImGui::SameLine();
-    const char* l_StatusLabel = l_IsPlaying ? "Playing" : "Editing";
-    ImGui::Text("Scene State: %s", l_StatusLabel);
-    if (!m_SceneIoTooltip.empty() && ImGui::IsItemHovered())
-    {
-        // Preserve scene IO feedback as a tooltip so save/load results remain easy to discover.
-        ImGui::SetTooltip("%s", m_SceneIoTooltip.c_str());
-    }
+    ImGui::Text("Scene State: %s", l_IsPlaying ? "Playing" : "Editing");
 
-    ImGui::Separator();
-
-    // Mirror renderer performance capture controls so teams can trigger recordings from the editor toolbar.
-    const bool l_IsCapturing = Trident::RenderCommand::IsPerformanceCaptureEnabled();
-    const size_t l_CaptureSamples = Trident::RenderCommand::GetPerformanceCaptureSampleCount();
-    const char* l_CaptureLabel = l_IsCapturing ? "Stop Performance Capture" : "Start Performance Capture";
-    if (ImGui::Button(l_CaptureLabel))
-    {
-        // Toggling the flag automatically starts or exports the capture through the renderer's existing logic.
-        Trident::RenderCommand::SetPerformanceCaptureEnabled(!l_IsCapturing);
-    }
-
-    ImGui::SameLine();
-    ImGui::Text("Captured Samples: %zu", l_CaptureSamples);
-    if (ImGui::IsItemHovered())
-    {
-        ImGui::SetTooltip("Samples export automatically when capture stops. Future tooling can expand analytics here.");
-    }
-
-    if (l_IsCapturing)
-    {
-        ImGui::SameLine();
-        ImGui::TextColored(ImVec4(0.85f, 0.25f, 0.25f, 1.0f), "Recording...");
-    }
-
-    // Future improvement: swap text buttons for icons, add hotkeys, and explore docking-friendly layout tweaks.
     ImGui::End();
-    ImGui::PopStyleVar();
 }
 
 void ApplicationLayer::HandleGlobalShortcuts()
