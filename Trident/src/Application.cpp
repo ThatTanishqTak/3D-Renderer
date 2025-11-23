@@ -1,5 +1,6 @@
 ﻿#include "Application.h"
 
+#include "Renderer/RenderCommand.h"
 #include "Events/ApplicationEvents.h"
 #include "Application/Input.h"
 
@@ -41,11 +42,29 @@ namespace Trident
             });
         m_Startup = std::make_unique<Startup>(*m_Window);
 
+        RenderCommand::Init();
+
         // Bootstrap the ImGui layer once the renderer is ready so editor widgets can access the graphics context safely.
         m_ImGuiLayer = std::make_unique<UI::ImGuiLayer>();
 
+        const QueueFamilyIndices l_QueueFamilyIndices = Startup::GetQueueFamilyIndices();
+        if (!l_QueueFamilyIndices.GraphicsFamily.has_value() || !l_QueueFamilyIndices.PresentFamily.has_value())
+        {
+            throw std::runtime_error("Queue family indices are not initialised before ImGui setup.");
+        }
+
+        const VkQueue l_GraphicsQueue = Startup::Get().GetGraphicsQueue();
+        const VkQueue l_PresentQueue = Startup::Get().GetPresentQueue();
+        (void)l_PresentQueue; // Present queue reserved for future multi-queue UI work.
+
+        m_ImGuiLayer->Init(m_Window->GetNativeWindow(), Startup::GetInstance(), Startup::GetPhysicalDevice(), Startup::GetDevice(), l_QueueFamilyIndices.GraphicsFamily.value(),
+            l_GraphicsQueue, Startup::GetRenderer().GetRenderPass(), static_cast<uint32_t>(Startup::GetRenderer().GetImageCount()), Startup::GetRenderer().GetCommandPool());
+
         // Fully initialises ImGui so renderer-side texture registration calls do not trip assertions about missing contexts.
         m_ImGuiLayer->Initialize();
+
+        // Share the ImGui layer with the renderer so it can route draw commands and lifetime events appropriately.
+        Startup::GetRenderer().SetImGuiLayer(m_ImGuiLayer.get());
 
         // Once the renderer is configured, the active layer can allocate gameplay/editor resources safely.
         if (m_ActiveLayer)
@@ -99,6 +118,8 @@ namespace Trident
         {
             m_ImGuiLayer->EndFrame();
         }
+
+        RenderCommand::DrawFrame();
 
         // After the main swapchain submission, render any detached ImGui platform windows so they remain visible.
         if (m_ImGuiLayer)
@@ -157,10 +178,12 @@ namespace Trident
         // to access freed UI state.
         if (m_ImGuiLayer)
         {
+            Startup::GetRenderer().SetImGuiLayer(nullptr);
             m_ImGuiLayer->Shutdown();
             m_ImGuiLayer.reset();
         }
 
+        RenderCommand::Shutdown();
 
         // Release window and startup scaffolding last so Vulkan resources are already flushed.
         m_Startup.reset();

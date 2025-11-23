@@ -1,17 +1,39 @@
 #include "SceneViewportPanel.h"
 
+#include "Renderer/RenderCommand.h"
+
 #include <string>
 
 namespace EditorPanels
 {
     SceneViewportPanel::SceneViewportPanel()
     {
-
+        m_ViewportInfo.ViewportID = 1U;
     }
 
     void SceneViewportPanel::Render()
     {
+        const bool l_WindowVisible = ImGui::Begin("Scene Viewport");
+        (void)l_WindowVisible;
+        // Always render viewport internals so dockspace and viewport tests see consistent submission even when collapsed.
 
+        const ImVec2 l_Available = ImGui::GetContentRegionAvail();
+        m_ViewportInfo.Size = { l_Available.x, l_Available.y };
+        Trident::RenderCommand::SetViewport(m_ViewportInfo.ViewportID, m_ViewportInfo);
+
+        SubmitViewportTexture(l_Available);
+
+        m_IsHovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows);
+        m_IsFocused = ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows);
+
+        // Cache the screen-space bounds so external drop handlers can test OS-level cursor positions reliably.
+        const ImVec2 l_ContentMin = ImGui::GetWindowContentRegionMin();
+        const ImVec2 l_ContentMax = ImGui::GetWindowContentRegionMax();
+        const ImVec2 l_WindowPos = ImGui::GetWindowPos();
+        m_BoundsMin = { l_WindowPos.x + l_ContentMin.x, l_WindowPos.y + l_ContentMin.y };
+        m_BoundsMax = { l_WindowPos.x + l_ContentMax.x, l_WindowPos.y + l_ContentMax.y };
+
+        ImGui::End();
     }
 
     void SceneViewportPanel::Update()
@@ -31,7 +53,7 @@ namespace EditorPanels
 
     glm::vec2 SceneViewportPanel::GetViewportSize() const
     {
-        return glm::vec2();
+        return m_ViewportInfo.Size;
     }
 
     bool SceneViewportPanel::IsHovered() const
@@ -46,7 +68,8 @@ namespace EditorPanels
 
     bool SceneViewportPanel::ContainsPoint(const ImVec2& screenPoint) const
     {
-        return screenPoint.x >= m_BoundsMin.x && screenPoint.x <= m_BoundsMax.x && screenPoint.y >= m_BoundsMin.y && screenPoint.y <= m_BoundsMax.y;
+        return screenPoint.x >= m_BoundsMin.x && screenPoint.x <= m_BoundsMax.x &&
+            screenPoint.y >= m_BoundsMin.y && screenPoint.y <= m_BoundsMax.y;
     }
 
     Trident::ECS::Entity SceneViewportPanel::GetSelectedEntity() const
@@ -76,6 +99,19 @@ namespace EditorPanels
 
     void SceneViewportPanel::SubmitViewportTexture(const ImVec2& viewportSize)
     {
+        const VkDescriptorSet l_DescriptorSet = Trident::RenderCommand::GetViewportTexture(m_ViewportInfo.ViewportID);
+        const ImTextureID l_TextureId = reinterpret_cast<ImTextureID>(l_DescriptorSet);
 
+        // Swapchain-aware: leave sizing to ImGui while ensuring the Vulkan image view stays bound for the frame's
+        // command buffer. Comparing against an explicit zero sentinel keeps the check valid whether ImTextureID is a
+        // pointer or integer, matching the expectations documented in https://github.com/ocornut/imgui/wiki/Image-Loading-and-Displaying-Examples.
+        if (l_TextureId != ImTextureID{ 0 } && viewportSize.x > 0.0f && viewportSize.y > 0.0f)
+        {
+            ImGui::Image(l_TextureId, viewportSize, ImVec2(0, 0), ImVec2(1, 1));
+        }
+        else
+        {
+            ImGui::TextUnformatted("Viewport unavailable");
+        }
     }
 }

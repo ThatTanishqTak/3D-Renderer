@@ -1,12 +1,12 @@
 #pragma once
 
+#include "Renderer/Renderer.h"
 #include "GizmoState.h"
 #include "ECS/Registry.h"
 
 #include <imgui.h>
 #include <functional>
 #include <vector>
-#include <string>
 
 namespace EditorPanels
 {
@@ -32,6 +32,7 @@ namespace EditorPanels
         void SubmitViewportTexture(const ImVec2& viewportSize);
 
     private:
+        Trident::ViewportInfo m_ViewportInfo{}; ///< Renderer viewport metadata for the runtime view.
         bool m_IsHovered = false; ///< Hover tracking used to gate runtime-focused shortcuts.
         bool m_IsFocused = false; ///< Focus tracking used to route keyboard input to the runtime viewport.
         Trident::GizmoState* m_GizmoState = nullptr; ///< Shared gizmo state pointer for future runtime gizmo support.

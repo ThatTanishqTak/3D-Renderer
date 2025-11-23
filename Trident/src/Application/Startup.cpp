@@ -46,16 +46,6 @@ namespace Trident
         PickPhysicalDevice();
         CreateLogicalDevice();
 
-        // Prepare the renderer immediately after the device and queue handles are ready so downstream systems
-        // can upload meshes and materials without re-threading initialization logic.
-        uint32_t l_FramebufferWidth = 0;
-        uint32_t l_FramebufferHeight = 0;
-        m_Window.GetFramebufferSize(l_FramebufferWidth, l_FramebufferHeight);
-
-        m_Renderer = std::make_unique<Renderer>();
-        m_Renderer->Initialize(m_Instance, m_PhysicalDevice, m_Device, m_Surface, m_GraphicsQueue, m_PresentQueue,
-            l_FramebufferWidth, l_FramebufferHeight);
-
         TR_CORE_INFO("-------VULKAN INITIALIZED-------");
     }
 
@@ -64,13 +54,6 @@ namespace Trident
         TR_CORE_TRACE("Shutting down Vulkan");
 
         vkDeviceWaitIdle(m_Device);
-
-        if (m_Renderer)
-        {
-            // Tear down renderer resources before the core Vulkan objects disappear to avoid stale handles.
-            m_Renderer->Shutdown();
-            m_Renderer.reset();
-        }
 
         if (m_Surface != VK_NULL_HANDLE)
         {
@@ -230,11 +213,135 @@ namespace Trident
     void Startup::PickPhysicalDevice()
     {
         TR_CORE_TRACE("Selecting Physical Device (GPU)");
+
+        uint32_t l_DeviceCount = 0;
+        vkEnumeratePhysicalDevices(m_Instance, &l_DeviceCount, nullptr);
+
+        if (l_DeviceCount == 0)
+        {
+            TR_CORE_CRITICAL("No Vulkan-capable GPUs found");
+        }
+
+        std::vector<VkPhysicalDevice> l_Devices(l_DeviceCount);
+        vkEnumeratePhysicalDevices(m_Instance, &l_DeviceCount, l_Devices.data());
+
+        VkPhysicalDevice l_BestDevice = VK_NULL_HANDLE;
+
+        for (const auto& it_Device : l_Devices)
+        {
+            if (!IsDeviceSuitable(it_Device))
+            {
+                continue;
+            }
+
+            VkPhysicalDeviceProperties l_Properites;
+            vkGetPhysicalDeviceProperties(it_Device, &l_Properites);
+
+            if (l_Properites.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
+            {
+                m_PhysicalDevice = it_Device;
+                m_QueueFamilyIndices = FindQueueFamilies(it_Device);
+
+                break;
+            }
+
+            // fallback (if no discrete GPU is found)
+            if (l_BestDevice == VK_NULL_HANDLE)
+            {
+                l_BestDevice = it_Device;
+                m_QueueFamilyIndices = FindQueueFamilies(it_Device);
+            }
+        }
+
+        if (m_PhysicalDevice == VK_NULL_HANDLE && l_BestDevice != VK_NULL_HANDLE)
+        {
+            m_PhysicalDevice = l_BestDevice;
+        }
+
+        if (m_PhysicalDevice == VK_NULL_HANDLE)
+        {
+            TR_CORE_CRITICAL("Failed to find a suitable GPU");
+        }
+
+        VkPhysicalDeviceProperties l_Properties{};
+        vkGetPhysicalDeviceProperties(m_PhysicalDevice, &l_Properties);
+
+        TR_CORE_TRACE("Selected GPU: {}", l_Properties.deviceName);
     }
 
     void Startup::CreateLogicalDevice()
     {
         TR_CORE_TRACE("Creating Logical Device And Queues");
+
+        auto a_QueueFamily = m_QueueFamilyIndices;
+        if (!a_QueueFamily.IsComplete())
+        {
+            TR_CORE_CRITICAL("Queue family indices not set");
+
+            return;
+        }
+        std::set<uint32_t> l_UniqueFamilies = { a_QueueFamily.GraphicsFamily.value(), a_QueueFamily.PresentFamily.value() };
+
+        float l_Priority = 1.0f;
+        std::vector<VkDeviceQueueCreateInfo> l_QueueCreateInfo;
+
+        for (auto it_Family : l_UniqueFamilies)
+        {
+            VkDeviceQueueCreateInfo l_DeviceQueueInfo{};
+
+            l_DeviceQueueInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+            l_DeviceQueueInfo.queueFamilyIndex = it_Family;
+            l_DeviceQueueInfo.queueCount = 1;
+            l_DeviceQueueInfo.pQueuePriorities = &l_Priority;
+            l_QueueCreateInfo.push_back(l_DeviceQueueInfo);
+        }
+
+        VkPhysicalDeviceFeatures l_Features{};
+        // Query the device for Vulkan 1.2 descriptor indexing support so we can safely enable it.
+        VkPhysicalDeviceVulkan12Features l_AvailableVulkan12Features{};
+        l_AvailableVulkan12Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+
+        VkPhysicalDeviceFeatures2 l_Features2{};
+        l_Features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+        l_Features2.pNext = &l_AvailableVulkan12Features;
+        vkGetPhysicalDeviceFeatures2(m_PhysicalDevice, &l_Features2);
+
+        if (l_AvailableVulkan12Features.runtimeDescriptorArray != VK_TRUE ||
+            l_AvailableVulkan12Features.shaderSampledImageArrayNonUniformIndexing != VK_TRUE)
+        {
+            TR_CORE_CRITICAL("Selected GPU does not support required descriptor indexing features");
+            return;
+        }
+
+        VkPhysicalDeviceVulkan12Features l_EnabledVulkan12Features{};
+        l_EnabledVulkan12Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+        l_EnabledVulkan12Features.runtimeDescriptorArray = VK_TRUE;
+        l_EnabledVulkan12Features.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
+        // Timeline semaphores reduce CPU-GPU latency when recycling swapchain slots. Enable them when available so the renderer
+        // can progress without resetting fences every frame.
+        m_TimelineSemaphoreSupported = l_AvailableVulkan12Features.timelineSemaphore == VK_TRUE;
+        l_EnabledVulkan12Features.timelineSemaphore = m_TimelineSemaphoreSupported ? VK_TRUE : VK_FALSE;
+
+        VkDeviceCreateInfo l_DeviceCreateInfo{};
+
+        l_DeviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+        l_DeviceCreateInfo.queueCreateInfoCount = static_cast<uint32_t>(l_QueueCreateInfo.size());
+        l_DeviceCreateInfo.pQueueCreateInfos = l_QueueCreateInfo.data();
+        l_DeviceCreateInfo.pEnabledFeatures = &l_Features;
+        l_DeviceCreateInfo.pNext = &l_EnabledVulkan12Features;
+        const char* l_Extensions[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
+        l_DeviceCreateInfo.enabledExtensionCount = 1;
+        l_DeviceCreateInfo.ppEnabledExtensionNames = l_Extensions;
+
+        if (vkCreateDevice(m_PhysicalDevice, &l_DeviceCreateInfo, nullptr, &m_Device) != VK_SUCCESS)
+        {
+            TR_CORE_CRITICAL("Failed to create logical Device");
+        }
+
+        vkGetDeviceQueue(m_Device, *a_QueueFamily.GraphicsFamily, 0, &m_GraphicsQueue);
+        vkGetDeviceQueue(m_Device, *a_QueueFamily.PresentFamily, 0, &m_PresentQueue);
+
+        TR_CORE_TRACE("Logical Device And Queues ready (GFX = {}, Present = {})", *a_QueueFamily.GraphicsFamily, *a_QueueFamily.PresentFamily);
     }
 
     //----------------------------------------------------------------------------------------------------------------------------------------------------------//

@@ -1,14 +1,12 @@
 #pragma once
 
+#include "Renderer/Renderer.h"
 #include "GizmoState.h"
 #include "ECS/Registry.h"
-
-#include <glm/glm.hpp>
 
 #include <imgui.h>
 #include <functional>
 #include <vector>
-#include <string>
 
 namespace EditorPanels
 {
@@ -42,6 +40,7 @@ namespace EditorPanels
         void SubmitViewportTexture(const ImVec2& viewportSize);
 
     private:
+        Trident::ViewportInfo m_ViewportInfo{}; ///< Mirrors the renderer viewport configuration for the scene view.
         bool m_IsHovered = false; ///< Tracks whether the viewport window is hovered for tool input routing.
         bool m_IsFocused = false; ///< Tracks whether the viewport window has keyboard focus for shortcuts.
         ImVec2 m_BoundsMin{ 0.0f, 0.0f }; ///< Cached minimum bound used for hit-testing OS drag-and-drop coordinates.

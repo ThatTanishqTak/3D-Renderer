@@ -1,5 +1,7 @@
 #include "EditorToolbar.h"
 
+#include "Renderer/RenderCommand.h"
+
 #include <imgui.h>
 
 namespace EditorPanels
@@ -50,6 +52,9 @@ namespace EditorPanels
         {
             const bool l_NewCaptureState = !m_IsPerformanceCaptureEnabled;
             m_IsPerformanceCaptureEnabled = l_NewCaptureState;
+
+            // Update the renderer capture mode to keep swapchain command buffer lifetime correct per the LunarG guides.
+            Trident::RenderCommand::SetPerformanceCaptureEnabled(l_NewCaptureState);
 
             if (m_OnCaptureToggle)
             {
