@@ -1,7 +1,6 @@
 #pragma once
 
 #include "Vulkan/Vulkan.h"
-#include "Renderer/Renderer.h"
 #include "ECS/Registry.h"
 
 #include <optional>
@@ -32,15 +31,8 @@ namespace Trident
         static VkSurfaceKHR GetSurface() { return Get().m_Surface; }
         static VkQueue GetGraphicsQueue() { return Get().m_GraphicsQueue; }
         static VkQueue GetPresentQueue() { return Get().m_PresentQueue; }
-        static QueueFamilyIndices GetQueueFamilyIndices() { return Get().m_QueueFamilyIndices; }
         static bool SupportsTimelineSemaphores() { return Get().m_TimelineSemaphoreSupported; }
         static Window& GetWindow() { return Get().m_Window; }
-        static Renderer& GetRenderer() { return Get().m_Renderer; }
-        static Renderer* TryGetRenderer()
-        {
-            // Expose a safe pointer for callers that may run before the singleton has finished constructing.
-            return s_Instance ? &s_Instance->m_Renderer : nullptr;
-        }
         static ECS::Registry& GetRegistry() { return Get().m_Registry; }
         static bool HasInstance() { return s_Instance != nullptr; }
 
@@ -63,7 +55,6 @@ namespace Trident
         // Store a reference instead of a value to avoid copying the non-copyable
         // Window wrapper while still giving Startup long-term access.
         Window& m_Window;
-        Renderer m_Renderer;
         ECS::Registry m_Registry;
 
         VkInstance m_Instance = VK_NULL_HANDLE;
@@ -74,7 +65,6 @@ namespace Trident
         VkDevice m_Device = VK_NULL_HANDLE;
         VkQueue m_GraphicsQueue = VK_NULL_HANDLE;
         VkQueue m_PresentQueue = VK_NULL_HANDLE;
-        QueueFamilyIndices m_QueueFamilyIndices;
         bool m_TimelineSemaphoreSupported = false;
 
         static Startup* s_Instance;
