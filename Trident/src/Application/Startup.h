@@ -2,8 +2,10 @@
 
 #include "Vulkan/Vulkan.h"
 #include "ECS/Registry.h"
+#include "Renderer/Renderer.h"
 
 #include <optional>
+#include <memory>
 #include <vector>
 
 namespace Trident
@@ -34,6 +36,7 @@ namespace Trident
         static bool SupportsTimelineSemaphores() { return Get().m_TimelineSemaphoreSupported; }
         static Window& GetWindow() { return Get().m_Window; }
         static ECS::Registry& GetRegistry() { return Get().m_Registry; }
+        static Renderer& GetRenderer() { return *Get().m_Renderer; }
         static bool HasInstance() { return s_Instance != nullptr; }
 
     private:
@@ -66,6 +69,8 @@ namespace Trident
         VkQueue m_GraphicsQueue = VK_NULL_HANDLE;
         VkQueue m_PresentQueue = VK_NULL_HANDLE;
         bool m_TimelineSemaphoreSupported = false;
+
+        std::unique_ptr<Renderer> m_Renderer;
 
         static Startup* s_Instance;
     };

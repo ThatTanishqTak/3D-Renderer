@@ -46,6 +46,16 @@ namespace Trident
         PickPhysicalDevice();
         CreateLogicalDevice();
 
+        // Prepare the renderer immediately after the device and queue handles are ready so downstream systems
+        // can upload meshes and materials without re-threading initialization logic.
+        uint32_t l_FramebufferWidth = 0;
+        uint32_t l_FramebufferHeight = 0;
+        m_Window.GetFramebufferSize(l_FramebufferWidth, l_FramebufferHeight);
+
+        m_Renderer = std::make_unique<Renderer>();
+        m_Renderer->Initialize(m_Instance, m_PhysicalDevice, m_Device, m_Surface, m_GraphicsQueue, m_PresentQueue,
+            l_FramebufferWidth, l_FramebufferHeight);
+
         TR_CORE_INFO("-------VULKAN INITIALIZED-------");
     }
 
@@ -54,6 +64,13 @@ namespace Trident
         TR_CORE_TRACE("Shutting down Vulkan");
 
         vkDeviceWaitIdle(m_Device);
+
+        if (m_Renderer)
+        {
+            // Tear down renderer resources before the core Vulkan objects disappear to avoid stale handles.
+            m_Renderer->Shutdown();
+            m_Renderer.reset();
+        }
 
         if (m_Surface != VK_NULL_HANDLE)
         {
