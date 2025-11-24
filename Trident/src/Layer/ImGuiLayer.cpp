@@ -59,6 +59,7 @@ namespace Trident
 
             // Enable editor friendly features out of the box so future UI panels can rely on docking and multiple viewports.
             ImGuiIO& l_IO = ImGui::GetIO();
+            l_IO.IniFilename = "imgui.ini";
             l_IO.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 #ifdef TRIDENT_IMGUI_VIEWPORTS
             l_IO.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
@@ -210,6 +211,38 @@ namespace Trident
             // Rendering is driven externally via the Vulkan command buffer overload.
         }
 
+        void ImGuiLayer::BeginDockspace()
+        {
+            ImGuiIO& l_IO = ImGui::GetIO();
+            ImGuiViewport* l_Viewport = ImGui::GetMainViewport();
+            if (l_Viewport == nullptr)
+            {
+                return;
+            }
+
+            ImGui::SetNextWindowPos(l_Viewport->Pos);
+            ImGui::SetNextWindowSize(l_Viewport->Size);
+            ImGui::SetNextWindowViewport(l_Viewport->ID);
+
+            ImGuiWindowFlags l_WindowFlags =
+                ImGuiWindowFlags_NoDocking |
+                ImGuiWindowFlags_NoTitleBar |
+                ImGuiWindowFlags_NoCollapse |
+                ImGuiWindowFlags_NoResize |
+                ImGuiWindowFlags_NoMove |
+                ImGuiWindowFlags_NoBringToFrontOnFocus |
+                ImGuiWindowFlags_NoNavFocus |
+                ImGuiWindowFlags_MenuBar;
+
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+            ImGui::Begin("TridentDockspaceHost", nullptr, l_WindowFlags);
+            ImGui::PopStyleVar();
+
+            ImGuiID l_DockspaceId = ImGui::GetID("TridentMainDockspace");
+            ImGuiDockNodeFlags l_DockspaceFlags = ImGuiDockNodeFlags_None;
+            ImGui::DockSpace(l_DockspaceId, ImVec2(0.0f, 0.0f), l_DockspaceFlags);
+        }
+
         void ImGuiLayer::Render(VkCommandBuffer commandBuffer)
         {
             if (!m_IsImGuiContextReady)
@@ -236,6 +269,8 @@ namespace Trident
             ImGui_ImplVulkan_NewFrame();
             ImGui_ImplGlfw_NewFrame();
             ImGui::NewFrame();
+
+            BeginDockspace();
         }
 
         void ImGuiLayer::EndFrame()
@@ -244,6 +279,8 @@ namespace Trident
             {
                 return;
             }
+
+            ImGui::End();
 
             ImGui::Render();
         }

@@ -58,6 +58,9 @@ namespace Trident
             void RenderAdditionalViewports();
 
         private:
+            void BeginDockspace();
+
+        private:
             // Track whether Init has received graphics handles. Useful for guarding future work.
             bool m_IsInitialized = false;
             bool m_IsImGuiContextReady = false; ///< Guards against double initialisation and protects draw calls.
