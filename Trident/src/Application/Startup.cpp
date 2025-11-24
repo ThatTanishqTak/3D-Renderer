@@ -57,7 +57,10 @@ namespace Trident
 
         if (m_Surface != VK_NULL_HANDLE)
         {
+            // Destroy the primary window surface and immediately clear its tracked entry so validation checks only observe live handles.
             vkDestroySurfaceKHR(m_Instance, m_Surface, nullptr);
+
+            UnregisterSurface(m_Surface);
 
             m_Surface = VK_NULL_HANDLE;
         }
@@ -205,9 +208,40 @@ namespace Trident
         }
 
         // Track the primary window surface so shutdown can validate every surface is destroyed before the instance.
-        m_TrackedSurfaces.push_back(m_Surface);
+        RegisterSurface(m_Surface);
 
         TR_CORE_TRACE("Window Surface Created");
+    }
+
+    void Startup::RegisterSurface(VkSurfaceKHR surface)
+    {
+        // Keep a record of every live surface so shutdown can verify clean destruction.
+        if (surface == VK_NULL_HANDLE)
+        {
+            return;
+        }
+
+        auto& l_Surfaces = Get().m_TrackedSurfaces;
+        l_Surfaces.push_back(surface);
+    }
+
+    void Startup::UnregisterSurface(VkSurfaceKHR surface)
+    {
+        // Mark the surface as destroyed to avoid false leak warnings once vkDestroySurfaceKHR has been called.
+        if (surface == VK_NULL_HANDLE)
+        {
+            return;
+        }
+
+        auto& l_Surfaces = Get().m_TrackedSurfaces;
+        for (VkSurfaceKHR& it_Surface : l_Surfaces)
+        {
+            if (it_Surface == surface)
+            {
+                it_Surface = VK_NULL_HANDLE;
+                break;
+            }
+        }
     }
 
     void Startup::PickPhysicalDevice()

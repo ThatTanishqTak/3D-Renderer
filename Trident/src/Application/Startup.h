@@ -43,6 +43,8 @@ namespace Trident
         }
         static ECS::Registry& GetRegistry() { return Get().m_Registry; }
         static bool HasInstance() { return s_Instance != nullptr; }
+        static void RegisterSurface(VkSurfaceKHR surface);
+        static void UnregisterSurface(VkSurfaceKHR surface);
 
     private:
         void Initialize();
