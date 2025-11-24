@@ -2,6 +2,10 @@
 
 #include <imgui.h>
 #include <string>
+#include "ECS/Components/TagComponent.h"
+
+#include <imgui.h>
+#include <string>
 
 namespace EditorPanels
 {
@@ -32,7 +36,22 @@ namespace EditorPanels
             for (Trident::ECS::Entity it_Entity : m_Registry->GetEntities())
             {
                 const bool l_IsSelected = it_Entity == m_SelectedEntity;
-                const std::string l_Label = "Entity " + std::to_string(it_Entity);
+
+                std::string l_Label;
+                if (m_Registry->HasComponent<Trident::TagComponent>(it_Entity))
+                {
+                    const auto& l_Tag = m_Registry->GetComponent<Trident::TagComponent>(it_Entity);
+                    if (!l_Tag.m_Tag.empty())
+                    {
+                        l_Label = l_Tag.m_Tag;
+                    }
+                }
+
+                if (l_Label.empty())
+                {
+                    l_Label = "Entity " + std::to_string(it_Entity);
+                }
+
                 if (ImGui::Selectable(l_Label.c_str(), l_IsSelected))
                 {
                     m_SelectedEntity = it_Entity;
