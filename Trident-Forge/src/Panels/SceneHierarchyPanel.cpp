@@ -29,7 +29,6 @@ namespace EditorPanels
         // Always submit hierarchy content so dockspace layouts see the node regardless of collapse state.
 
         ImGui::TextUnformatted(m_StatusMessage.c_str());
-        ImGui::TextUnformatted("Hierarchy population will be driven by the active registry.");
 
         if (m_Registry != nullptr)
         {
@@ -104,10 +103,8 @@ namespace EditorPanels
         m_Registry = registry;
     }
 
-    void SceneHierarchyPanel::SetContextMenuActions(const std::function<void()>& onCreateEmpty,
-        const std::function<void()>& onCreateCube,
-        const std::function<void()>& onCreateSphere,
-        const std::function<void()>& onCreateQuad)
+    void SceneHierarchyPanel::SetContextMenuActions(const std::function<void()>& onCreateEmpty, const std::function<void()>& onCreateCube,
+        const std::function<void()>& onCreateSphere, const std::function<void()>& onCreateQuad)
     {
         m_OnCreateEmpty = onCreateEmpty;
         m_OnCreateCube = onCreateCube;

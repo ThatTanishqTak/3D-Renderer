@@ -30,6 +30,7 @@ namespace EditorPanels
 
     private:
         void SubmitViewportTexture(const ImVec2& viewportSize);
+        void RenderFrameRateOverlay();
 
     private:
         Trident::ViewportInfo m_ViewportInfo{}; ///< Renderer viewport metadata for the runtime view.

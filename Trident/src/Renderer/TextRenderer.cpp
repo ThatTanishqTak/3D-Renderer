@@ -444,6 +444,7 @@ namespace Trident
             vkDestroyImage(l_Device, m_AtlasImage, nullptr);
             m_AtlasImage = VK_NULL_HANDLE;
             m_Buffers->DestroyBuffer(l_StagingBuffer, l_StagingMemory);
+
             return;
         }
 
@@ -513,6 +514,7 @@ namespace Trident
             TR_CORE_ERROR("Failed to create text atlas view");
             m_Buffers->DestroyBuffer(l_StagingBuffer, l_StagingMemory);
             DestroyAtlasImage();
+            
             return;
         }
 
@@ -534,6 +536,7 @@ namespace Trident
             TR_CORE_ERROR("Failed to create text atlas sampler");
             m_Buffers->DestroyBuffer(l_StagingBuffer, l_StagingMemory);
             DestroyAtlasImage();
+            
             return;
         }
 
@@ -664,6 +667,7 @@ namespace Trident
                 std::vector<char> l_Buffer(static_cast<size_t>(l_Size));
                 l_File.seekg(0, std::ios::beg);
                 l_File.read(l_Buffer.data(), l_Size);
+            
                 return l_Buffer;
             };
 
@@ -678,6 +682,7 @@ namespace Trident
                 l_Candidates.emplace_back("glslc.exe");
                 l_Candidates.emplace_back("glslangValidator");
                 l_Candidates.emplace_back("glslangValidator.exe");
+                
                 return l_Candidates;
             };
 
@@ -730,6 +735,7 @@ namespace Trident
         if (l_VertexCode.empty() || l_FragmentCode.empty())
         {
             TR_CORE_ERROR("Failed to load text shaders. Expected '{}.spv' and '{}.spv'", l_VertexSource.string(), l_FragmentSource.string());
+            
             return;
         }
 
@@ -740,6 +746,7 @@ namespace Trident
         if (vkCreateShaderModule(Startup::GetDevice(), &l_VertexModuleInfo, nullptr, &l_VertexModule) != VK_SUCCESS)
         {
             TR_CORE_ERROR("Failed to create text vertex shader module");
+            
             return;
         }
 
@@ -751,6 +758,7 @@ namespace Trident
         {
             TR_CORE_ERROR("Failed to create text fragment shader module");
             vkDestroyShaderModule(Startup::GetDevice(), l_VertexModule, nullptr);
+            
             return;
         }
 
@@ -844,6 +852,7 @@ namespace Trident
             TR_CORE_ERROR("Failed to create text pipeline layout");
             vkDestroyShaderModule(Startup::GetDevice(), l_VertexModule, nullptr);
             vkDestroyShaderModule(Startup::GetDevice(), l_FragmentModule, nullptr);
+            
             return;
         }
 
@@ -961,6 +970,7 @@ namespace Trident
         if (vkMapMemory(l_Device, l_Buffer.m_Memory, 0, l_Size, 0, &l_Data) != VK_SUCCESS)
         {
             TR_CORE_ERROR("Failed to map text vertex buffer");
+            
             return;
         }
 
@@ -1050,6 +1060,7 @@ namespace Trident
         }
 
         static Glyph s_EmptyGlyph{};
+        
         return s_EmptyGlyph;
     }
 }

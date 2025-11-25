@@ -3,6 +3,8 @@
 #include "Renderer/RenderCommand.h"
 
 #include <string>
+#include <sstream>
+#include <iomanip>
 
 namespace EditorPanels
 {
@@ -22,6 +24,7 @@ namespace EditorPanels
         Trident::RenderCommand::SetViewport(m_ViewportInfo.ViewportID, m_ViewportInfo);
 
         SubmitViewportTexture(l_Available);
+        RenderFrameRateOverlay();
 
         // Keep hover/focus state in sync with the render path so runtime shortcuts can respect ImGui focus rules.
         m_IsHovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows);
@@ -85,5 +88,26 @@ namespace EditorPanels
     void GameViewportPanel::SetRegistry(Trident::ECS::Registry* registry)
     {
         m_Registry = registry;
+    }
+
+    void GameViewportPanel::RenderFrameRateOverlay()
+    {
+        // Pull averaged frame timing data from the renderer so the runtime viewport can surface the current FPS.
+        const Trident::Renderer::FrameTimingStats l_FrameTimingStats = Trident::RenderCommand::GetFrameTimingStats();
+
+        // Present the overlay only when the renderer has reported a valid timing sample.
+        if (l_FrameTimingStats.AverageFPS <= 0.0)
+        {
+            return;
+        }
+
+        std::ostringstream l_FpsLabel{};
+        l_FpsLabel << std::fixed << std::setprecision(1) << "FPS: " << l_FrameTimingStats.AverageFPS;
+
+        const glm::vec2 l_TextPosition{ 10.0f, 30.0f };
+        const glm::vec4 l_TextColor{ 1.0f, 1.0f, 1.0f, 1.0f };
+
+        // Route the overlay through the renderer so text batching aligns with existing viewport submissions.
+        Trident::RenderCommand::SubmitText(m_ViewportInfo.ViewportID, l_TextPosition, l_TextColor, l_FpsLabel.str());
     }
 }

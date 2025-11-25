@@ -18,7 +18,6 @@ namespace Trident
             // Guard against accidental double construction which would leave
             // the static accessors pointing at a stale Startup instance.
             TR_CORE_CRITICAL("Startup already exists");
-            throw std::runtime_error("Startup singleton already constructed");
         }
 
         s_Instance = this;
@@ -221,8 +220,8 @@ namespace Trident
             return;
         }
 
-        auto& l_Surfaces = Get().m_TrackedSurfaces;
-        l_Surfaces.push_back(surface);
+        auto& a_Surface = Get().m_TrackedSurfaces;
+        a_Surface.push_back(surface);
     }
 
     void Startup::UnregisterSurface(VkSurfaceKHR surface)
@@ -233,8 +232,8 @@ namespace Trident
             return;
         }
 
-        auto& l_Surfaces = Get().m_TrackedSurfaces;
-        for (VkSurfaceKHR& it_Surface : l_Surfaces)
+        auto& a_Surface = Get().m_TrackedSurfaces;
+        for (VkSurfaceKHR& it_Surface : a_Surface)
         {
             if (it_Surface == surface)
             {
@@ -340,8 +339,7 @@ namespace Trident
         l_Features2.pNext = &l_AvailableVulkan12Features;
         vkGetPhysicalDeviceFeatures2(m_PhysicalDevice, &l_Features2);
 
-        if (l_AvailableVulkan12Features.runtimeDescriptorArray != VK_TRUE ||
-            l_AvailableVulkan12Features.shaderSampledImageArrayNonUniformIndexing != VK_TRUE)
+        if (l_AvailableVulkan12Features.runtimeDescriptorArray != VK_TRUE || l_AvailableVulkan12Features.shaderSampledImageArrayNonUniformIndexing != VK_TRUE)
         {
             TR_CORE_CRITICAL("Selected GPU does not support required descriptor indexing features");
             return;
