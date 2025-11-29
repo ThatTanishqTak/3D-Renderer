@@ -43,11 +43,11 @@ void ApplicationLayer::Initialize()
     m_AnimationGraphPanel.Initialize();
 
     // Wire up the gizmo state so the viewport and inspector remain in sync.
-    m_ViewportPanel.SetGizmoState(&m_GizmoState);
+    m_SceneViewportPanel.SetGizmoState(&m_GizmoState);
     m_InspectorPanel.SetGizmoState(&m_GizmoState);
 
     // Ensure the console mirrors Unity-style defaults by surfacing info/warning/error output immediately.
-    m_ConsolePanel.SetLevelVisibility(spdlog::level::trace, false);
+    m_ConsolePanel.SetLevelVisibility(spdlog::level::trace, true);
     m_ConsolePanel.SetLevelVisibility(spdlog::level::debug, false);
     m_ConsolePanel.SetLevelVisibility(spdlog::level::info, true);
     m_ConsolePanel.SetLevelVisibility(spdlog::level::warn, true);
@@ -65,7 +65,7 @@ void ApplicationLayer::Initialize()
         });
 
     // Route drag-and-drop payloads originating inside the editor back into the shared import path.
-    m_ViewportPanel.SetAssetDropHandler([this](const std::vector<std::string>& droppedPaths)
+    m_SceneViewportPanel.SetAssetDropHandler([this](const std::vector<std::string>& droppedPaths)
         {
             ImportDroppedAssets(droppedPaths);
         });
@@ -128,7 +128,7 @@ void ApplicationLayer::Initialize()
     Trident::ECS::Registry* l_RegistryForPanels = &m_ActiveScene->GetEditorRegistry();
     m_SceneHierarchyPanel.SetRegistry(l_RegistryForPanels);
     m_InspectorPanel.SetRegistry(l_RegistryForPanels);
-    m_ViewportPanel.SetRegistry(l_RegistryForPanels);
+    m_SceneViewportPanel.SetRegistry(l_RegistryForPanels);
     m_AIDebugPanel.SetRegistry(l_RegistryForPanels);
     //m_AnimationGraphPanel.SetRegistry(l_RegistryForPanels);
 
@@ -166,7 +166,7 @@ void ApplicationLayer::Update()
     // Process global shortcuts after the camera update so input state is ready for high-level actions like save/load.
     HandleGlobalShortcuts();
 
-    m_ViewportPanel.Update();
+    m_SceneViewportPanel.Update();
     // Keep the runtime viewport state aligned with the editor viewport so shared handlers see up-to-date focus/hover data.
     RefreshRuntimeCameraBinding();
 
@@ -184,12 +184,12 @@ void ApplicationLayer::Update()
     const Trident::ECS::Entity l_SelectedEntity = m_SceneHierarchyPanel.GetSelectedEntity();
     m_InspectorPanel.SetSelectedEntity(l_SelectedEntity);
     // Mirror the selection for the viewport so camera pivots follow the same entity l_Focus.
-    m_ViewportPanel.SetSelectedEntity(l_SelectedEntity);
+    m_SceneViewportPanel.SetSelectedEntity(l_SelectedEntity);
     m_AIDebugPanel.SetSelectedEntity(l_SelectedEntity);
     //m_AnimationGraphPanel.SetSelectedEntity(l_SelectedEntity);
     m_InspectorPanel.Update();
     //m_AnimationGraphPanel.Update();
-    //m_ConsolePanel.Update();
+    m_ConsolePanel.Update();
     m_AIDebugPanel.Update();
 }
 
@@ -206,13 +206,13 @@ void ApplicationLayer::Render()
     RenderSceneToolbar();
     HandleSceneFileDialogs();
 
-    m_ViewportPanel.Render();
+    m_SceneViewportPanel.Render();
     m_GameViewportPanel.Render();
     m_ContentBrowserPanel.Render();
     m_SceneHierarchyPanel.Render();
     m_InspectorPanel.Render();
     m_AnimationGraphPanel.Render();
-    m_ConsolePanel.Render(); // still optional
+    m_ConsolePanel.Render();
     m_AIDebugPanel.Render();
 }
 
@@ -759,9 +759,9 @@ bool ApplicationLayer::HandleFileDrop(Trident::FileDropEvent& event)
     }
 
     const ImVec2 l_MouseImGui{ l_MousePosition.x, l_MousePosition.y };
-    const bool l_IsWithinViewport = m_ViewportPanel.ContainsPoint(l_MouseImGui);
+    const bool l_IsWithinViewport = m_SceneViewportPanel.ContainsPoint(l_MouseImGui);
 
-    if (!m_ViewportPanel.IsHovered() && !l_IsWithinViewport)
+    if (!m_SceneViewportPanel.IsHovered() && !l_IsWithinViewport)
     {
         // Ignore drops that land outside the viewport so accidental drags do not spawn entities.
         return false;
@@ -1119,8 +1119,8 @@ void ApplicationLayer::UpdateEditorCamera(float deltaTime)
     // permitting viewport interaction whenever the scene window is hovered or focused.
     Trident::Input& l_Input = Trident::Input::Get();
     ImGuiIO& l_ImGuiIO = ImGui::GetIO();
-    const bool l_ViewportHovered = m_ViewportPanel.IsHovered();
-    const bool l_ViewportFocused = m_ViewportPanel.IsFocused();
+    const bool l_ViewportHovered = m_SceneViewportPanel.IsHovered();
+    const bool l_ViewportFocused = m_SceneViewportPanel.IsFocused();
     const bool l_BlockMouse = l_ImGuiIO.WantCaptureMouse && !l_ViewportHovered;
     const bool l_BlockKeyboard = l_ImGuiIO.WantCaptureKeyboard && !l_ViewportFocused;
     l_Input.SetUICapture(l_BlockMouse, l_BlockKeyboard);

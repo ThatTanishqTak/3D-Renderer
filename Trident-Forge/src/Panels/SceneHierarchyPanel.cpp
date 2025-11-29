@@ -4,9 +4,6 @@
 #include <string>
 #include "ECS/Components/TagComponent.h"
 
-#include <imgui.h>
-#include <string>
-
 namespace EditorPanels
 {
     void SceneHierarchyPanel::Update()

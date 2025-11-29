@@ -84,7 +84,7 @@ private:
     std::string MakeUniqueName(const std::string& baseName) const;
 
 private:
-    EditorPanels::SceneViewportPanel m_ViewportPanel;
+    EditorPanels::SceneViewportPanel m_SceneViewportPanel;
     EditorPanels::GameViewportPanel m_GameViewportPanel;
     EditorPanels::ContentBrowserPanel m_ContentBrowserPanel;
     EditorPanels::SceneHierarchyPanel m_SceneHierarchyPanel;

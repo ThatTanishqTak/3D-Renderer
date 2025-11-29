@@ -96,8 +96,7 @@ namespace Trident
         {
             m_ActiveLayer->Update();
         }
-        // Reset one-shot input edges so the next tick starts with a clean slate while
-        // keeping the held state active. Future controller or text helpers can share this hook.
+        // Reset one-shot input edges so the next tick starts with a clean slate while keeping the held state active. Future controller or text helpers can share this hook.
         Input::Get().EndFrame();
     }
 

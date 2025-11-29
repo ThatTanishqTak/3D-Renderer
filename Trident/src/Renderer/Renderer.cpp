@@ -573,7 +573,7 @@ namespace Trident
         }
 
         // Resolve any completed GPU readback before new commands reuse the staging buffers for this swapchain image.
-        ResolvePendingReadback(l_ImageIndex);
+        ResolvePendingReadback(l_ImageIndex, l_FrameWallClock);
 
         UpdateUniformBuffer(l_ImageIndex);
 
@@ -591,6 +591,9 @@ namespace Trident
 
         // Once the main color pass is ready we can offer the frame to the AI helper.
         ProcessAiFrame();
+
+        // Offer the newly resolved readback to the recording path if a viewport capture is active.
+        SubmitViewportFrame(l_ImageIndex, l_FrameWallClock);
 
         // Capture the extent actually used when recording commands so our metrics reflect the final render target dimensions.
         l_FrameExtent = m_Swapchain.GetExtent();
@@ -755,6 +758,49 @@ namespace Trident
         return true;
     }
 
+    void Renderer::SubmitViewportFrame(uint32_t imageIndex, std::chrono::system_clock::time_point captureTimestamp)
+    {
+        (void)captureTimestamp;
+
+        if (!m_ViewportRecordingEnabled)
+        {
+            return;
+        }
+
+        if (m_RecordingViewportId == s_InvalidViewportId)
+        {
+            return;
+        }
+
+        if (m_PendingFrameReadbackBytes.empty())
+        {
+            return;
+        }
+
+        if (m_RecordingExtent.width == 0 || m_RecordingExtent.height == 0)
+        {
+            TR_CORE_WARN("Viewport recording rejected because the extent is invalid.");
+            return;
+        }
+
+        VideoEncoder::RecordedFrame l_Frame{};
+        l_Frame.m_Pixels = m_PendingFrameReadbackBytes;
+        l_Frame.m_Extent = m_RecordingExtent;
+        l_Frame.m_Timestamp = m_LastReadbackTimestamp;
+        l_Frame.m_FrameIndex = imageIndex;
+        l_Frame.m_ViewportId = m_RecordingViewportId;
+
+        m_ViewportFrameBuffer.push_back(l_Frame);
+
+        if (m_VideoEncoder)
+        {
+            if (!m_VideoEncoder->SubmitFrame(l_Frame))
+            {
+                TR_CORE_WARN("Video encoder rejected frame {} for viewport {}", imageIndex, m_RecordingViewportId);
+            }
+        }
+    }
+
     bool Renderer::TryInitialiseAiModel()
     {
         // Attempt to resolve the AI model and initialise the frame generator. Logging is throttled so development builds remain readable.
@@ -866,7 +912,7 @@ namespace Trident
         m_PendingFrameReadback.clear();
     }
 
-    void Renderer::ResolvePendingReadback(uint32_t imageIndex)
+    void Renderer::ResolvePendingReadback(uint32_t imageIndex, std::chrono::system_clock::time_point captureTimestamp)
     {
         if (imageIndex >= m_FrameReadbackBuffers.size())
         {
@@ -898,6 +944,7 @@ namespace Trident
         const size_t l_PixelCount = static_cast<size_t>(m_FrameReadbackExtent.width) * static_cast<size_t>(m_FrameReadbackExtent.height);
         const size_t l_TotalElements = l_PixelCount * static_cast<size_t>(m_FrameReadbackChannelCount);
         m_PendingFrameReadback.resize(l_TotalElements);
+        m_PendingFrameReadbackBytes.resize(l_TotalElements);
 
         const float l_Normalise = 1.0f / 255.0f;
         for (size_t it_Index = 0; it_Index < l_TotalElements; ++it_Index)
@@ -909,6 +956,7 @@ namespace Trident
 
         vkUnmapMemory(l_Device, m_FrameReadbackMemory[imageIndex]);
         m_FrameReadbackPending[imageIndex] = false;
+        m_LastReadbackTimestamp = captureTimestamp;
     }
 
     bool Renderer::EnsureAiTextureResources(VkExtent2D extent)
@@ -5420,6 +5468,41 @@ namespace Trident
             m_PerformanceCaptureBuffer.clear();
 
             TR_CORE_INFO("Performance capture disabled");
+        }
+    }
+
+    void Renderer::SetViewportRecordingEnabled(bool enabled, uint32_t viewportId, VkExtent2D extent, const std::filesystem::path& outputPath)
+    {
+        if (enabled)
+        {
+            m_ViewportFrameBuffer.clear();
+            m_RecordingViewportId = viewportId;
+            m_RecordingExtent = extent;
+            m_RecordingOutputPath = outputPath;
+            m_ViewportRecordingEnabled = true;
+
+            if (!m_VideoEncoder)
+            {
+                m_VideoEncoder = std::make_unique<VideoEncoder>();
+            }
+
+            if (m_VideoEncoder && !m_VideoEncoder->BeginSession(outputPath, extent, 30))
+            {
+                TR_CORE_WARN("Failed to start video encoding session for viewport {}", viewportId);
+            }
+        }
+        else
+        {
+            m_ViewportRecordingEnabled = false;
+            m_RecordingViewportId = s_InvalidViewportId;
+
+            if (m_VideoEncoder && m_VideoEncoder->IsSessionActive())
+            {
+                if (!m_VideoEncoder->EndSession())
+                {
+                    TR_CORE_WARN("Video encoder failed to finalize output at {}", m_RecordingOutputPath.string());
+                }
+            }
         }
     }
 

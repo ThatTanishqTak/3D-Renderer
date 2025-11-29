@@ -15,7 +15,7 @@ namespace EditorPanels
     {
         const bool l_WindowVisible = ImGui::Begin("Scene Viewport");
         (void)l_WindowVisible;
-        // Always render viewport internals so dockspace and viewport tests see consistent submission even when collapsed.
+        // Always render viewport internals so dockspace and viewport tests see consistent submission even when collapsed
 
         const ImVec2 l_Available = ImGui::GetContentRegionAvail();
         m_ViewportInfo.Size = { l_Available.x, l_Available.y };
@@ -26,10 +26,11 @@ namespace EditorPanels
         m_IsHovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows);
         m_IsFocused = ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows);
 
-        // Cache the screen-space bounds so external drop handlers can test OS-level cursor positions reliably.
+        // Cache the screen-space bounds so external drop handlers can test OS-level cursor positions reliably
         const ImVec2 l_ContentMin = ImGui::GetWindowContentRegionMin();
         const ImVec2 l_ContentMax = ImGui::GetWindowContentRegionMax();
         const ImVec2 l_WindowPos = ImGui::GetWindowPos();
+
         m_BoundsMin = { l_WindowPos.x + l_ContentMin.x, l_WindowPos.y + l_ContentMin.y };
         m_BoundsMax = { l_WindowPos.x + l_ContentMax.x, l_WindowPos.y + l_ContentMax.y };
 
@@ -38,7 +39,7 @@ namespace EditorPanels
 
     void SceneViewportPanel::Update()
     {
-        // Handle ImGui drag-and-drop payloads that originate from inside the editor (e.g., content browser).
+        // Handle ImGui drag-and-drop payloads that originate from inside the editor
         if (m_OnAssetsDropped && ImGui::BeginDragDropTarget())
         {
             if (const ImGuiPayload* l_Payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM"))
@@ -68,8 +69,7 @@ namespace EditorPanels
 
     bool SceneViewportPanel::ContainsPoint(const ImVec2& screenPoint) const
     {
-        return screenPoint.x >= m_BoundsMin.x && screenPoint.x <= m_BoundsMax.x &&
-            screenPoint.y >= m_BoundsMin.y && screenPoint.y <= m_BoundsMax.y;
+        return screenPoint.x >= m_BoundsMin.x && screenPoint.x <= m_BoundsMax.x && screenPoint.y >= m_BoundsMin.y && screenPoint.y <= m_BoundsMax.y;
     }
 
     Trident::ECS::Entity SceneViewportPanel::GetSelectedEntity() const
@@ -102,9 +102,6 @@ namespace EditorPanels
         const VkDescriptorSet l_DescriptorSet = Trident::RenderCommand::GetViewportTexture(m_ViewportInfo.ViewportID);
         const ImTextureID l_TextureId = reinterpret_cast<ImTextureID>(l_DescriptorSet);
 
-        // Swapchain-aware: leave sizing to ImGui while ensuring the Vulkan image view stays bound for the frame's
-        // command buffer. Comparing against an explicit zero sentinel keeps the check valid whether ImTextureID is a
-        // pointer or integer, matching the expectations documented in https://github.com/ocornut/imgui/wiki/Image-Loading-and-Displaying-Examples.
         if (l_TextureId != ImTextureID{ 0 } && viewportSize.x > 0.0f && viewportSize.y > 0.0f)
         {
             ImGui::Image(l_TextureId, viewportSize, ImVec2(0, 0), ImVec2(1, 1));

@@ -7,6 +7,9 @@
 #include <imgui.h>
 #include <functional>
 #include <vector>
+#include <chrono>
+#include <string>
+#include <filesystem>
 
 namespace EditorPanels
 {
@@ -31,6 +34,8 @@ namespace EditorPanels
     private:
         void SubmitViewportTexture(const ImVec2& viewportSize);
         void RenderFrameRateOverlay();
+        void RenderExportControls();
+        float QueryClipDurationSeconds() const;
 
     private:
         Trident::ViewportInfo m_ViewportInfo{}; ///< Renderer viewport metadata for the runtime view.
@@ -39,5 +44,10 @@ namespace EditorPanels
         Trident::GizmoState* m_GizmoState = nullptr; ///< Shared gizmo state pointer for future runtime gizmo support.
         Trident::ECS::Registry* m_Registry = nullptr; ///< Registry pointer retained for future runtime entity queries.
         std::function<void(const std::vector<std::string>&)> m_OnAssetsDropped; ///< Callback invoked when assets are dropped.
+        bool m_IsRecording = false; ///< Tracks whether the panel has initiated a clip export.
+        float m_TargetClipDuration = 0.0f; ///< Duration requested for the current export.
+        std::chrono::steady_clock::time_point m_RecordingStartTime{}; ///< Clock used to track progress.
+        std::string m_CurrentOutputPath; ///< Destination path reported to the user.
+        float m_RecordingProgress = 0.0f; ///< Normalised progress for the UI.
     };
 }

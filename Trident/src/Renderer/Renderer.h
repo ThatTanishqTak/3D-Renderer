@@ -12,6 +12,7 @@
 #include "Renderer/Commands.h"
 #include "Renderer/Skybox.h"
 #include "Renderer/TextRenderer.h"
+#include "Renderer/VideoEncoder.h"
 #include "AI/FrameGenerator.h"
 #include "AI/FrameDatasetRecorder.h"
 
@@ -164,6 +165,26 @@ namespace Trident
         size_t GetPerformanceCaptureSampleCount() const { return m_PerformanceCaptureBuffer.size(); }
         bool IsPerformanceCaptureEnabled() const { return m_PerformanceCaptureEnabled; }
         void SetPerformanceCaptureEnabled(bool enabled);
+
+        /**
+         * @brief Toggle viewport recording so panels can export rendered frames.
+         */
+        void SetViewportRecordingEnabled(bool enabled, uint32_t viewportId, VkExtent2D extent, const std::filesystem::path& outputPath);
+
+        /**
+         * @brief Submit the latest readback buffer as a recorded frame when available.
+         */
+        void SubmitViewportFrame(uint32_t imageIndex, std::chrono::system_clock::time_point captureTimestamp);
+
+        /**
+         * @brief Query whether the renderer is actively recording viewport frames.
+         */
+        bool IsViewportRecording() const { return m_ViewportRecordingEnabled; }
+
+        /**
+         * @brief Inspect buffered viewport frames so tooling can visualise progress.
+         */
+        const std::vector<VideoEncoder::RecordedFrame>& GetViewportFrameBuffer() const { return m_ViewportFrameBuffer; }
 
         void SetTransform(const Transform& props);
         void SetViewport(uint32_t viewportId, const ViewportInfo& info);
@@ -447,6 +468,15 @@ namespace Trident
         bool m_AiModelInitialiseWarningIssued = false;         ///< Prevents repeated warnings when a supplied model fails to load.
         AI::FrameDatasetRecorder m_FrameDatasetRecorder;       ///< Helper that persists AI training samples for offline pipelines.
 
+        bool m_ViewportRecordingEnabled = false;               ///< Tracks whether viewport capture is active.
+        uint32_t m_RecordingViewportId = s_InvalidViewportId;  ///< Active viewport being recorded.
+        VkExtent2D m_RecordingExtent{ 0, 0 };                  ///< Resolution locked for the recording session.
+        std::filesystem::path m_RecordingOutputPath{};         ///< Destination file path for the recording session.
+        std::unique_ptr<VideoEncoder> m_VideoEncoder;          ///< Helper that streams recorded frames to disk.
+        std::vector<uint8_t> m_PendingFrameReadbackBytes;      ///< Raw RGBA data copied from the GPU for capture.
+        std::vector<VideoEncoder::RecordedFrame> m_ViewportFrameBuffer; ///< Buffered frames retained for status displays.
+        std::chrono::system_clock::time_point m_LastReadbackTimestamp{}; ///< Timestamp captured alongside the last readback.
+
     private:
         // Core setup
         void ProcessAiFrame();
@@ -455,7 +485,7 @@ namespace Trident
         std::optional<std::filesystem::path> ResolveAiModelPath() const;
         void CreateOrResizeReadbackResources();
         void DestroyReadbackResources();
-        void ResolvePendingReadback(uint32_t imageIndex);
+        void ResolvePendingReadback(uint32_t imageIndex, std::chrono::system_clock::time_point captureTimestamp);
         bool EnsureAiTextureResources(VkExtent2D extent);
         void DestroyAiResources();
         void UploadAiInterpolationToGpu();

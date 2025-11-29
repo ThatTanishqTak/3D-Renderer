@@ -2,6 +2,9 @@
 
 #include "Application/Startup.h"
 
+#include <filesystem>
+#include <chrono>
+
 namespace Trident
 {
     void RenderCommand::Init()
@@ -194,5 +197,27 @@ namespace Trident
     {
         // Placeholder that will eventually return the ImGui descriptor once the renderer exposes the AI texture to tooling.
         return Startup::GetRenderer().GetAiTextureDescriptor();
+    }
+
+    void RenderCommand::SetViewportRecordingEnabled(bool enabled, uint32_t viewportId, VkExtent2D extent, const std::filesystem::path& outputPath)
+    {
+        // Forward the recording toggle so UI panels can trigger capture sessions.
+        Startup::GetRenderer().SetViewportRecordingEnabled(enabled, viewportId, extent, outputPath);
+    }
+
+    void RenderCommand::SubmitViewportFrame(uint32_t imageIndex, std::chrono::system_clock::time_point captureTimestamp)
+    {
+        // Allow panels to push the latest readback into the recording buffer when needed.
+        Startup::GetRenderer().SubmitViewportFrame(imageIndex, captureTimestamp);
+    }
+
+    bool RenderCommand::IsViewportRecording()
+    {
+        return Startup::GetRenderer().IsViewportRecording();
+    }
+
+    const std::vector<VideoEncoder::RecordedFrame>& RenderCommand::GetViewportFrameBuffer()
+    {
+        return Startup::GetRenderer().GetViewportFrameBuffer();
     }
 }

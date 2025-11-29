@@ -5,6 +5,8 @@
 #include <string>
 #include <sstream>
 #include <iomanip>
+#include <chrono>
+#include <filesystem>
 
 namespace EditorPanels
 {
@@ -25,6 +27,7 @@ namespace EditorPanels
 
         SubmitViewportTexture(l_Available);
         RenderFrameRateOverlay();
+        RenderExportControls();
 
         // Keep hover/focus state in sync with the render path so runtime shortcuts can respect ImGui focus rules.
         m_IsHovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows);
@@ -109,5 +112,75 @@ namespace EditorPanels
 
         // Route the overlay through the renderer so text batching aligns with existing viewport submissions.
         Trident::RenderCommand::SubmitText(m_ViewportInfo.ViewportID, l_TextPosition, l_TextColor, l_FpsLabel.str());
+    }
+
+    void GameViewportPanel::RenderExportControls()
+    {
+        const bool l_HasRuntimeCamera = Trident::RenderCommand::HasRuntimeCamera();
+        const bool l_ViewValid = m_ViewportInfo.Size.x > 0.0f && m_ViewportInfo.Size.y > 0.0f;
+
+        if (!l_HasRuntimeCamera)
+        {
+            ImGui::TextUnformatted("No runtime camera available for capture.");
+            return;
+        }
+
+        if (!l_ViewValid)
+        {
+            ImGui::TextUnformatted("Viewport size is invalid for capture.");
+            return;
+        }
+
+        if (!m_IsRecording)
+        {
+            if (ImGui::Button("Start Clip Export"))
+            {
+                m_TargetClipDuration = QueryClipDurationSeconds();
+                if (m_TargetClipDuration <= 0.0f)
+                {
+                    m_TargetClipDuration = 3.0f; // Fallback duration when no clip data is available.
+                }
+
+                m_RecordingStartTime = std::chrono::steady_clock::now();
+                m_CurrentOutputPath = std::filesystem::path("Assets/Export/ViewportCapture.mp4").string();
+                m_RecordingProgress = 0.0f;
+
+                Trident::RenderCommand::SetViewportRecordingEnabled(true, m_ViewportInfo.ViewportID,
+                    { static_cast<uint32_t>(m_ViewportInfo.Size.x), static_cast<uint32_t>(m_ViewportInfo.Size.y) }, m_CurrentOutputPath);
+                m_IsRecording = true;
+            }
+        }
+        else
+        {
+            const auto l_Now = std::chrono::steady_clock::now();
+            const float l_Elapsed = std::chrono::duration<float>(l_Now - m_RecordingStartTime).count();
+            m_RecordingProgress = std::min(1.0f, l_Elapsed / m_TargetClipDuration);
+
+            ImGui::Text("Exporting clip... %.0f%%", m_RecordingProgress * 100.0f);
+            ImGui::Text("Output: %s", m_CurrentOutputPath.c_str());
+
+            if (l_Elapsed >= m_TargetClipDuration)
+            {
+                Trident::RenderCommand::SetViewportRecordingEnabled(false, m_ViewportInfo.ViewportID,
+                    { static_cast<uint32_t>(m_ViewportInfo.Size.x), static_cast<uint32_t>(m_ViewportInfo.Size.y) }, m_CurrentOutputPath);
+                m_IsRecording = false;
+            }
+
+            if (ImGui::Button("Stop Export"))
+            {
+                Trident::RenderCommand::SetViewportRecordingEnabled(false, m_ViewportInfo.ViewportID,
+                    { static_cast<uint32_t>(m_ViewportInfo.Size.x), static_cast<uint32_t>(m_ViewportInfo.Size.y) }, m_CurrentOutputPath);
+                m_IsRecording = false;
+            }
+        }
+    }
+
+    float GameViewportPanel::QueryClipDurationSeconds() const
+    {
+        // Placeholder: access to the runtime animation context is not yet exposed to the panel.
+        // A future change can query AnimationPlayer::GetClipDuration once the runtime player becomes accessible here.
+        (void)m_Registry;
+
+        return 0.0f;
     }
 }
