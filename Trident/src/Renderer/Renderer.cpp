@@ -767,6 +767,43 @@ namespace Trident
             return;
         }
 
+        const bool l_SessionActive = m_ViewportRecordingSessionActive && m_VideoEncoder && m_VideoEncoder->IsSessionActive();
+
+        // Detect encoder session drift and either restart the encoder or disable recording to keep UI state accurate.
+        if (!l_SessionActive)
+        {
+            if (!m_VideoEncoder)
+            {
+                m_VideoEncoder = std::make_unique<VideoEncoder>();
+            }
+
+            if (!m_VideoEncoder)
+            {
+                TR_CORE_WARN("Viewport recording disabled because the encoder could not be created.");
+                m_ViewportRecordingEnabled = false;
+                m_ViewportRecordingSessionActive = false;
+                m_RecordingViewportId = s_InvalidViewportId;
+
+                return;
+            }
+
+            const bool l_SessionRestarted = m_VideoEncoder->BeginSession(m_RecordingOutputPath, m_RecordingExtent, 30);
+            const bool l_ReinitialisedSessionActive = l_SessionRestarted && m_VideoEncoder->IsSessionActive();
+
+            if (!l_ReinitialisedSessionActive)
+            {
+                TR_CORE_WARN("Viewport recording disabled because the encoder session is inactive.");
+                m_ViewportRecordingEnabled = false;
+                m_ViewportRecordingSessionActive = false;
+                m_RecordingViewportId = s_InvalidViewportId;
+
+                return;
+            }
+
+            m_ViewportRecordingEnabled = true;
+            m_ViewportRecordingSessionActive = true;
+        }
+
         if (m_RecordingViewportId == s_InvalidViewportId)
         {
             return;
@@ -5526,14 +5563,21 @@ namespace Trident
                 return false;
             }
 
-            if (!m_VideoEncoder->BeginSession(outputPath, extent, 30))
-            {
-                TR_CORE_WARN("Failed to start video encoding session for viewport {}", viewportId);
+            const bool l_SessionStarted = m_VideoEncoder->BeginSession(outputPath, extent, 30);
+            const bool l_SessionActive = l_SessionStarted && m_VideoEncoder->IsSessionActive();
 
+            // Reject the start request if the encoder did not accept the session so the caller can surface an error.
+            if (!l_SessionActive)
+            {
+                TR_CORE_ERROR("Failed to start video encoding session for viewport {} at {}", viewportId, outputPath.string());
+
+                m_ViewportRecordingEnabled = false;
+                m_ViewportRecordingSessionActive = false;
                 return false;
             }
 
-            m_ViewportRecordingEnabled = true;
+            m_ViewportRecordingEnabled = l_SessionActive;
+            m_ViewportRecordingSessionActive = l_SessionActive;
             m_ReadbackConfigurationWarningIssued = false;
 
             return true;
@@ -5541,6 +5585,7 @@ namespace Trident
         else
         {
             m_ViewportRecordingEnabled = false;
+            m_ViewportRecordingSessionActive = false;
             m_RecordingViewportId = s_InvalidViewportId;
 
             if (m_VideoEncoder && m_VideoEncoder->IsSessionActive())

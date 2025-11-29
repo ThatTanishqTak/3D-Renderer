@@ -474,6 +474,7 @@ namespace Trident
         VkExtent2D m_RecordingExtent{ 0, 0 };                  // Resolution locked for the recording session.
         std::filesystem::path m_RecordingOutputPath{};         // Destination file path for the recording session.
         std::unique_ptr<VideoEncoder> m_VideoEncoder;          // Helper that streams recorded frames to disk.
+        bool m_ViewportRecordingSessionActive = false;         // Tracks whether the encoder session is ready to accept frames.
         std::vector<uint8_t> m_PendingFrameReadbackBytes;      // Raw RGBA data copied from the GPU for capture.
         std::vector<VideoEncoder::RecordedFrame> m_ViewportFrameBuffer; // Buffered frames retained for status displays.
         std::chrono::system_clock::time_point m_LastReadbackTimestamp{}; // Timestamp captured alongside the last readback.
