@@ -10,6 +10,7 @@
 #include <chrono>
 #include <string>
 #include <filesystem>
+#include <array>
 
 namespace EditorPanels
 {
@@ -49,5 +50,6 @@ namespace EditorPanels
         std::chrono::steady_clock::time_point m_RecordingStartTime{}; ///< Clock used to track progress.
         std::string m_CurrentOutputPath; ///< Destination path reported to the user.
         float m_RecordingProgress = 0.0f; ///< Normalised progress for the UI.
+        std::array<char, 260> m_OutputPathBuffer{}; ///< UI buffer used to collect the export path.
     };
 }

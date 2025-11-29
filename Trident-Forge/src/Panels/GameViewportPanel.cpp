@@ -7,12 +7,19 @@
 #include <iomanip>
 #include <chrono>
 #include <filesystem>
+#include <system_error>
+#include <cstdio>
+#include <cstring>
 
 namespace EditorPanels
 {
     GameViewportPanel::GameViewportPanel()
     {
         m_ViewportInfo.ViewportID = 2U;
+        // Seed the export path so the UI presents a writable destination before recording begins.
+        m_CurrentOutputPath = "Assets/Export/ViewportCapture.mp4";
+        std::memset(m_OutputPathBuffer.data(), 0, m_OutputPathBuffer.size());
+        std::snprintf(m_OutputPathBuffer.data(), m_OutputPathBuffer.size(), "%s", m_CurrentOutputPath.c_str());
     }
 
     void GameViewportPanel::Render()
@@ -133,6 +140,9 @@ namespace EditorPanels
 
         if (!m_IsRecording)
         {
+            ImGui::InputText("Export Path", m_OutputPathBuffer.data(), m_OutputPathBuffer.size());
+            ImGui::TextWrapped("Choose where the exported clip will be written before starting the capture. Missing folders are created automatically.");
+
             if (ImGui::Button("Start Clip Export"))
             {
                 m_TargetClipDuration = QueryClipDurationSeconds();
@@ -141,8 +151,36 @@ namespace EditorPanels
                     m_TargetClipDuration = 3.0f; // Fallback duration when no clip data is available.
                 }
 
+                // Capture the path from the UI buffer so the renderer writes to the user-selected destination.
+                m_CurrentOutputPath = std::string(m_OutputPathBuffer.data());
+
+                // Fall back to the default asset export folder when the user has not provided a path.
+                if (m_CurrentOutputPath.empty())
+                {
+                    m_CurrentOutputPath = "Assets/Export/ViewportCapture.mp4";
+                    std::snprintf(m_OutputPathBuffer.data(), m_OutputPathBuffer.size(), "%s", m_CurrentOutputPath.c_str());
+                }
+
+                // Ensure the parent directory exists before asking the renderer to start recording.
+                std::filesystem::path l_OutputPath(m_CurrentOutputPath);
+                std::filesystem::path l_ParentDirectory = l_OutputPath.parent_path();
+                if (l_ParentDirectory.empty())
+                {
+                    l_ParentDirectory = std::filesystem::path("Assets/Export");
+                    l_OutputPath = l_ParentDirectory / l_OutputPath;
+                    m_CurrentOutputPath = l_OutputPath.string();
+                    std::snprintf(m_OutputPathBuffer.data(), m_OutputPathBuffer.size(), "%s", m_CurrentOutputPath.c_str());
+                }
+
+                std::error_code l_DirectoryError{};
+                const bool l_DirectoryReady = std::filesystem::exists(l_ParentDirectory) || std::filesystem::create_directories(l_ParentDirectory, l_DirectoryError);
+                if (!l_DirectoryReady)
+                {
+                    ImGui::TextUnformatted("Unable to prepare export directory.");
+                    return;
+                }
+
                 m_RecordingStartTime = std::chrono::steady_clock::now();
-                m_CurrentOutputPath = std::filesystem::path("Assets/Export/ViewportCapture.mp4").string();
                 m_RecordingProgress = 0.0f;
 
                 Trident::RenderCommand::SetViewportRecordingEnabled(true, m_ViewportInfo.ViewportID,
