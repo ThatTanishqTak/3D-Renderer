@@ -910,6 +910,7 @@ namespace Trident
         m_FrameReadbackBytesPerPixel = 0;
         m_FrameReadbackChannelCount = 0;
         m_PendingFrameReadback.clear();
+        m_PendingFrameReadbackBytes.clear();
     }
 
     void Renderer::ResolvePendingReadback(uint32_t imageIndex, std::chrono::system_clock::time_point captureTimestamp)
@@ -950,8 +951,12 @@ namespace Trident
         for (size_t it_Index = 0; it_Index < l_TotalElements; ++it_Index)
         {
             const uint8_t l_Value = l_SourceBytes[it_Index];
-            // Normalise the byte channels so downstream AI code can consume standardised [0,1] data.
+
+            // Normalised float data for AI
             m_PendingFrameReadback[it_Index] = static_cast<float>(l_Value) * l_Normalise;
+
+            // Raw bytes for the video encoder
+            m_PendingFrameReadbackBytes[it_Index] = l_Value;
         }
 
         vkUnmapMemory(l_Device, m_FrameReadbackMemory[imageIndex]);
