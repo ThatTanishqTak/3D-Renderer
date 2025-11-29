@@ -885,8 +885,9 @@ namespace Trident
         m_FrameReadbackBufferSize = l_BufferSize;
         m_FrameReadbackBytesPerPixel = l_FormatInfo.m_BytesPerPixel;
         m_FrameReadbackChannelCount = l_FormatInfo.m_ChannelCount;
+        m_ReadbackConfigurationWarningIssued = false;
 
-        TR_CORE_TRACE("Frame readback staging resized to {}x{} ({} bytes per pixel, {} buffers)", l_TargetExtent.width, l_TargetExtent.height, 
+        TR_CORE_TRACE("Frame readback staging resized to {}x{} ({} bytes per pixel, {} buffers)", l_TargetExtent.width, l_TargetExtent.height,
             l_FormatInfo.m_BytesPerPixel, l_ImageCount);
     }
 
@@ -909,6 +910,7 @@ namespace Trident
         m_FrameReadbackBufferSize = 0;
         m_FrameReadbackBytesPerPixel = 0;
         m_FrameReadbackChannelCount = 0;
+        m_ReadbackConfigurationWarningIssued = false;
         m_PendingFrameReadback.clear();
         m_PendingFrameReadbackBytes.clear();
     }
@@ -925,9 +927,20 @@ namespace Trident
             return;
         }
 
-        if (m_FrameReadbackBufferSize == 0 || m_FrameReadbackChannelCount == 0)
+        const bool l_HasExtent = (m_FrameReadbackExtent.width > 0) && (m_FrameReadbackExtent.height > 0);
+        const bool l_HasBuffer = (m_FrameReadbackBufferSize > 0);
+        const bool l_HasChannels = (m_FrameReadbackChannelCount > 0);
+
+        if (!l_HasExtent || !l_HasBuffer || !l_HasChannels)
         {
-            m_FrameReadbackPending[imageIndex] = false;
+            if (!m_ReadbackConfigurationWarningIssued)
+            {
+                TR_CORE_WARN("Deferred frame readback is waiting for valid configuration (extent {}x{}, buffer {}, channels {}).", m_FrameReadbackExtent.width,
+                    m_FrameReadbackExtent.height, m_FrameReadbackBufferSize, m_FrameReadbackChannelCount);
+                m_ReadbackConfigurationWarningIssued = true;
+            }
+
+            // Keep the pending flag intact so the frame is not silently dropped while resources are recreated.
             return;
         }
 
@@ -937,13 +950,14 @@ namespace Trident
         {
             TR_CORE_CRITICAL("Failed to map frame readback buffer {}", imageIndex);
             m_FrameReadbackPending[imageIndex] = false;
-
             return;
         }
 
         const uint8_t* l_SourceBytes = static_cast<const uint8_t*>(l_Mapped);
-        const size_t l_PixelCount = static_cast<size_t>(m_FrameReadbackExtent.width) * static_cast<size_t>(m_FrameReadbackExtent.height);
+        const size_t l_PixelCount = static_cast<size_t>(m_FrameReadbackExtent.width) *
+            static_cast<size_t>(m_FrameReadbackExtent.height);
         const size_t l_TotalElements = l_PixelCount * static_cast<size_t>(m_FrameReadbackChannelCount);
+
         m_PendingFrameReadback.resize(l_TotalElements);
         m_PendingFrameReadbackBytes.resize(l_TotalElements);
 
@@ -952,10 +966,10 @@ namespace Trident
         {
             const uint8_t l_Value = l_SourceBytes[it_Index];
 
-            // Normalised float data for AI
+            // For AI
             m_PendingFrameReadback[it_Index] = static_cast<float>(l_Value) * l_Normalise;
 
-            // Raw bytes for the video encoder
+            // For video encoder
             m_PendingFrameReadbackBytes[it_Index] = l_Value;
         }
 
@@ -5476,25 +5490,53 @@ namespace Trident
         }
     }
 
-    void Renderer::SetViewportRecordingEnabled(bool enabled, uint32_t viewportId, VkExtent2D extent, const std::filesystem::path& outputPath)
+    bool Renderer::SetViewportRecordingEnabled(bool enabled, uint32_t viewportId, VkExtent2D extent, const std::filesystem::path& outputPath)
     {
         if (enabled)
         {
+            // Ensure readback buffers exist before toggling capture so we do not start a session without valid resources.
+            CreateOrResizeReadbackResources();
+
+            const bool l_HasValidReadbackExtent = (m_FrameReadbackExtent.width > 0) && (m_FrameReadbackExtent.height > 0);
+            const bool l_HasValidRecordingExtent = (extent.width > 0) && (extent.height > 0);
+            const bool l_HasValidChannelCount = (m_FrameReadbackChannelCount > 0);
+
+            if (!l_HasValidReadbackExtent || !l_HasValidRecordingExtent || !l_HasValidChannelCount)
+            {
+                TR_CORE_WARN("Viewport recording unavailable. Extent {}x{} (readback {}x{}), channels {}.", extent.width, extent.height,
+                    m_FrameReadbackExtent.width, m_FrameReadbackExtent.height, m_FrameReadbackChannelCount);
+
+                return false;
+            }
+
             m_ViewportFrameBuffer.clear();
             m_RecordingViewportId = viewportId;
             m_RecordingExtent = extent;
             m_RecordingOutputPath = outputPath;
-            m_ViewportRecordingEnabled = true;
 
             if (!m_VideoEncoder)
             {
                 m_VideoEncoder = std::make_unique<VideoEncoder>();
             }
 
-            if (m_VideoEncoder && !m_VideoEncoder->BeginSession(outputPath, extent, 30))
+            if (!m_VideoEncoder)
+            {
+                TR_CORE_WARN("Viewport recording unavailable. Video encoder failed to initialise.");
+
+                return false;
+            }
+
+            if (!m_VideoEncoder->BeginSession(outputPath, extent, 30))
             {
                 TR_CORE_WARN("Failed to start video encoding session for viewport {}", viewportId);
+
+                return false;
             }
+
+            m_ViewportRecordingEnabled = true;
+            m_ReadbackConfigurationWarningIssued = false;
+
+            return true;
         }
         else
         {
@@ -5508,6 +5550,8 @@ namespace Trident
                     TR_CORE_WARN("Video encoder failed to finalize output at {}", m_RecordingOutputPath.string());
                 }
             }
+
+            return true;
         }
     }
 

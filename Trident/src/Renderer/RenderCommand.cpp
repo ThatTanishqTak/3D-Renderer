@@ -199,10 +199,10 @@ namespace Trident
         return Startup::GetRenderer().GetAiTextureDescriptor();
     }
 
-    void RenderCommand::SetViewportRecordingEnabled(bool enabled, uint32_t viewportId, VkExtent2D extent, const std::filesystem::path& outputPath)
+    bool RenderCommand::SetViewportRecordingEnabled(bool enabled, uint32_t viewportId, VkExtent2D extent, const std::filesystem::path& outputPath)
     {
         // Forward the recording toggle so UI panels can trigger capture sessions.
-        Startup::GetRenderer().SetViewportRecordingEnabled(enabled, viewportId, extent, outputPath);
+        return Startup::GetRenderer().SetViewportRecordingEnabled(enabled, viewportId, extent, outputPath);
     }
 
     void RenderCommand::SubmitViewportFrame(uint32_t imageIndex, std::chrono::system_clock::time_point captureTimestamp)

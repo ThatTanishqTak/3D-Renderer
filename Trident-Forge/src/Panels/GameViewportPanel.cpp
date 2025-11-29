@@ -183,9 +183,17 @@ namespace EditorPanels
                 m_RecordingStartTime = std::chrono::steady_clock::now();
                 m_RecordingProgress = 0.0f;
 
-                Trident::RenderCommand::SetViewportRecordingEnabled(true, m_ViewportInfo.ViewportID,
+                const bool l_RecordingStarted = Trident::RenderCommand::SetViewportRecordingEnabled(true, m_ViewportInfo.ViewportID,
                     { static_cast<uint32_t>(m_ViewportInfo.Size.x), static_cast<uint32_t>(m_ViewportInfo.Size.y) }, m_CurrentOutputPath);
-                m_IsRecording = true;
+                if (!l_RecordingStarted)
+                {
+                    ImGui::TextUnformatted("Viewport recording could not start. Verify swapchain and encoder readiness.");
+                    m_IsRecording = false;
+                }
+                else
+                {
+                    m_IsRecording = true;
+                }
             }
         }
         else
@@ -199,16 +207,22 @@ namespace EditorPanels
 
             if (l_Elapsed >= m_TargetClipDuration)
             {
-                Trident::RenderCommand::SetViewportRecordingEnabled(false, m_ViewportInfo.ViewportID,
+                const bool l_StopRequested = Trident::RenderCommand::SetViewportRecordingEnabled(false, m_ViewportInfo.ViewportID,
                     { static_cast<uint32_t>(m_ViewportInfo.Size.x), static_cast<uint32_t>(m_ViewportInfo.Size.y) }, m_CurrentOutputPath);
-                m_IsRecording = false;
+                if (l_StopRequested)
+                {
+                    m_IsRecording = false;
+                }
             }
 
             if (ImGui::Button("Stop Export"))
             {
-                Trident::RenderCommand::SetViewportRecordingEnabled(false, m_ViewportInfo.ViewportID,
+                const bool l_StopRequested = Trident::RenderCommand::SetViewportRecordingEnabled(false, m_ViewportInfo.ViewportID,
                     { static_cast<uint32_t>(m_ViewportInfo.Size.x), static_cast<uint32_t>(m_ViewportInfo.Size.y) }, m_CurrentOutputPath);
-                m_IsRecording = false;
+                if (l_StopRequested)
+                {
+                    m_IsRecording = false;
+                }
             }
         }
     }

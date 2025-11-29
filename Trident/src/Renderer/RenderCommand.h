@@ -60,7 +60,7 @@ namespace Trident
         // Placeholder hook for future UI that will surface the AI texture preview.
         static ImTextureID GetAiTextureDescriptor();
         // Toggle viewport recording so UI panels can export animation clips.
-        static void SetViewportRecordingEnabled(bool enabled, uint32_t viewportId, VkExtent2D extent, const std::filesystem::path& outputPath);
+        static bool SetViewportRecordingEnabled(bool enabled, uint32_t viewportId, VkExtent2D extent, const std::filesystem::path& outputPath);
         // Submit the latest frame to the recording path when readback completes.
         static void SubmitViewportFrame(uint32_t imageIndex, std::chrono::system_clock::time_point captureTimestamp);
         static bool IsViewportRecording();

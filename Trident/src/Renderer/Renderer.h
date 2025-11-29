@@ -64,14 +64,14 @@ namespace Trident
      */
     struct CameraOverlayInstance
     {
-        ECS::Entity m_Entity = std::numeric_limits<ECS::Entity>::max(); ///< Entity owning the camera component.
-        glm::vec2 m_ScreenPosition{ 0.0f, 0.0f };                     ///< Position inside the viewport in pixels.
-        float m_Depth = 1.0f;                                         ///< Normalised device depth used for front-to-back sorting.
-        bool m_IsPrimary = false;                                     ///< True when the camera component is flagged as primary.
-        bool m_IsViewportCamera = false;                              ///< True when the camera currently drives the viewport.
-        std::array<glm::vec2, 4> m_FrustumCorners{};                  ///< Screen-space quad describing the preview frustum.
-        std::array<bool, 4> m_FrustumCornerVisible{};                 ///< Flags indicating which projected corners remain onscreen.
-        bool m_HasFrustum = false;                                    ///< Cached visibility state for overlay rendering code.
+        ECS::Entity m_Entity = std::numeric_limits<ECS::Entity>::max(); // Entity owning the camera component.
+        glm::vec2 m_ScreenPosition{ 0.0f, 0.0f };                     // Position inside the viewport in pixels.
+        float m_Depth = 1.0f;                                         // Normalised device depth used for front-to-back sorting.
+        bool m_IsPrimary = false;                                     // True when the camera component is flagged as primary.
+        bool m_IsViewportCamera = false;                              // True when the camera currently drives the viewport.
+        std::array<glm::vec2, 4> m_FrustumCorners{};                  // Screen-space quad describing the preview frustum.
+        std::array<bool, 4> m_FrustumCornerVisible{};                 // Flags indicating which projected corners remain onscreen.
+        bool m_HasFrustum = false;                                    // Cached visibility state for overlay rendering code.
     };
 
     class Renderer
@@ -98,15 +98,15 @@ namespace Trident
         // Surface AI pipeline metrics so editor tooling can reason about queue depth and timing behaviour.
         struct AiDebugStats
         {
-            bool m_ModelInitialised = false;                 ///< True when the frame generator has successfully loaded a model.
-            size_t m_PendingJobCount = 0;                    ///< Number of frames sitting in the queue awaiting inference.
-            uint64_t m_CompletedInferenceCount = 0;          ///< Total number of jobs that produced an output tensor.
-            double m_LastInferenceMilliseconds = 0.0;        ///< Duration of the most recent inference in milliseconds.
-            double m_AverageInferenceMilliseconds = 0.0;     ///< Average duration across all completed runs.
-            bool m_TextureReady = false;                     ///< Signals whether the AI texture is bound for sampling.
-            float m_BlendStrength = 0.0f;                    ///< Current blend factor applied during compositing.
-            VkExtent2D m_TextureExtent{ 0, 0 };              ///< Resolution of the uploaded AI texture.
-            double m_ReservedMetric = 0.0;                   ///< Placeholder slot for future statistics without breaking ABI.
+            bool m_ModelInitialised = false;                 // True when the frame generator has successfully loaded a model.
+            size_t m_PendingJobCount = 0;                    // Number of frames sitting in the queue awaiting inference.
+            uint64_t m_CompletedInferenceCount = 0;          // Total number of jobs that produced an output tensor.
+            double m_LastInferenceMilliseconds = 0.0;        // Duration of the most recent inference in milliseconds.
+            double m_AverageInferenceMilliseconds = 0.0;     // Average duration across all completed runs.
+            bool m_TextureReady = false;                     // Signals whether the AI texture is bound for sampling.
+            float m_BlendStrength = 0.0f;                    // Current blend factor applied during compositing.
+            VkExtent2D m_TextureExtent{ 0, 0 };              // Resolution of the uploaded AI texture.
+            double m_ReservedMetric = 0.0;                   // Placeholder slot for future statistics without breaking ABI.
         };
 
         Renderer();
@@ -135,12 +135,12 @@ namespace Trident
         // resources required to keep it alive for the duration of the renderer.
         struct ImGuiTexture
         {
-            VkImage m_Image = VK_NULL_HANDLE;              ///< GPU image storing the texels.
-            VkDeviceMemory m_ImageMemory = VK_NULL_HANDLE; ///< Device memory bound to the image.
-            VkImageView m_ImageView = VK_NULL_HANDLE;      ///< View consumed by ImGui shaders.
-            VkSampler m_Sampler = VK_NULL_HANDLE;          ///< Sampler describing filtering and addressing.
-            ImTextureID m_Descriptor = 0;                  ///< Descriptor passed directly to ImGui::Image.
-            VkExtent2D m_Extent{ 0, 0 };                   ///< Dimensions used for sizing the widget.
+            VkImage m_Image = VK_NULL_HANDLE;              // GPU image storing the texels.
+            VkDeviceMemory m_ImageMemory = VK_NULL_HANDLE; // Device memory bound to the image.
+            VkImageView m_ImageView = VK_NULL_HANDLE;      // View consumed by ImGui shaders.
+            VkSampler m_Sampler = VK_NULL_HANDLE;          // Sampler describing filtering and addressing.
+            ImTextureID m_Descriptor = 0;                  // Descriptor passed directly to ImGui::Image.
+            VkExtent2D m_Extent{ 0, 0 };                   // Dimensions used for sizing the widget.
         };
 
         // Creates a texture that can be consumed by ImGui widgets. The renderer keeps
@@ -169,7 +169,7 @@ namespace Trident
         /**
          * @brief Toggle viewport recording so panels can export rendered frames.
          */
-        void SetViewportRecordingEnabled(bool enabled, uint32_t viewportId, VkExtent2D extent, const std::filesystem::path& outputPath);
+        bool SetViewportRecordingEnabled(bool enabled, uint32_t viewportId, VkExtent2D extent, const std::filesystem::path& outputPath);
 
         /**
          * @brief Submit the latest readback buffer as a recorded frame when available.
@@ -251,41 +251,41 @@ namespace Trident
         bool m_Shutdown = false;
 
     private:
-        static constexpr uint32_t s_MaxBonesPerSkeleton = 128; ///< Enough for Mixamo rigs with headroom for future assets.
+        static constexpr uint32_t s_MaxBonesPerSkeleton = 128; // Enough for Mixamo rigs with headroom for future assets.
 
         struct MeshDrawInfo
         {
-            uint32_t m_FirstIndex = 0;            ///< First index in the shared buffer for the mesh.
-            uint32_t m_IndexCount = 0;            ///< Number of indices the draw call should submit.
-            int32_t m_BaseVertex = 0;             ///< Base vertex offset applied during drawing.
-            int32_t m_MaterialIndex = -1;         ///< Material resolved at upload time.
+            uint32_t m_FirstIndex = 0;            // First index in the shared buffer for the mesh.
+            uint32_t m_IndexCount = 0;            // Number of indices the draw call should submit.
+            int32_t m_BaseVertex = 0;             // Base vertex offset applied during drawing.
+            int32_t m_MaterialIndex = -1;         // Material resolved at upload time.
         };
 
         struct MeshDrawCommand
         {
-            glm::mat4 m_ModelMatrix{ 1.0f };      ///< Cached transform ready for the GPU.
-            const MeshComponent* m_Component = nullptr; ///< Source component describing the draw parameters.
-            const TextureComponent* m_TextureComponent = nullptr; ///< Optional texture binding supplied by the entity.
-            const AnimationComponent* m_AnimationComponent = nullptr; ///< Optional animation data driving skinning.
-            uint32_t m_BoneOffset = 0;            ///< Offset into the bone palette buffer assigned during batching.
-            uint32_t m_BoneCount = 0;             ///< Number of matrices contributing to this palette.
-            ECS::Entity m_Entity = 0;             ///< Owning entity for debugging and picking hooks.
+            glm::mat4 m_ModelMatrix{ 1.0f };      // Cached transform ready for the GPU.
+            const MeshComponent* m_Component = nullptr; // Source component describing the draw parameters.
+            const TextureComponent* m_TextureComponent = nullptr; // Optional texture binding supplied by the entity.
+            const AnimationComponent* m_AnimationComponent = nullptr; // Optional animation data driving skinning.
+            uint32_t m_BoneOffset = 0;            // Offset into the bone palette buffer assigned during batching.
+            uint32_t m_BoneCount = 0;             // Number of matrices contributing to this palette.
+            ECS::Entity m_Entity = 0;             // Owning entity for debugging and picking hooks.
         };
 
         struct SpriteDrawCommand
         {
-            glm::mat4 m_ModelMatrix{ 1.0f };        ///< Cached transform ready for GPU submission.
-            const SpriteComponent* m_Component = nullptr; ///< Pointer into ECS storage for sprite properties.
-            const TextureComponent* m_TextureComponent = nullptr; ///< Optional texture binding supplied by the entity.
-            ECS::Entity m_Entity = 0;               ///< Owning entity for debugging and future sorting.
+            glm::mat4 m_ModelMatrix{ 1.0f };        // Cached transform ready for GPU submission.
+            const SpriteComponent* m_Component = nullptr; // Pointer into ECS storage for sprite properties.
+            const TextureComponent* m_TextureComponent = nullptr; // Optional texture binding supplied by the entity.
+            ECS::Entity m_Entity = 0;               // Owning entity for debugging and future sorting.
         };
 
         struct TextSubmission
         {
-            uint32_t m_ViewportId = 0; ///< Target viewport that should receive the overlay text.
-            glm::vec2 m_Position{ 0.0f }; ///< Top-left text anchor in viewport pixels.
-            glm::vec4 m_Color{ 1.0f };   ///< RGBA tint applied to every glyph.
-            std::string m_Text;          ///< UTF-8 encoded message queued for rendering.
+            uint32_t m_ViewportId = 0; // Target viewport that should receive the overlay text.
+            glm::vec2 m_Position{ 0.0f }; // Top-left text anchor in viewport pixels.
+            glm::vec4 m_Color{ 1.0f };   // RGBA tint applied to every glyph.
+            std::string m_Text;          // UTF-8 encoded message queued for rendering.
         };
 
         void GatherMeshDraws();
@@ -310,11 +310,11 @@ namespace Trident
         VkDeviceMemory m_IndexBufferMemory = VK_NULL_HANDLE;
         uint32_t m_IndexCount = 0;
 
-        std::vector<VkBuffer> m_BonePaletteBuffers;             ///< Storage buffers holding per-draw skinning palettes.
-        std::vector<VkDeviceMemory> m_BonePaletteMemory;        ///< Device memory backing the bone palette buffers.
-        VkDeviceSize m_BonePaletteBufferSize = 0;               ///< Size in bytes of each bone palette buffer.
-        size_t m_BonePaletteMatrixCapacity = 0;                 ///< Number of matrices allocated per swapchain image.
-        std::vector<glm::mat4> m_BonePaletteScratch;            ///< CPU staging area populated before uploading to the GPU.
+        std::vector<VkBuffer> m_BonePaletteBuffers;             // Storage buffers holding per-draw skinning palettes.
+        std::vector<VkDeviceMemory> m_BonePaletteMemory;        // Device memory backing the bone palette buffers.
+        VkDeviceSize m_BonePaletteBufferSize = 0;               // Size in bytes of each bone palette buffer.
+        size_t m_BonePaletteMatrixCapacity = 0;                 // Number of matrices allocated per swapchain image.
+        std::vector<glm::mat4> m_BonePaletteScratch;            // CPU staging area populated before uploading to the GPU.
 
         // Pipeline
         Pipeline m_Pipeline;
@@ -328,31 +328,31 @@ namespace Trident
         std::vector<VkDescriptorSet> m_DescriptorSets;
         std::vector<VkBuffer> m_GlobalUniformBuffers;
         std::vector<VkDeviceMemory> m_GlobalUniformBuffersMemory;
-        std::vector<VkBuffer> m_MaterialBuffers;               ///< Per-frame GPU-visible cache of material records.
-        std::vector<VkDeviceMemory> m_MaterialBuffersMemory;    ///< Backing memory for the material storage buffers.
-        std::vector<bool> m_MaterialBufferDirty;                ///< Tracks which per-frame material uploads still need refreshing.
-        size_t m_MaterialBufferElementCount = 0;                ///< Number of MaterialUniformBuffer records resident on the GPU.
+        std::vector<VkBuffer> m_MaterialBuffers;               // Per-frame GPU-visible cache of material records.
+        std::vector<VkDeviceMemory> m_MaterialBuffersMemory;    // Backing memory for the material storage buffers.
+        std::vector<bool> m_MaterialBufferDirty;                // Tracks which per-frame material uploads still need refreshing.
+        size_t m_MaterialBufferElementCount = 0;                // Number of MaterialUniformBuffer records resident on the GPU.
         struct TextureSlot
         {
-            VkImage m_Image = VK_NULL_HANDLE;                    ///< Backing image containing the texture pixels.
-            VkDeviceMemory m_Memory = VK_NULL_HANDLE;            ///< Device memory bound to the image.
-            VkImageView m_View = VK_NULL_HANDLE;                 ///< View used for sampling.
-            VkSampler m_Sampler = VK_NULL_HANDLE;                ///< Sampler describing filtering/wrapping.
-            VkDescriptorImageInfo m_Descriptor{};                ///< Cached descriptor info for descriptor writes.
-            std::string m_SourcePath{};                          ///< Normalized path of the source asset.
+            VkImage m_Image = VK_NULL_HANDLE;                    // Backing image containing the texture pixels.
+            VkDeviceMemory m_Memory = VK_NULL_HANDLE;            // Device memory bound to the image.
+            VkImageView m_View = VK_NULL_HANDLE;                 // View used for sampling.
+            VkSampler m_Sampler = VK_NULL_HANDLE;                // Sampler describing filtering/wrapping.
+            VkDescriptorImageInfo m_Descriptor{};                // Cached descriptor info for descriptor writes.
+            std::string m_SourcePath{};                          // Normalized path of the source asset.
         };
 
-        std::vector<TextureSlot> m_TextureSlots;                 ///< GPU texture slots shared across materials.
-        std::unordered_map<std::string, uint32_t> m_TextureSlotLookup; ///< Maps normalized texture paths to slot indices.
-        std::vector<VkDescriptorImageInfo> m_TextureDescriptorCache;   ///< Scratch buffer used when updating descriptor arrays.
-        VkBuffer m_SpriteVertexBuffer = VK_NULL_HANDLE;      ///< Shared quad geometry for batched sprites.
-        VkDeviceMemory m_SpriteVertexMemory = VK_NULL_HANDLE;///< Memory backing the sprite vertex buffer.
-        VkBuffer m_SpriteIndexBuffer = VK_NULL_HANDLE;       ///< Index buffer referencing the shared quad.
-        VkDeviceMemory m_SpriteIndexMemory = VK_NULL_HANDLE; ///< Memory backing the sprite index buffer.
-        uint32_t m_SpriteIndexCount = 0;                    ///< Number of indices issued per sprite draw.
-        std::vector<MeshDrawInfo> m_MeshDrawInfo;           ///< Cached draw metadata for each uploaded mesh.
-        std::vector<MeshDrawCommand> m_MeshDrawCommands;    ///< Mesh draw list gathered per-frame from the ECS registry.
-        std::vector<Geometry::Mesh> m_GeometryCache;        ///< CPU-side copy of uploaded meshes for incremental rebuilds.
+        std::vector<TextureSlot> m_TextureSlots;                 // GPU texture slots shared across materials.
+        std::unordered_map<std::string, uint32_t> m_TextureSlotLookup; // Maps normalized texture paths to slot indices.
+        std::vector<VkDescriptorImageInfo> m_TextureDescriptorCache;   // Scratch buffer used when updating descriptor arrays.
+        VkBuffer m_SpriteVertexBuffer = VK_NULL_HANDLE;      // Shared quad geometry for batched sprites.
+        VkDeviceMemory m_SpriteVertexMemory = VK_NULL_HANDLE;// Memory backing the sprite vertex buffer.
+        VkBuffer m_SpriteIndexBuffer = VK_NULL_HANDLE;       // Index buffer referencing the shared quad.
+        VkDeviceMemory m_SpriteIndexMemory = VK_NULL_HANDLE; // Memory backing the sprite index buffer.
+        uint32_t m_SpriteIndexCount = 0;                    // Number of indices issued per sprite draw.
+        std::vector<MeshDrawInfo> m_MeshDrawInfo;           // Cached draw metadata for each uploaded mesh.
+        std::vector<MeshDrawCommand> m_MeshDrawCommands;    // Mesh draw list gathered per-frame from the ECS registry.
+        std::vector<Geometry::Mesh> m_GeometryCache;        // CPU-side copy of uploaded meshes for incremental rebuilds.
 
         // Storage for ImGui textures (such as file icons) so their Vulkan resources
         // remain valid until the renderer explicitly destroys them.
@@ -378,9 +378,9 @@ namespace Trident
         // Offscreen rendering resources keyed by viewport identifier so multiple panels can co-exist.
         struct ViewportContext
         {
-            ViewportInfo m_Info{};                     ///< Latest position/size reported by the owning panel.
-            VkExtent2D m_CachedExtent{ 0, 0 };         ///< Cached Vulkan extent used to avoid redundant resizes.
-            OffscreenTarget m_Target{};                ///< Offscreen render target backing the viewport.
+            ViewportInfo m_Info{};                     // Latest position/size reported by the owning panel.
+            VkExtent2D m_CachedExtent{ 0, 0 };         // Cached Vulkan extent used to avoid redundant resizes.
+            OffscreenTarget m_Target{};                // Offscreen render target backing the viewport.
         };
 
         std::unordered_map<uint32_t, ViewportContext> m_ViewportContexts;
@@ -391,14 +391,14 @@ namespace Trident
         Buffers m_Buffers;
 
         TextRenderer m_TextRenderer;
-        std::unordered_map<uint32_t, std::vector<TextSubmission>> m_TextSubmissionQueue; ///< Per-viewport text queued this frame.
+        std::unordered_map<uint32_t, std::vector<TextSubmission>> m_TextSubmissionQueue; // Per-viewport text queued this frame.
 
         size_t m_MaxVertexCount = 0;
         size_t m_MaxIndexCount = 0;
         std::unique_ptr<Vertex[]> m_StagingVertices;
         std::unique_ptr<uint32_t[]> m_StagingIndices;
         std::vector<Geometry::Material> m_Materials; // CPU copy of the material table used during shading
-        std::vector<SpriteDrawCommand> m_SpriteDrawList;    ///< Cached list of sprites visible for the current frame.
+        std::vector<SpriteDrawCommand> m_SpriteDrawList;    // Cached list of sprites visible for the current frame.
 
         ECS::Entity m_Entity = 0;
         ECS::Registry* m_Registry = nullptr;
@@ -410,18 +410,18 @@ namespace Trident
         std::vector<VkDescriptorSet> m_SkyboxDescriptorSets;
 
         UI::ImGuiLayer* m_ImGuiLayer = nullptr;
-        Camera* m_EditorCamera = nullptr;          ///< Camera used while authoring scenes in the viewport.
-        Camera* m_RuntimeCamera = nullptr;         ///< Camera representing runtime/gameplay output routed to the game viewport.
-        bool m_RuntimeCameraReady = false;         ///< Tracks whether the runtime camera currently points at a valid scene entity.
+        Camera* m_EditorCamera = nullptr;          // Camera used while authoring scenes in the viewport.
+        Camera* m_RuntimeCamera = nullptr;         // Camera representing runtime/gameplay output routed to the game viewport.
+        bool m_RuntimeCameraReady = false;         // Tracks whether the runtime camera currently points at a valid scene entity.
         size_t m_FrameAllocationCount = 0;
 
         size_t m_ModelCount = 0;
         size_t m_TriangleCount = 0;
 
-        static constexpr uint32_t s_MaxPointLights = kMaxPointLights; ///< Mirror uniform buffer light budget.
-        static constexpr glm::vec3 s_DefaultDirectionalDirection{ -0.5f, -1.0f, -0.3f }; ///< Fallback sun direction.
-        static constexpr glm::vec3 s_DefaultDirectionalColor{ 1.0f, 0.98f, 0.92f }; ///< Warm sunlight tint.
-        static constexpr float s_DefaultDirectionalIntensity = 5.0f; ///< Brightness used when no lights exist.
+        static constexpr uint32_t s_MaxPointLights = kMaxPointLights; // Mirror uniform buffer light budget.
+        static constexpr glm::vec3 s_DefaultDirectionalDirection{ -0.5f, -1.0f, -0.3f }; // Fallback sun direction.
+        static constexpr glm::vec3 s_DefaultDirectionalColor{ 1.0f, 0.98f, 0.92f }; // Warm sunlight tint.
+        static constexpr float s_DefaultDirectionalIntensity = 5.0f; // Brightness used when no lights exist.
         glm::vec3 m_AmbientColor{ 0.03f };  // Ambient tint simulating image-based lighting
         float m_AmbientIntensity = 1.0f;     // Scalar multiplier for ambient contribution
         glm::vec4 m_ClearColor{ 0.005f, 0.005f, 0.005f, 1.0f }; // Default background colour used for both offscreen and swapchain clears
@@ -437,45 +437,46 @@ namespace Trident
         std::chrono::system_clock::time_point m_PerformanceCaptureStartTime{};
         std::vector<VkImageLayout> m_SwapchainDepthLayouts;
 
-        AI::FrameGenerator m_FrameGenerator;                   ///< Helper that owns the ONNX runtime bindings.
-        std::vector<float> m_AiInterpolationBuffer;            ///< Latest AI output available for dependent passes.
-        std::vector<float> m_PendingFrameReadback;             ///< Staging buffer populated once GPU readback hooks are ready.
-        std::vector<VkBuffer> m_FrameReadbackBuffers;          ///< CPU-visible buffers receiving colour copies per swapchain image.
-        std::vector<VkDeviceMemory> m_FrameReadbackMemory;     ///< Host-visible allocations backing the staging buffers.
-        std::vector<bool> m_FrameReadbackPending;              ///< Flags indicating which buffers contain fresh GPU data.
-        VkExtent2D m_FrameReadbackExtent{ 0, 0 };              ///< Cached extent used to validate copy/readback paths.
-        VkDeviceSize m_FrameReadbackBufferSize = 0;            ///< Expected byte size for each staging buffer.
-        uint32_t m_FrameReadbackBytesPerPixel = 0;             ///< Cached pixel stride derived from the swapchain format.
-        uint32_t m_FrameReadbackChannelCount = 0;              ///< Number of colour channels copied into the staging buffer.
-        VkImage m_AiTextureImage = VK_NULL_HANDLE;             ///< GPU image sampling the AI generated frame.
-        VkDeviceMemory m_AiTextureMemory = VK_NULL_HANDLE;     ///< Device local memory backing the AI texture.
-        VkImageView m_AiTextureView = VK_NULL_HANDLE;          ///< View bound to descriptor sets for sampling.
-        VkSampler m_AiTextureSampler = VK_NULL_HANDLE;         ///< Sampler used when shading blends the AI output.
-        VkImageLayout m_AiTextureLayout = VK_IMAGE_LAYOUT_UNDEFINED; ///< Cached layout used when transitioning the AI texture.
-        VkExtent2D m_AiTextureExtent{ 0, 0 };                  ///< Resolution of the GPU AI texture for descriptor updates.
-        VkBuffer m_AiUploadBuffer = VK_NULL_HANDLE;            ///< Host-visible staging buffer for AI uploads.
-        VkDeviceMemory m_AiUploadMemory = VK_NULL_HANDLE;      ///< Memory backing the staging buffer.
-        VkDeviceSize m_AiUploadBufferSize = 0;                 ///< Size of the host-visible staging allocation.
-        bool m_AiTextureDirty = false;                         ///< Signals that a fresh AI frame should be uploaded to the GPU.
-        bool m_AiTextureReady = false;                         ///< Tracks whether the descriptor can point at the GPU texture.
-        float m_AiBlendStrength = 0.35f;                       ///< Blend factor used to mix the AI and rasterised frames.
-        AiDebugStats m_AiDebugStats{};                         ///< Snapshot of AI metrics surfaced to debug tooling.
-        bool m_AiInputLayoutVerified = false;                  ///< Ensures tensor layout validation logs only trigger once.
-        bool m_AiOutputLayoutVerified = false;                 ///< Ensures output layout validation does not spam the console.
-        inline static constexpr std::chrono::milliseconds s_AiModelSearchInterval{ 1000 }; ///< Interval between AI model search attempts.
-        std::chrono::steady_clock::time_point m_AiNextModelSearchTime{ std::chrono::steady_clock::time_point::min() }; ///< Time when the next model search should be attempted.
-        bool m_AiModelMissingWarningIssued = false;            ///< Prevents the missing model log from repeating every frame.
-        bool m_AiModelInitialiseWarningIssued = false;         ///< Prevents repeated warnings when a supplied model fails to load.
-        AI::FrameDatasetRecorder m_FrameDatasetRecorder;       ///< Helper that persists AI training samples for offline pipelines.
+        AI::FrameGenerator m_FrameGenerator;                   // Helper that owns the ONNX runtime bindings.
+        std::vector<float> m_AiInterpolationBuffer;            // Latest AI output available for dependent passes.
+        std::vector<float> m_PendingFrameReadback;             // Staging buffer populated once GPU readback hooks are ready.
+        std::vector<VkBuffer> m_FrameReadbackBuffers;          // CPU-visible buffers receiving colour copies per swapchain image.
+        std::vector<VkDeviceMemory> m_FrameReadbackMemory;     // Host-visible allocations backing the staging buffers.
+        std::vector<bool> m_FrameReadbackPending;              // Flags indicating which buffers contain fresh GPU data.
+        VkExtent2D m_FrameReadbackExtent{ 0, 0 };              // Cached extent used to validate copy/readback paths.
+        VkDeviceSize m_FrameReadbackBufferSize = 0;            // Expected byte size for each staging buffer.
+        uint32_t m_FrameReadbackBytesPerPixel = 0;             // Cached pixel stride derived from the swapchain format.
+        uint32_t m_FrameReadbackChannelCount = 0;              // Number of colour channels copied into the staging buffer.
+        bool m_ReadbackConfigurationWarningIssued = false;     // Tracks whether configuration warnings have already been issued.
+        VkImage m_AiTextureImage = VK_NULL_HANDLE;             // GPU image sampling the AI generated frame.
+        VkDeviceMemory m_AiTextureMemory = VK_NULL_HANDLE;     // Device local memory backing the AI texture.
+        VkImageView m_AiTextureView = VK_NULL_HANDLE;          // View bound to descriptor sets for sampling.
+        VkSampler m_AiTextureSampler = VK_NULL_HANDLE;         // Sampler used when shading blends the AI output.
+        VkImageLayout m_AiTextureLayout = VK_IMAGE_LAYOUT_UNDEFINED; // Cached layout used when transitioning the AI texture.
+        VkExtent2D m_AiTextureExtent{ 0, 0 };                  // Resolution of the GPU AI texture for descriptor updates.
+        VkBuffer m_AiUploadBuffer = VK_NULL_HANDLE;            // Host-visible staging buffer for AI uploads.
+        VkDeviceMemory m_AiUploadMemory = VK_NULL_HANDLE;      // Memory backing the staging buffer.
+        VkDeviceSize m_AiUploadBufferSize = 0;                 // Size of the host-visible staging allocation.
+        bool m_AiTextureDirty = false;                         // Signals that a fresh AI frame should be uploaded to the GPU.
+        bool m_AiTextureReady = false;                         // Tracks whether the descriptor can point at the GPU texture.
+        float m_AiBlendStrength = 0.35f;                       // Blend factor used to mix the AI and rasterised frames.
+        AiDebugStats m_AiDebugStats{};                         // Snapshot of AI metrics surfaced to debug tooling.
+        bool m_AiInputLayoutVerified = false;                  // Ensures tensor layout validation logs only trigger once.
+        bool m_AiOutputLayoutVerified = false;                 // Ensures output layout validation does not spam the console.
+        inline static constexpr std::chrono::milliseconds s_AiModelSearchInterval{ 1000 }; // Interval between AI model search attempts.
+        std::chrono::steady_clock::time_point m_AiNextModelSearchTime{ std::chrono::steady_clock::time_point::min() }; // Time when the next model search should be attempted.
+        bool m_AiModelMissingWarningIssued = false;            // Prevents the missing model log from repeating every frame.
+        bool m_AiModelInitialiseWarningIssued = false;         // Prevents repeated warnings when a supplied model fails to load.
+        AI::FrameDatasetRecorder m_FrameDatasetRecorder;       // Helper that persists AI training samples for offline pipelines.
 
-        bool m_ViewportRecordingEnabled = false;               ///< Tracks whether viewport capture is active.
-        uint32_t m_RecordingViewportId = s_InvalidViewportId;  ///< Active viewport being recorded.
-        VkExtent2D m_RecordingExtent{ 0, 0 };                  ///< Resolution locked for the recording session.
-        std::filesystem::path m_RecordingOutputPath{};         ///< Destination file path for the recording session.
-        std::unique_ptr<VideoEncoder> m_VideoEncoder;          ///< Helper that streams recorded frames to disk.
-        std::vector<uint8_t> m_PendingFrameReadbackBytes;      ///< Raw RGBA data copied from the GPU for capture.
-        std::vector<VideoEncoder::RecordedFrame> m_ViewportFrameBuffer; ///< Buffered frames retained for status displays.
-        std::chrono::system_clock::time_point m_LastReadbackTimestamp{}; ///< Timestamp captured alongside the last readback.
+        bool m_ViewportRecordingEnabled = false;               // Tracks whether viewport capture is active.
+        uint32_t m_RecordingViewportId = s_InvalidViewportId;  // Active viewport being recorded.
+        VkExtent2D m_RecordingExtent{ 0, 0 };                  // Resolution locked for the recording session.
+        std::filesystem::path m_RecordingOutputPath{};         // Destination file path for the recording session.
+        std::unique_ptr<VideoEncoder> m_VideoEncoder;          // Helper that streams recorded frames to disk.
+        std::vector<uint8_t> m_PendingFrameReadbackBytes;      // Raw RGBA data copied from the GPU for capture.
+        std::vector<VideoEncoder::RecordedFrame> m_ViewportFrameBuffer; // Buffered frames retained for status displays.
+        std::chrono::system_clock::time_point m_LastReadbackTimestamp{}; // Timestamp captured alongside the last readback.
 
     private:
         // Core setup
