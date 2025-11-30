@@ -447,6 +447,7 @@ namespace Trident
         VkDeviceSize m_FrameReadbackBufferSize = 0;            // Expected byte size for each staging buffer.
         uint32_t m_FrameReadbackBytesPerPixel = 0;             // Cached pixel stride derived from the swapchain format.
         uint32_t m_FrameReadbackChannelCount = 0;              // Number of colour channels copied into the staging buffer.
+        std::array<uint32_t, 4> m_FrameReadbackChannelMapping{ { 0, 1, 2, 3 } }; // Mapping from source format into RGBA order.
         bool m_ReadbackConfigurationWarningIssued = false;     // Tracks whether configuration warnings have already been issued.
         VkImage m_AiTextureImage = VK_NULL_HANDLE;             // GPU image sampling the AI generated frame.
         VkDeviceMemory m_AiTextureMemory = VK_NULL_HANDLE;     // Device local memory backing the AI texture.

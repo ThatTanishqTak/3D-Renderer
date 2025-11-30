@@ -47,8 +47,9 @@ namespace
 
     struct SwapchainFormatInfo
     {
-        uint32_t m_BytesPerPixel = 0; ///< Total bytes consumed by a single pixel in the swapchain format.
-        uint32_t m_ChannelCount = 0;  ///< Number of colour channels represented by the format.
+        uint32_t m_BytesPerPixel = 0; // Total bytes consumed by a single pixel in the swapchain format.
+        uint32_t m_ChannelCount = 0;  // Number of colour channels represented by the format.
+        std::array<uint32_t, 4> m_ChannelMapping{ 0, 1, 2, 3 }; // Source channel order converted into RGBA output.
     };
 
     /**
@@ -56,13 +57,13 @@ namespace
      */
     struct TensorShapeInfo
     {
-        bool m_IsValid = false;              ///< Signals whether the provided shape matched the expected NHWC layout.
-        bool m_HasExplicitBatch = false;     ///< Tracks whether the model declared the batch dimension explicitly.
-        bool m_IsChannelsLast = false;       ///< Indicates that the tensor arranges colour channels in the final dimension.
-        int64_t m_Batch = 1;                 ///< Batch dimension reported by the model (defaulting to one sample).
-        int64_t m_Height = -1;               ///< Height component extracted from the tensor shape.
-        int64_t m_Width = -1;                ///< Width component extracted from the tensor shape.
-        int64_t m_Channels = -1;             ///< Channel count derived from the tensor shape.
+        bool m_IsValid = false;              // Signals whether the provided shape matched the expected NHWC layout.
+        bool m_HasExplicitBatch = false;     // Tracks whether the model declared the batch dimension explicitly.
+        bool m_IsChannelsLast = false;       // Indicates that the tensor arranges colour channels in the final dimension.
+        int64_t m_Batch = 1;                 // Batch dimension reported by the model (defaulting to one sample).
+        int64_t m_Height = -1;               // Height component extracted from the tensor shape.
+        int64_t m_Width = -1;                // Width component extracted from the tensor shape.
+        int64_t m_Channels = -1;             // Channel count derived from the tensor shape.
     };
 
     SwapchainFormatInfo QuerySwapchainFormatInfo(VkFormat format)
@@ -72,17 +73,20 @@ namespace
         {
         case VK_FORMAT_B8G8R8A8_UNORM:
         case VK_FORMAT_B8G8R8A8_SRGB:
+            // Vulkan stores pixels as BGRA for this swapchain format, so remap into RGBA before consumption.
+            return { 4u, 4u, { 2u, 1u, 0u, 3u } };
         case VK_FORMAT_R8G8B8A8_UNORM:
         case VK_FORMAT_R8G8B8A8_SRGB:
-            return { 4u, 4u };
+            // Already in RGBA order, so no remapping is required.
+            return { 4u, 4u, { 0u, 1u, 2u, 3u } };
         default:
             return {};
         }
     }
 
     /**
- * @brief Extract the NHWC layout information from the model supplied tensor shape.
- */
+     * @brief Extract the NHWC layout information from the model supplied tensor shape.
+     */
     TensorShapeInfo ParseTensorShapeNhwc(std::span<const int64_t> a_Shape)
     {
         TensorShapeInfo l_Info{};
@@ -922,6 +926,7 @@ namespace Trident
         m_FrameReadbackBufferSize = l_BufferSize;
         m_FrameReadbackBytesPerPixel = l_FormatInfo.m_BytesPerPixel;
         m_FrameReadbackChannelCount = l_FormatInfo.m_ChannelCount;
+        m_FrameReadbackChannelMapping = l_FormatInfo.m_ChannelMapping;
         m_ReadbackConfigurationWarningIssued = false;
 
         TR_CORE_TRACE("Frame readback staging resized to {}x{} ({} bytes per pixel, {} buffers)", l_TargetExtent.width, l_TargetExtent.height,
@@ -947,6 +952,7 @@ namespace Trident
         m_FrameReadbackBufferSize = 0;
         m_FrameReadbackBytesPerPixel = 0;
         m_FrameReadbackChannelCount = 0;
+        m_FrameReadbackChannelMapping = { 0, 1, 2, 3 };
         m_ReadbackConfigurationWarningIssued = false;
         m_PendingFrameReadback.clear();
         m_PendingFrameReadbackBytes.clear();
@@ -999,15 +1005,32 @@ namespace Trident
         m_PendingFrameReadbackBytes.resize(l_TotalElements);
 
         const float l_Normalise = 1.0f / 255.0f;
-        for (size_t it_Index = 0; it_Index < l_TotalElements; ++it_Index)
+        const uint32_t l_ChannelCount = m_FrameReadbackChannelCount;
+        const bool l_ApplyMapping = (l_ChannelCount == 4u) && (m_FrameReadbackBytesPerPixel >= 4u);
+
+        for (size_t it_PixelIndex = 0; it_PixelIndex < l_PixelCount; ++it_PixelIndex)
         {
-            const uint8_t l_Value = l_SourceBytes[it_Index];
+            const size_t l_SourceOffset = it_PixelIndex * static_cast<size_t>(m_FrameReadbackBytesPerPixel);
+            const size_t l_DestinationOffset = it_PixelIndex * static_cast<size_t>(l_ChannelCount);
 
-            // For AI
-            m_PendingFrameReadback[it_Index] = static_cast<float>(l_Value) * l_Normalise;
+            for (uint32_t it_Channel = 0; it_Channel < l_ChannelCount; ++it_Channel)
+            {
+                uint32_t l_SourceChannel = l_ApplyMapping ? m_FrameReadbackChannelMapping[it_Channel] : it_Channel;
 
-            // For video encoder
-            m_PendingFrameReadbackBytes[it_Index] = l_Value;
+                // Protect against unexpected formats by falling back to the original order.
+                if (l_SourceChannel >= m_FrameReadbackBytesPerPixel)
+                {
+                    l_SourceChannel = it_Channel;
+                }
+
+                const uint8_t l_Value = l_SourceBytes[l_SourceOffset + static_cast<size_t>(l_SourceChannel)];
+
+                // AI consumers expect normalised floats in RGBA order.
+                m_PendingFrameReadback[l_DestinationOffset + it_Channel] = static_cast<float>(l_Value) * l_Normalise;
+
+                // Video encoder expects raw bytes in RGBA order so it always feeds FFmpeg the same layout.
+                m_PendingFrameReadbackBytes[l_DestinationOffset + it_Channel] = l_Value;
+            }
         }
 
         vkUnmapMemory(l_Device, m_FrameReadbackMemory[imageIndex]);
