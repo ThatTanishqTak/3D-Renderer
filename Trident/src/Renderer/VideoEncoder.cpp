@@ -155,9 +155,9 @@ namespace Trident
                 return static_cast<char>(std::tolower(c));
             });
 
-        const bool l_UsingFfmpeg = (l_NormalisedExtension == ".mp4" || l_NormalisedExtension == ".mov" || l_NormalisedExtension == ".avi");
+        const bool l_UsingFFmpeg = (l_NormalisedExtension == ".mp4" || l_NormalisedExtension == ".mov" || l_NormalisedExtension == ".avi");
 
-        if (l_UsingFfmpeg)
+        if (l_UsingFFmpeg)
         {
             // Use FFmpeg to handle compressed containers on supported platforms.
             m_UsingFfmpegContainer = InitialiseFfmpegEncoder();

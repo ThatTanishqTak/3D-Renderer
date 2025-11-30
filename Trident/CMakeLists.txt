@@ -21,26 +21,71 @@ if(NOT VULKAN_INCLUDE_DIR OR NOT VULKAN_LIBRARY)
   message(FATAL_ERROR "Unable to find Vulkan headers or lib in ${VULKAN_SDK_PATH}")
 endif()
 
-# FFmpeg
+
+# FFmpeg auto-download + configuration
 set(FFMPEG_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/vendor/FFmpeg")
+
+# URL of the FFmpeg dev build zip (headers + libs)
+set(TRIDENT_FFMPEG_URL
+    "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl-shared.zip"
+    CACHE STRING "URL of FFmpeg dev build (zip with include/ and lib/)" )
+
+# Use presence of avcodec.lib as the "installed" marker on Windows.
+# On non-Windows, you can adjust this to whatever shared objects you use.
+if(WIN32)
+  set(TRIDENT_FFMPEG_MARKER "${FFMPEG_ROOT}/lib/avcodec.lib")
+else()
+  set(TRIDENT_FFMPEG_MARKER "${FFMPEG_ROOT}/lib/libavcodec.so")
+endif()
+
+if(NOT EXISTS "${TRIDENT_FFMPEG_MARKER}")
+  if(NOT TRIDENT_FFMPEG_URL)
+    message(FATAL_ERROR
+      "FFmpeg not found in ${FFMPEG_ROOT}, and TRIDENT_FFMPEG_URL is empty.\n"
+      "Set TRIDENT_FFMPEG_URL to a valid FFmpeg dev build zip.")
+  endif()
+
+  message(STATUS "FFmpeg not found in ${FFMPEG_ROOT}, downloading from: ${TRIDENT_FFMPEG_URL}")
+
+  file(MAKE_DIRECTORY "${FFMPEG_ROOT}")
+  set(TRIDENT_FFMPEG_ARCHIVE "${CMAKE_BINARY_DIR}/ffmpeg-download.zip")
+
+  file(DOWNLOAD
+    "${TRIDENT_FFMPEG_URL}"
+    "${TRIDENT_FFMPEG_ARCHIVE}"
+    SHOW_PROGRESS
+  )
+
+  # Extract the archive into vendor/FFmpeg.
+  # For .zip archives, 'tar xvf' works with CMake's built-in tar.
+  execute_process(
+    COMMAND ${CMAKE_COMMAND} -E tar xvf "${TRIDENT_FFMPEG_ARCHIVE}"
+    WORKING_DIRECTORY "${FFMPEG_ROOT}"
+  )
+
+  file(REMOVE "${TRIDENT_FFMPEG_ARCHIVE}")
+endif()
+
+# FFmpeg layout config
 set(FFMPEG_INCLUDE_DIR "${FFMPEG_ROOT}/include")
+set(FFMPEG_BIN_DIR     "${FFMPEG_ROOT}/bin")
 
 if(WIN32)
   set(FFMPEG_LIB_DIR "${FFMPEG_ROOT}/lib")
-  set(FFMPEG_AVCODEC_LIBRARY   "${FFMPEG_LIB_DIR}/avcodec.lib")
-  set(FFMPEG_AVFORMAT_LIBRARY  "${FFMPEG_LIB_DIR}/avformat.lib")
-  set(FFMPEG_AVUTIL_LIBRARY    "${FFMPEG_LIB_DIR}/avutil.lib")
-  set(FFMPEG_AVDEVICE_LIBRARY  "${FFMPEG_LIB_DIR}/avdevice.lib")
+  set(FFMPEG_AVCODEC_LIBRARY    "${FFMPEG_LIB_DIR}/avcodec.lib")
+  set(FFMPEG_AVFORMAT_LIBRARY   "${FFMPEG_LIB_DIR}/avformat.lib")
+  set(FFMPEG_AVUTIL_LIBRARY     "${FFMPEG_LIB_DIR}/avutil.lib")
+  set(FFMPEG_AVDEVICE_LIBRARY   "${FFMPEG_LIB_DIR}/avdevice.lib")
   set(FFMPEG_SWRESAMPLE_LIBRARY "${FFMPEG_LIB_DIR}/swresample.lib")
-  set(FFMPEG_SWSCALE_LIBRARY   "${FFMPEG_LIB_DIR}/swscale.lib")
+  set(FFMPEG_SWSCALE_LIBRARY    "${FFMPEG_LIB_DIR}/swscale.lib")
 else()
   set(FFMPEG_LIB_DIR "${FFMPEG_ROOT}/lib")
-  set(FFMPEG_AVCODEC_LIBRARY   "${FFMPEG_LIB_DIR}/libavcodec.so")
-  set(FFMPEG_AVFORMAT_LIBRARY  "${FFMPEG_LIB_DIR}/libavformat.so")
-  set(FFMPEG_AVUTIL_LIBRARY    "${FFMPEG_LIB_DIR}/libavutil.so")
-  set(FFMPEG_AVDEVICE_LIBRARY  "${FFMPEG_LIB_DIR}/libavdevice.so")
+  set(FFMPEG_AVCODEC_LIBRARY    "${FFMPEG_LIB_DIR}/libavcodec.so")
+  set(FFMPEG_AVFORMAT_LIBRARY   "${FFMPEG_LIB_DIR}/libavformat.so")
+  set(FFMPEG_AVUTIL_LIBRARY     "${FFMPEG_LIB_DIR}/libavutil.so")
+  set(FFMPEG_AVDEVICE_LIBRARY   "${FFMPEG_LIB_DIR}/libavdevice.so")
   set(FFMPEG_SWRESAMPLE_LIBRARY "${FFMPEG_LIB_DIR}/libswresample.so")
-  set(FFMPEG_SWSCALE_LIBRARY   "${FFMPEG_LIB_DIR}/libswscale.so")
+  set(FFMPEG_SWSCALE_LIBRARY    "${FFMPEG_LIB_DIR}/libswscale.so")
 endif()
 
 # Fail early if the layout is wrong
@@ -59,6 +104,13 @@ foreach(lib IN ITEMS
     message(FATAL_ERROR "FFmpeg library '${lib}' not found at '${${lib}}'")
   endif()
 endforeach()
+
+# Collect FFmpeg DLLs (for copying to runtime output)
+if(EXISTS "${FFMPEG_BIN_DIR}")
+  file(GLOB FFMPEG_DLLS "${FFMPEG_BIN_DIR}/*.dll")
+else()
+  set(FFMPEG_DLLS "")
+endif()
 
 # Vulkan package + FetchContent
 find_package(Vulkan REQUIRED)
@@ -194,8 +246,18 @@ target_compile_definitions(trident_onnx_validator PRIVATE
   TRIDENT_MAX_ONNX_IR=11
 )
 
-add_test(
-  NAME TridentValidateOnnxRuntimeCompatibility
+# Copy FFmpeg DLLs next to the validator executable so it can actually run
+if(FFMPEG_DLLS)
+  foreach(dll IN LISTS FFMPEG_DLLS)
+    add_custom_command(TARGET trident_onnx_validator POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${dll}"
+        $<TARGET_FILE_DIR:trident_onnx_validator>
+    )
+  endforeach()
+endif()
+
+add_test(NAME TridentValidateOnnxRuntimeCompatibility
   COMMAND trident_onnx_validator
   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
 )
