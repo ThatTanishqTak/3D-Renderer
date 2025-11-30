@@ -39,17 +39,17 @@ namespace EditorPanels
         float QueryClipDurationSeconds() const;
 
     private:
-        Trident::ViewportInfo m_ViewportInfo{}; ///< Renderer viewport metadata for the runtime view.
-        bool m_IsHovered = false; ///< Hover tracking used to gate runtime-focused shortcuts.
-        bool m_IsFocused = false; ///< Focus tracking used to route keyboard input to the runtime viewport.
-        Trident::GizmoState* m_GizmoState = nullptr; ///< Shared gizmo state pointer for future runtime gizmo support.
-        Trident::ECS::Registry* m_Registry = nullptr; ///< Registry pointer retained for future runtime entity queries.
-        std::function<void(const std::vector<std::string>&)> m_OnAssetsDropped; ///< Callback invoked when assets are dropped.
-        bool m_IsRecording = false; ///< Tracks whether the panel has initiated a clip export.
-        float m_TargetClipDuration = 0.0f; ///< Duration requested for the current export.
-        std::chrono::steady_clock::time_point m_RecordingStartTime{}; ///< Clock used to track progress.
-        std::string m_CurrentOutputPath; ///< Destination path reported to the user.
-        float m_RecordingProgress = 0.0f; ///< Normalised progress for the UI.
-        std::array<char, 260> m_OutputPathBuffer{}; ///< UI buffer used to collect the export path.
+        Trident::ViewportInfo m_ViewportInfo{}; // Renderer viewport metadata for the runtime view.
+        bool m_IsHovered = false; // Hover tracking used to gate runtime-focused shortcuts.
+        bool m_IsFocused = false; // Focus tracking used to route keyboard input to the runtime viewport.
+        Trident::GizmoState* m_GizmoState = nullptr; // Shared gizmo state pointer for future runtime gizmo support.
+        Trident::ECS::Registry* m_Registry = nullptr; // Registry pointer retained for future runtime entity queries.
+        std::function<void(const std::vector<std::string>&)> m_OnAssetsDropped; // Callback invoked when assets are dropped.
+        bool m_IsRecording = false; // Tracks whether the panel has initiated a clip export.
+        float m_TargetClipDuration = 0.0f; // Duration requested for the current export.
+        std::chrono::steady_clock::time_point m_RecordingStartTime{}; // Clock used to track progress.
+        std::string m_CurrentOutputPath; // Destination path reported to the user.
+        float m_RecordingProgress = 0.0f; // Normalised progress for the UI.
+        std::array<char, 260> m_OutputPathBuffer{}; // UI buffer used to collect the export path.
     };
 }

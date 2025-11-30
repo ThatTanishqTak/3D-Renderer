@@ -8,3 +8,6 @@
 *.fbx
 *.FBX
 *.exr
+*.exe
+*.pdb
+/Trident/vendor/FFmpeg 

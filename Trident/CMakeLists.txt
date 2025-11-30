@@ -9,6 +9,7 @@ include(CTest)
 
 add_definitions(-DGLFW_INCLUDE_VULKAN)
 
+# Vulkan SDK sanity check
 if(NOT DEFINED ENV{VULKAN_SDK})
   message(FATAL_ERROR "Please set the VULKAN_SDK environment variable to your Vulkan SDK path")
 endif()
@@ -20,75 +21,151 @@ if(NOT VULKAN_INCLUDE_DIR OR NOT VULKAN_LIBRARY)
   message(FATAL_ERROR "Unable to find Vulkan headers or lib in ${VULKAN_SDK_PATH}")
 endif()
 
+# FFmpeg
+set(FFMPEG_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/vendor/FFmpeg")
+set(FFMPEG_INCLUDE_DIR "${FFMPEG_ROOT}/include")
+
+if(WIN32)
+  set(FFMPEG_LIB_DIR "${FFMPEG_ROOT}/lib")
+  set(FFMPEG_AVCODEC_LIBRARY   "${FFMPEG_LIB_DIR}/avcodec.lib")
+  set(FFMPEG_AVFORMAT_LIBRARY  "${FFMPEG_LIB_DIR}/avformat.lib")
+  set(FFMPEG_AVUTIL_LIBRARY    "${FFMPEG_LIB_DIR}/avutil.lib")
+  set(FFMPEG_AVDEVICE_LIBRARY  "${FFMPEG_LIB_DIR}/avdevice.lib")
+  set(FFMPEG_SWRESAMPLE_LIBRARY "${FFMPEG_LIB_DIR}/swresample.lib")
+  set(FFMPEG_SWSCALE_LIBRARY   "${FFMPEG_LIB_DIR}/swscale.lib")
+else()
+  set(FFMPEG_LIB_DIR "${FFMPEG_ROOT}/lib")
+  set(FFMPEG_AVCODEC_LIBRARY   "${FFMPEG_LIB_DIR}/libavcodec.so")
+  set(FFMPEG_AVFORMAT_LIBRARY  "${FFMPEG_LIB_DIR}/libavformat.so")
+  set(FFMPEG_AVUTIL_LIBRARY    "${FFMPEG_LIB_DIR}/libavutil.so")
+  set(FFMPEG_AVDEVICE_LIBRARY  "${FFMPEG_LIB_DIR}/libavdevice.so")
+  set(FFMPEG_SWRESAMPLE_LIBRARY "${FFMPEG_LIB_DIR}/libswresample.so")
+  set(FFMPEG_SWSCALE_LIBRARY   "${FFMPEG_LIB_DIR}/libswscale.so")
+endif()
+
+# Fail early if the layout is wrong
+if(NOT EXISTS "${FFMPEG_INCLUDE_DIR}/libavcodec/avcodec.h")
+  message(FATAL_ERROR "FFmpeg headers not found in ${FFMPEG_INCLUDE_DIR}")
+endif()
+
+foreach(lib IN ITEMS
+    FFMPEG_AVCODEC_LIBRARY
+    FFMPEG_AVFORMAT_LIBRARY
+    FFMPEG_AVUTIL_LIBRARY
+    FFMPEG_AVDEVICE_LIBRARY
+    FFMPEG_SWRESAMPLE_LIBRARY
+    FFMPEG_SWSCALE_LIBRARY)
+  if(NOT EXISTS "${${lib}}")
+    message(FATAL_ERROR "FFmpeg library '${lib}' not found at '${${lib}}'")
+  endif()
+endforeach()
+
+# Vulkan package + FetchContent
 find_package(Vulkan REQUIRED)
 include(FetchContent)
 
-# Vendor libraries -------------------------------------------------
+# Vendor libraries
 add_library(glm INTERFACE)
-target_include_directories(glm INTERFACE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/vendor/glm>)
+target_include_directories(glm INTERFACE
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/vendor/glm>
+)
 
 add_library(spdlog INTERFACE)
-target_include_directories(spdlog INTERFACE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/vendor/spdlog/include>)
+target_include_directories(spdlog INTERFACE
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/vendor/spdlog/include>
+)
 
 add_library(stb INTERFACE)
-target_include_directories(stb INTERFACE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/vendor/stb>)
+target_include_directories(stb INTERFACE
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/vendor/stb>
+)
 
 add_library(tinyexr INTERFACE)
 target_include_directories(tinyexr INTERFACE
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/vendor/tinyexr>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/vendor/tinyexr/deps/miniz>
 )
-target_sources(tinyexr INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/vendor/tinyexr/deps/miniz/miniz.c)
+target_sources(tinyexr INTERFACE
+  ${CMAKE_CURRENT_SOURCE_DIR}/vendor/tinyexr/deps/miniz/miniz.c
+)
 
 add_library(libktx INTERFACE IMPORTED)
 set_target_properties(libktx PROPERTIES
   INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/vendor/libktx/include"
 )
 if(WIN32)
-  set_target_properties(libktx PROPERTIES IMPORTED_LOCATION "${CMAKE_CURRENT_SOURCE_DIR}/vendor/libktx/lib/ktx.lib")
+  set_target_properties(libktx PROPERTIES
+    IMPORTED_LOCATION "${CMAKE_CURRENT_SOURCE_DIR}/vendor/libktx/lib/ktx.lib"
+  )
 else()
-  set_target_properties(libktx PROPERTIES IMPORTED_LOCATION "${CMAKE_CURRENT_SOURCE_DIR}/vendor/libktx/lib/libktx.so")
+  set_target_properties(libktx PROPERTIES
+    IMPORTED_LOCATION "${CMAKE_CURRENT_SOURCE_DIR}/vendor/libktx/lib/libktx.so"
+  )
 endif()
 
-# Assimp -----------------------------------------------------------
+# Assimp
 set(ASSIMP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(ASSIMP_BUILD_ASSIMP_TOOLS OFF CACHE BOOL "" FORCE)
 set(ASSIMP_BUILD_ALL_EXPORTERS_BY_DEFAULT OFF CACHE BOOL "" FORCE)
-set(ASSIMP_BUILD_ALL_IMPORTERS_BY_DEFAULT ON CACHE BOOL "" FORCE)
+set(ASSIMP_BUILD_ALL_IMPORTERS_BY_DEFAULT ON  CACHE BOOL "" FORCE)
 set(ASSIMP_NO_EXPORT ON CACHE BOOL "" FORCE)
-set(ASSIMP_INSTALL OFF CACHE BOOL "" FORCE)
+set(ASSIMP_INSTALL  OFF CACHE BOOL "" FORCE)
 
-FetchContent_Declare(assimp URL https://github.com/assimp/assimp/archive/refs/tags/v5.3.1.zip)
+FetchContent_Declare(
+  assimp
+  URL https://github.com/assimp/assimp/archive/refs/tags/v5.3.1.zip
+)
 FetchContent_MakeAvailable(assimp)
 
-# ImGuizmo ---------------------------------------------------------
+# ImGuizmo
 set(IMGUIZMO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/vendor/imguizmo")
 add_library(imguizmo STATIC ${IMGUIZMO_ROOT}/ImGuizmo.cpp)
-target_include_directories(imguizmo PUBLIC $<BUILD_INTERFACE:${IMGUIZMO_ROOT}>)
+target_include_directories(imguizmo PUBLIC
+  $<BUILD_INTERFACE:${IMGUIZMO_ROOT}>
+)
 target_link_libraries(imguizmo PUBLIC imgui)
 
-# Trident source ---------------------------------------------------
-file(GLOB_RECURSE TRIDENT_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp ${CMAKE_CURRENT_SOURCE_DIR}/src/*.h)
+# Trident source
+file(GLOB_RECURSE TRIDENT_SOURCES
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/*.h
+)
+
 add_library(${PROJECT_NAME} STATIC ${TRIDENT_SOURCES})
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_20)
 
 target_include_directories(${PROJECT_NAME} PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/vendor/nanosvg/src>
+  $<BUILD_INTERFACE:${FFMPEG_INCLUDE_DIR}>
 )
 
 target_link_libraries(${PROJECT_NAME} PUBLIC
   Vulkan::Vulkan
-  glm spdlog imguizmo stb tinyexr libktx assimp::assimp
+  glm
+  spdlog
+  imguizmo
+  stb
+  tinyexr
+  libktx
+  assimp::assimp
   onnxruntime::onnxruntime
   onnxruntime::headers
+  ${FFMPEG_AVFORMAT_LIBRARY}
+  ${FFMPEG_AVCODEC_LIBRARY}
+  ${FFMPEG_AVUTIL_LIBRARY}
+  ${FFMPEG_AVDEVICE_LIBRARY}
+  ${FFMPEG_SWRESAMPLE_LIBRARY}
+  ${FFMPEG_SWSCALE_LIBRARY}
 )
 
 # Surface the expected ONNX Runtime version to the code so we can verify
 # the loaded DLL matches the vendored SDK during startup.
-target_compile_definitions(${PROJECT_NAME} PUBLIC TRIDENT_ORT_VERSION="${ORT_VERSION}")
+target_compile_definitions(${PROJECT_NAME} PUBLIC
+  TRIDENT_ORT_VERSION="${ORT_VERSION}"
+)
 
-# Options ----------------------------------------------------------
+# Options
 option(TRIDENT_ENABLE_VALIDATION "Enable Vulkan Validation Layers" ON)
 if(TRIDENT_ENABLE_VALIDATION)
   target_compile_definitions(${PROJECT_NAME} PUBLIC TRIDENT_VALIDATION_LAYERS=1)
@@ -106,13 +183,19 @@ endif()
 
 message(STATUS "Vulkan SDK Path: ${VULKAN_SDK_PATH}")
 
+# ONNX model validator tool
 add_executable(trident_onnx_validator tools/ValidateOnnxAsset.cpp)
 target_link_libraries(trident_onnx_validator PRIVATE ${PROJECT_NAME})
-target_include_directories(trident_onnx_validator PRIVATE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>)
+target_include_directories(trident_onnx_validator PRIVATE
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
+)
 target_compile_definitions(trident_onnx_validator PRIVATE
   TRIDENT_DEFAULT_MODEL_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../Assets/AI/frame_generator.onnx"
-  TRIDENT_MAX_ONNX_IR=11)
+  TRIDENT_MAX_ONNX_IR=11
+)
 
-add_test(NAME TridentValidateOnnxRuntimeCompatibility
+add_test(
+  NAME TridentValidateOnnxRuntimeCompatibility
   COMMAND trident_onnx_validator
-  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..)
+  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
+)
