@@ -444,6 +444,9 @@ namespace Trident
         std::vector<VkDeviceMemory> m_FrameReadbackMemory;     // Host-visible allocations backing the staging buffers.
         std::vector<bool> m_FrameReadbackPending;              // Flags indicating which buffers contain fresh GPU data.
         VkExtent2D m_FrameReadbackExtent{ 0, 0 };              // Cached extent used to validate copy/readback paths.
+        VkExtent2D m_LastReadbackExtent{ 0, 0 };               // Tracks the last requested readback extent to avoid redundant resizes.
+        VkExtent2D m_PendingReadbackExtent{ 0, 0 };            // Extent staged for the next resize operation.
+        bool m_ReadbackResizePending = false;                  // Signals that readback resources should be rebuilt when safe.
         VkDeviceSize m_FrameReadbackBufferSize = 0;            // Expected byte size for each staging buffer.
         uint32_t m_FrameReadbackBytesPerPixel = 0;             // Cached pixel stride derived from the swapchain format.
         uint32_t m_FrameReadbackChannelCount = 0;              // Number of colour channels copied into the staging buffer.
@@ -486,6 +489,8 @@ namespace Trident
         bool TryInitialiseAiModel();
         bool TryAcquireRenderedFrame(std::vector<float>& outPixels);
         std::optional<std::filesystem::path> ResolveAiModelPath() const;
+        void RequestReadbackResize(VkExtent2D targetExtent, bool force = false);
+        void ApplyPendingReadbackResize();
         void CreateOrResizeReadbackResources();
         void CreateOrResizeReadbackResources(VkExtent2D targetExtent);
         void DestroyReadbackResources();

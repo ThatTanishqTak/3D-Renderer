@@ -435,7 +435,8 @@ namespace Trident
         l_DefaultContext.m_CachedExtent = { 0, 0 };
 
         // Prepare CPU-visible staging resources so AI tooling can safely consume rendered pixels.
-        CreateOrResizeReadbackResources(m_Swapchain.GetExtent());
+        RequestReadbackResize(m_Swapchain.GetExtent(), true);
+        ApplyPendingReadbackResize();
 
         VkFenceCreateInfo l_FenceInfo{ VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
         l_FenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
@@ -538,6 +539,9 @@ namespace Trident
 
         Utilities::Allocation::ResetFrame();
         ProcessReloadEvents();
+
+        // Apply any pending readback resizes once the GPU is idle so resource churn stays out of the hot path.
+        ApplyPendingReadbackResize();
 
         // Allow developers to tweak GLSL and get instant feedback without restarting the app.
         if (m_Pipeline.ReloadIfNeeded(m_Swapchain))
@@ -876,6 +880,41 @@ namespace Trident
         return false;
     }
 
+    void Renderer::RequestReadbackResize(VkExtent2D targetExtent, bool force)
+    {
+        // Cache the incoming request and mark the staging buffers dirty when the viewport geometry changes.
+        VkExtent2D l_TargetExtent = targetExtent;
+        if (l_TargetExtent.width == 0 || l_TargetExtent.height == 0)
+        {
+            l_TargetExtent = m_Swapchain.GetExtent();
+        }
+
+        const bool l_ExtentChanged = (l_TargetExtent.width != m_LastReadbackExtent.width) || (l_TargetExtent.height != m_LastReadbackExtent.height);
+        const bool l_ImageCountChanged = (m_FrameReadbackBuffers.size() != m_Swapchain.GetImageCount());
+
+        if (!force && !l_ExtentChanged && !l_ImageCountChanged)
+        {
+            return;
+        }
+
+        m_PendingReadbackExtent = l_TargetExtent;
+        m_ReadbackResizePending = true;
+    }
+
+    void Renderer::ApplyPendingReadbackResize()
+    {
+        if (!m_ReadbackResizePending)
+        {
+            return;
+        }
+
+        // Block until the GPU is idle before rebuilding staging buffers so in-flight frames are not disrupted.
+        vkDeviceWaitIdle(Startup::GetDevice());
+        CreateOrResizeReadbackResources(m_PendingReadbackExtent);
+        m_LastReadbackExtent = m_FrameReadbackExtent;
+        m_ReadbackResizePending = false;
+    }
+
     void Renderer::CreateOrResizeReadbackResources()
     {
         // Preserve the legacy entry point while routing the resize logic through the viewport-aware overload.
@@ -904,6 +943,8 @@ namespace Trident
             // Either the swapchain is minimised or we encountered an unsupported format; clear any stale allocations.
             DestroyReadbackResources();
 
+            m_LastReadbackExtent = { 0, 0 };
+
             return;
         }
 
@@ -913,6 +954,7 @@ namespace Trident
         const bool l_MatchingSize = (m_FrameReadbackBufferSize == l_BufferSize);
         const bool l_MatchingCount = (m_FrameReadbackBuffers.size() == l_ImageCount);
 
+        m_LastReadbackExtent = l_TargetExtent;
         if (l_MatchingExtent && l_MatchingSize && l_MatchingCount)
         {
             return;
@@ -961,6 +1003,7 @@ namespace Trident
         m_FrameReadbackMemory.clear();
         m_FrameReadbackPending.clear();
         m_FrameReadbackExtent = { 0, 0 };
+        m_LastReadbackExtent = { 0, 0 };
         m_FrameReadbackBufferSize = 0;
         m_FrameReadbackBytesPerPixel = 0;
         m_FrameReadbackChannelCount = 0;
@@ -2266,6 +2309,8 @@ namespace Trident
         l_RequestedExtent.height = static_cast<uint32_t>(std::max(info.Size.y, 0.0f));
 
         l_Context.m_CachedExtent = l_RequestedExtent;
+        // Request a readback resize whenever the viewport dimensions change so staging buffers track the active target.
+        RequestReadbackResize(l_RequestedExtent);
 
         if (l_RequestedExtent.width == 0 || l_RequestedExtent.height == 0)
         {
@@ -2804,7 +2849,8 @@ namespace Trident
 
         DestroyAiResources();
         // Ensure the readback staging buffers match the refreshed swapchain or viewport geometry before re-uploading AI frames.
-        CreateOrResizeReadbackResources(l_ReadbackExtent);
+        RequestReadbackResize(l_ReadbackExtent, true);
+        ApplyPendingReadbackResize();
         m_TextRenderer.RecreatePipeline(m_Pipeline.GetRenderPass());
     }
 
@@ -4372,13 +4418,10 @@ namespace Trident
             l_PrimaryTarget = &l_PrimaryContext->m_Target;
         }
 
-        VkExtent2D l_PrimaryTargetExtent{};
-        if (l_PrimaryTarget)
+        if (m_ReadbackResizePending)
         {
-            // Keep the readback staging buffers aligned with the active viewport dimensions used during copy operations.
-            l_PrimaryTargetExtent = l_PrimaryTarget->m_Extent;
+            ApplyPendingReadbackResize();
         }
-        CreateOrResizeReadbackResources(l_PrimaryTargetExtent);
 
         bool l_RenderedViewport = false;
 
@@ -5580,7 +5623,8 @@ namespace Trident
         {
             // Ensure readback buffers exist before toggling capture so we do not start a session without valid resources.
             // Size staging buffers to the viewport extent so the copy operation during recording lines up with the render target.
-            CreateOrResizeReadbackResources(extent);
+            RequestReadbackResize(extent, true);
+            ApplyPendingReadbackResize();
 
             const bool l_HasValidReadbackExtent = (m_FrameReadbackExtent.width > 0) && (m_FrameReadbackExtent.height > 0);
             const bool l_HasValidRecordingExtent = (extent.width > 0) && (extent.height > 0);
