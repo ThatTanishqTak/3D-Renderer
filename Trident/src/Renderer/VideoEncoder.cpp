@@ -338,10 +338,7 @@ namespace Trident
         // Provide a simple container header so the output is playable by standard Y4M readers.
         const uint64_t l_FpsNumerator = static_cast<uint64_t>(m_TargetFps);
         const uint64_t l_FpsDenominator = 1;
-        m_OutputStream << "YUV4MPEG2 W" << m_OutputExtent.width
-            << " H" << m_OutputExtent.height
-            << " F" << l_FpsNumerator << ":" << l_FpsDenominator
-            << " Ip A0:0 C444" << '\n';
+        m_OutputStream << "YUV4MPEG2 W" << m_OutputExtent.width << " H" << m_OutputExtent.height << " F" << l_FpsNumerator << ":" << l_FpsDenominator << " Ip A0:0 C444" << '\n';
 
         if (!m_OutputStream.good())
         {
@@ -369,9 +366,7 @@ namespace Trident
         m_OutputStream.write(reinterpret_cast<const char*>(l_YuvBuffer.data()), static_cast<std::streamsize>(l_YuvBuffer.size()));
 
         // Track timing to ensure frames are emitted with a consistent cadence.
-        const std::chrono::system_clock::time_point l_CaptureTime = (frame.m_Timestamp.time_since_epoch().count() == 0)
-            ? std::chrono::system_clock::now()
-            : frame.m_Timestamp;
+        const std::chrono::system_clock::time_point l_CaptureTime = (frame.m_Timestamp.time_since_epoch().count() == 0) ? std::chrono::system_clock::now() : frame.m_Timestamp;
         const std::chrono::nanoseconds l_Elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(l_CaptureTime - m_SessionStartTime);
         const uint64_t l_ExpectedFrames = static_cast<uint64_t>(l_Elapsed / m_TargetFrameDuration);
         if (l_ExpectedFrames > (m_FrameCounter + 1))

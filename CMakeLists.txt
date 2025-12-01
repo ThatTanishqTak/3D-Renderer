@@ -4,7 +4,7 @@ project(3D-Renderer LANGUAGES CXX)
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 set(GLFW_BUILD_WAYLAND OFF CACHE BOOL "" FORCE)
 
-include(Deps)          # <-- fetches ONNX Runtime, creates targets
+include(Deps)
 include(Tooling)
 
 set(CMAKE_CXX_STANDARD 20)
