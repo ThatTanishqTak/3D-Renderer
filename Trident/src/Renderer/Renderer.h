@@ -487,6 +487,7 @@ namespace Trident
         bool TryAcquireRenderedFrame(std::vector<float>& outPixels);
         std::optional<std::filesystem::path> ResolveAiModelPath() const;
         void CreateOrResizeReadbackResources();
+        void CreateOrResizeReadbackResources(VkExtent2D targetExtent);
         void DestroyReadbackResources();
         void ResolvePendingReadback(uint32_t imageIndex, std::chrono::system_clock::time_point captureTimestamp);
         bool EnsureAiTextureResources(VkExtent2D extent);

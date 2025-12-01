@@ -435,7 +435,7 @@ namespace Trident
         l_DefaultContext.m_CachedExtent = { 0, 0 };
 
         // Prepare CPU-visible staging resources so AI tooling can safely consume rendered pixels.
-        CreateOrResizeReadbackResources();
+        CreateOrResizeReadbackResources(m_Swapchain.GetExtent());
 
         VkFenceCreateInfo l_FenceInfo{ VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
         l_FenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
@@ -878,7 +878,19 @@ namespace Trident
 
     void Renderer::CreateOrResizeReadbackResources()
     {
-        const VkExtent2D l_TargetExtent = m_Swapchain.GetExtent();
+        // Preserve the legacy entry point while routing the resize logic through the viewport-aware overload.
+        CreateOrResizeReadbackResources(m_Swapchain.GetExtent());
+    }
+
+    void Renderer::CreateOrResizeReadbackResources(VkExtent2D targetExtent)
+    {
+        // Prefer the provided target extent (typically the primary render target) so staging buffers match the rendered viewport.
+        VkExtent2D l_TargetExtent = targetExtent;
+        if (l_TargetExtent.width == 0 || l_TargetExtent.height == 0)
+        {
+            // Fall back to the swapchain size so readback remains available even when no viewport is active.
+            l_TargetExtent = m_Swapchain.GetExtent();
+        }
         const uint32_t l_ImageCount = m_Swapchain.GetImageCount();
         const SwapchainFormatInfo l_FormatInfo = QuerySwapchainFormatInfo(m_Swapchain.GetImageFormat());
 
@@ -2764,7 +2776,9 @@ namespace Trident
                 l_ImageCount, m_GlobalUniformBuffers.size(), m_MaterialBuffers.size(), l_ImageCount, m_DescriptorSets.size());
         }
 
+        VkExtent2D l_ReadbackExtent = m_Swapchain.GetExtent();
         const ViewportContext* l_ActiveContext = FindViewportContext(m_ActiveViewportId);
+
         if (l_ActiveContext && IsValidViewport(l_ActiveContext->m_Info) && m_ActiveViewportId != 0)
         {
             VkExtent2D l_ViewportExtent{};
@@ -2775,6 +2789,8 @@ namespace Trident
             {
                 ViewportContext& l_MutableContext = GetOrCreateViewportContext(m_ActiveViewportId);
                 CreateOrResizeOffscreenResources(l_MutableContext.m_Target, l_ViewportExtent);
+
+                l_ReadbackExtent = l_ViewportExtent;
             }
             else
             {
@@ -2787,8 +2803,8 @@ namespace Trident
         }
 
         DestroyAiResources();
-        // Ensure the readback staging buffers match the refreshed swapchain geometry before re-uploading AI frames.
-        CreateOrResizeReadbackResources();
+        // Ensure the readback staging buffers match the refreshed swapchain or viewport geometry before re-uploading AI frames.
+        CreateOrResizeReadbackResources(l_ReadbackExtent);
         m_TextRenderer.RecreatePipeline(m_Pipeline.GetRenderPass());
     }
 
@@ -4356,6 +4372,14 @@ namespace Trident
             l_PrimaryTarget = &l_PrimaryContext->m_Target;
         }
 
+        VkExtent2D l_PrimaryTargetExtent{};
+        if (l_PrimaryTarget)
+        {
+            // Keep the readback staging buffers aligned with the active viewport dimensions used during copy operations.
+            l_PrimaryTargetExtent = l_PrimaryTarget->m_Extent;
+        }
+        CreateOrResizeReadbackResources(l_PrimaryTargetExtent);
+
         bool l_RenderedViewport = false;
 
         // Prepare the shared draw lists once so each viewport iteration can reuse the same data set.
@@ -5555,7 +5579,8 @@ namespace Trident
         if (enabled)
         {
             // Ensure readback buffers exist before toggling capture so we do not start a session without valid resources.
-            CreateOrResizeReadbackResources();
+            // Size staging buffers to the viewport extent so the copy operation during recording lines up with the render target.
+            CreateOrResizeReadbackResources(extent);
 
             const bool l_HasValidReadbackExtent = (m_FrameReadbackExtent.width > 0) && (m_FrameReadbackExtent.height > 0);
             const bool l_HasValidRecordingExtent = (extent.width > 0) && (extent.height > 0);
