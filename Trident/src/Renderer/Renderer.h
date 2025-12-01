@@ -157,11 +157,6 @@ namespace Trident
          */
         bool IsFrameDatasetCaptureEnabled() const { return m_FrameDatasetCaptureEnabled; }
 
-        /**
-         * @brief Draw an ImGui panel that exposes dataset capture configuration.
-         */
-        void DrawDatasetCaptureUI();
-
         // Resolve a texture path to a renderer-managed slot, loading GPU resources and updating descriptor bindings
         // when necessary. This keeps editor tooling responsive when authors tweak materials.
         int32_t ResolveTextureSlot(const std::string& texturePath);
@@ -510,8 +505,6 @@ namespace Trident
         bool m_FrameDatasetCaptureEnabled = false;             // Indicates whether dataset capture is currently running.
         uint32_t m_FrameDatasetCaptureInterval = 1;            // Frequency at which frames are sampled for dataset capture.
         std::filesystem::path m_FrameDatasetCaptureDirectory;  // Target directory for captured dataset artefacts.
-        std::array<char, 512> m_FrameDatasetDirectoryBuffer{}; // Mutable buffer used by the dataset capture UI.
-
         bool m_ReadbackEnabled = false;                       // Indicates whether CPU readback is currently required by AI or recording.
         bool m_ViewportRecordingEnabled = false;               // Tracks whether viewport capture is active.
         uint32_t m_RecordingViewportId = s_InvalidViewportId;  // Active viewport being recorded.
@@ -584,6 +577,5 @@ namespace Trident
         void CreateOrResizeOffscreenResources(OffscreenTarget& target, VkExtent2D extent);
         const Camera* GetActiveCamera(const ViewportContext& context) const;
         void SyncFrameDatasetRecorder();
-        void UpdateDatasetDirectoryBuffer();
     };
 }

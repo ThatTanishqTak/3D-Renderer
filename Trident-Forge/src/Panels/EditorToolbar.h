@@ -30,12 +30,18 @@ namespace EditorPanels
         void SetPlaybackState(PlaybackState playbackState);
         void SetSceneControlsEnabled(bool enabled);
         void SetPerformanceCaptureEnabled(bool enabled);
+        void SetDatasetCaptureEnabled(bool enabled);
+        void SetDatasetCaptureDirectory(const std::string& captureDirectory);
+        void SetDatasetCaptureInterval(uint32_t sampleInterval);
 
         void SetOnSceneReset(const std::function<void()>& callback);
         void SetOnPlayRequested(const std::function<void()>& callback);
         void SetOnPauseRequested(const std::function<void()>& callback);
         void SetOnStopRequested(const std::function<void()>& callback);
         void SetOnCaptureToggle(const std::function<void(bool)>& callback);
+        void SetOnDatasetCaptureToggle(const std::function<void(bool)>& callback);
+        void SetOnDatasetCaptureDirectoryChanged(const std::function<void(const std::string&)>& callback);
+        void SetOnDatasetSampleIntervalChanged(const std::function<void(uint32_t)>& callback);
         void SetOnExportStart(const std::function<void()>& callback);
         void SetOnExportStop(const std::function<void()>& callback);
         void SetOnExportPathChanged(const std::function<void(const std::string&)>& callback);
@@ -60,23 +66,31 @@ namespace EditorPanels
 
     private:
         bool RenderToolbarButton(const char* label, bool enabled);
+        void RenderDatasetCaptureControls();
         void RenderExportControls();
+        void UpdateDatasetDirectoryBuffer();
 
     private:
         PlaybackState m_PlaybackState = PlaybackState::Edit;
         bool m_SceneControlsEnabled = true;
         bool m_IsPerformanceCaptureEnabled = false;
+        bool m_IsDatasetCaptureEnabled = false;
+        uint32_t m_DatasetCaptureInterval = 1U;
 
         std::function<void()> m_OnSceneReset;
         std::function<void()> m_OnPlayRequested;
         std::function<void()> m_OnPauseRequested;
         std::function<void()> m_OnStopRequested;
         std::function<void(bool)> m_OnCaptureToggle;
+        std::function<void(bool)> m_OnDatasetCaptureToggle;
+        std::function<void(const std::string&)> m_OnDatasetCaptureDirectoryChanged;
+        std::function<void(uint32_t)> m_OnDatasetSampleIntervalChanged;
         std::function<void()> m_OnExportStart;
         std::function<void()> m_OnExportStop;
         std::function<void(const std::string&)> m_OnExportPathChanged;
 
         ExportUiState m_ExportUiState{};
         std::array<char, 260> m_ExportPathBuffer{};
+        std::array<char, 512> m_DatasetCaptureDirectoryBuffer{};
     };
 }

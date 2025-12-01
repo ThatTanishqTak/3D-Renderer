@@ -25,7 +25,7 @@ namespace EditorPanels
         (void)l_WindowVisible;
         // Always submit hierarchy content so dockspace layouts see the node regardless of collapse state.
 
-        ImGui::TextUnformatted(m_StatusMessage.c_str());
+        ImGui::TextWrapped(m_StatusMessage.c_str());
 
         if (m_Registry != nullptr)
         {

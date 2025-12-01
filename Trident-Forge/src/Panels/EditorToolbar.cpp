@@ -4,6 +4,7 @@
 
 #include <imgui.h>
 #include <cstdio>
+#include <algorithm>
 
 namespace EditorPanels
 {
@@ -65,6 +66,7 @@ namespace EditorPanels
 
         ImGui::PopStyleVar();
 
+        RenderDatasetCaptureControls();
         RenderExportControls();
 
         ImGui::End();
@@ -83,6 +85,25 @@ namespace EditorPanels
     void EditorToolbar::SetPerformanceCaptureEnabled(bool enabled)
     {
         m_IsPerformanceCaptureEnabled = enabled;
+    }
+
+    void EditorToolbar::SetDatasetCaptureEnabled(bool enabled)
+    {
+        // Keep a local copy of the capture flag so the UI reflects renderer state across frames.
+        m_IsDatasetCaptureEnabled = enabled;
+    }
+
+    void EditorToolbar::SetDatasetCaptureDirectory(const std::string& captureDirectory)
+    {
+        // Update the editable buffer so users can see the active directory even when it was configured elsewhere.
+        std::snprintf(m_DatasetCaptureDirectoryBuffer.data(), m_DatasetCaptureDirectoryBuffer.size(), "%s", captureDirectory.c_str());
+        UpdateDatasetDirectoryBuffer();
+    }
+
+    void EditorToolbar::SetDatasetCaptureInterval(uint32_t sampleInterval)
+    {
+        // Clamp to a valid range because the renderer enforces a minimum sample interval of 1 frame.
+        m_DatasetCaptureInterval = std::max<uint32_t>(1U, sampleInterval);
     }
 
     void EditorToolbar::SetOnSceneReset(const std::function<void()>& callback)
@@ -108,6 +129,21 @@ namespace EditorPanels
     void EditorToolbar::SetOnCaptureToggle(const std::function<void(bool)>& callback)
     {
         m_OnCaptureToggle = callback;
+    }
+
+    void EditorToolbar::SetOnDatasetCaptureToggle(const std::function<void(bool)>& callback)
+    {
+        m_OnDatasetCaptureToggle = callback;
+    }
+
+    void EditorToolbar::SetOnDatasetCaptureDirectoryChanged(const std::function<void(const std::string&)>& callback)
+    {
+        m_OnDatasetCaptureDirectoryChanged = callback;
+    }
+
+    void EditorToolbar::SetOnDatasetSampleIntervalChanged(const std::function<void(uint32_t)>& callback)
+    {
+        m_OnDatasetSampleIntervalChanged = callback;
     }
 
     void EditorToolbar::SetOnExportStart(const std::function<void()>& callback)
@@ -146,10 +182,53 @@ namespace EditorPanels
         return l_Clicked;
     }
 
+    void EditorToolbar::RenderDatasetCaptureControls()
+    {
+        ImGui::Separator();
+        ImGui::TextWrapped("Dataset Capture");
+        ImGui::TextWrapped("Enable dataset capture from the toolbar to avoid a separate floating window.");
+
+        bool l_CaptureEnabled = m_IsDatasetCaptureEnabled;
+        if (ImGui::Checkbox("Enable dataset capture", &l_CaptureEnabled))
+        {
+            m_IsDatasetCaptureEnabled = l_CaptureEnabled;
+
+            if (m_OnDatasetCaptureToggle)
+            {
+                m_OnDatasetCaptureToggle(l_CaptureEnabled);
+            }
+        }
+
+        // Allow authors to change the dataset directory without reopening a dedicated window.
+        if (ImGui::InputText("Capture directory", m_DatasetCaptureDirectoryBuffer.data(), m_DatasetCaptureDirectoryBuffer.size()))
+        {
+            UpdateDatasetDirectoryBuffer();
+
+            if (m_OnDatasetCaptureDirectoryChanged)
+            {
+                m_OnDatasetCaptureDirectoryChanged(std::string(m_DatasetCaptureDirectoryBuffer.data()));
+            }
+        }
+
+        int l_SampleInterval = static_cast<int>(m_DatasetCaptureInterval);
+        if (ImGui::InputInt("Sample interval", &l_SampleInterval))
+        {
+            l_SampleInterval = std::max(1, l_SampleInterval);
+            m_DatasetCaptureInterval = static_cast<uint32_t>(l_SampleInterval);
+
+            if (m_OnDatasetSampleIntervalChanged)
+            {
+                m_OnDatasetSampleIntervalChanged(m_DatasetCaptureInterval);
+            }
+        }
+
+        ImGui::TextWrapped("Sampling every %u frame(s)", m_DatasetCaptureInterval);
+    }
+
     void EditorToolbar::RenderExportControls()
     {
         ImGui::Separator();
-        ImGui::TextUnformatted("Clip Export");
+        ImGui::TextWrapped("Clip Export");
 
         // Surface the current export path for editing so the toolbar owns the export UI.
         if (ImGui::InputText("Export Path", m_ExportPathBuffer.data(), m_ExportPathBuffer.size()))
@@ -165,25 +244,25 @@ namespace EditorPanels
         const bool l_ShowRoundedNote = m_ExportUiState.m_RawExtent.width != m_ExportUiState.m_SanitizedExtent.width ||
             m_ExportUiState.m_RawExtent.height != m_ExportUiState.m_SanitizedExtent.height;
 
-        ImGui::Text("Capture Resolution: %ux%u", m_ExportUiState.m_SanitizedExtent.width, m_ExportUiState.m_SanitizedExtent.height);
+        ImGui::TextWrapped("Capture Resolution: %ux%u", m_ExportUiState.m_SanitizedExtent.width, m_ExportUiState.m_SanitizedExtent.height);
         if (l_ShowRoundedNote)
         {
-            ImGui::TextUnformatted("Note: Rounded up to even dimensions for YUV420P export.");
+            ImGui::TextWrapped("Note: Rounded up to even dimensions for YUV420P export.");
         }
 
         if (!l_HasRuntimeCamera)
         {
-            ImGui::TextUnformatted("No runtime camera available for capture.");
+            ImGui::TextWrapped("No runtime camera available for capture.");
         }
         else if (!l_HasValidViewport)
         {
-            ImGui::TextUnformatted("Viewport size is invalid for capture.");
+            ImGui::TextWrapped("Viewport size is invalid for capture.");
         }
 
         if (m_ExportUiState.m_IsRecording)
         {
-            ImGui::Text("Exporting clip... %.0f%%", m_ExportUiState.m_RecordingProgress * 100.0f);
-            ImGui::Text("Output: %s", m_ExportUiState.m_OutputPath.c_str());
+            ImGui::TextWrapped("Exporting clip... %.0f%%", m_ExportUiState.m_RecordingProgress * 100.0f);
+            ImGui::TextWrapped("Output: %s", m_ExportUiState.m_OutputPath.c_str());
             if (RenderToolbarButton("Stop Export", true) && m_OnExportStop)
             {
                 m_OnExportStop();
@@ -200,7 +279,18 @@ namespace EditorPanels
 
         if (!m_ExportUiState.m_StatusMessage.empty())
         {
-            ImGui::TextUnformatted(m_ExportUiState.m_StatusMessage.c_str());
+            ImGui::TextWrapped(m_ExportUiState.m_StatusMessage.c_str());
         }
+    }
+
+    void EditorToolbar::UpdateDatasetDirectoryBuffer()
+    {
+        // Keep the directory buffer null terminated so ImGui input cannot overrun the storage.
+        if (m_DatasetCaptureDirectoryBuffer.empty())
+        {
+            return;
+        }
+
+        m_DatasetCaptureDirectoryBuffer.back() = '\0';
     }
 }

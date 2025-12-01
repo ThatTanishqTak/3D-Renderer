@@ -69,8 +69,6 @@ namespace Trident
         // Adjust how frequently frames are captured to reduce I/O pressure.
         static void SetFrameDatasetCaptureInterval(uint32_t interval);
         static uint32_t GetFrameDatasetCaptureInterval();
-        // Draw the dataset capture configuration panel when ImGui is active.
-        static void DrawDatasetCaptureUI();
         // Toggle viewport recording so UI panels can export animation clips.
         static bool SetViewportRecordingEnabled(bool enabled, uint32_t viewportId, VkExtent2D extent, const std::filesystem::path& outputPath);
         // Submit the latest frame to the recording path when readback completes.

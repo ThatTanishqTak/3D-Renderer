@@ -230,11 +230,6 @@ namespace Trident
         return Startup::GetRenderer().GetFrameDatasetCaptureInterval();
     }
 
-    void RenderCommand::DrawDatasetCaptureUI()
-    {
-        Startup::GetRenderer().DrawDatasetCaptureUI();
-    }
-
     bool RenderCommand::SetViewportRecordingEnabled(bool enabled, uint32_t viewportId, VkExtent2D extent, const std::filesystem::path& outputPath)
     {
         // Forward the recording toggle so UI panels can trigger capture sessions.

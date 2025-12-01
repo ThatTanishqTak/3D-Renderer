@@ -108,7 +108,7 @@ namespace EditorPanels
         }
         else
         {
-            ImGui::TextUnformatted("Viewport unavailable");
+            ImGui::TextWrapped("Viewport unavailable");
         }
     }
 }

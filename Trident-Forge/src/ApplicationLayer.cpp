@@ -115,6 +115,29 @@ void ApplicationLayer::Initialize()
             RefreshRuntimeCameraBinding();
         });
 
+    // Mirror renderer dataset capture state into the toolbar and propagate toolbar edits back into the renderer.
+    m_EditorToolbar.SetDatasetCaptureEnabled(Trident::RenderCommand::IsFrameDatasetCaptureEnabled());
+    m_EditorToolbar.SetDatasetCaptureDirectory(Trident::RenderCommand::GetFrameDatasetCaptureDirectory().string());
+    m_EditorToolbar.SetDatasetCaptureInterval(Trident::RenderCommand::GetFrameDatasetCaptureInterval());
+
+    m_EditorToolbar.SetOnDatasetCaptureToggle([](bool enabled)
+        {
+            // Propagate enable state directly into the renderer command layer.
+            Trident::RenderCommand::SetFrameDatasetCaptureEnabled(enabled);
+        });
+
+    m_EditorToolbar.SetOnDatasetCaptureDirectoryChanged([](const std::string& captureDirectory)
+        {
+            // Keep the renderer in sync with toolbar edits.
+            Trident::RenderCommand::SetFrameDatasetCaptureDirectory(std::filesystem::path(captureDirectory));
+        });
+
+    m_EditorToolbar.SetOnDatasetSampleIntervalChanged([](uint32_t sampleInterval)
+        {
+            // Clamp intervals in the command so downstream recorder uses a valid cadence.
+            Trident::RenderCommand::SetFrameDatasetCaptureInterval(sampleInterval);
+        });
+
     m_EditorToolbar.SetOnExportStart([this]()
         {
             // Defer recording to the game viewport panel so RenderCommand interactions remain centralised there.

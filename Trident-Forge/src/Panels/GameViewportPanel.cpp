@@ -68,7 +68,7 @@ namespace EditorPanels
         }
         else
         {
-            ImGui::TextUnformatted("Runtime viewport unavailable");
+            ImGui::TextWrapped("Runtime viewport unavailable");
         }
     }
 

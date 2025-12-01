@@ -16,6 +16,7 @@ namespace EditorPanels
             m_Entries.clear();
             m_StatusMessage = "No content directory configured.";
             m_EntriesDirty = false;
+
             return;
         }
 
@@ -26,6 +27,7 @@ namespace EditorPanels
             m_Entries.clear();
             m_StatusMessage = "Content root does not exist: " + m_RootDirectory.string();
             m_EntriesDirty = false;
+
             return;
         }
 
@@ -63,6 +65,7 @@ namespace EditorPanels
         {
             m_StatusMessage = "Directory does not exist: " + m_CurrentDirectory.string();
             m_EntriesDirty = false;
+
             return;
         }
 
@@ -109,13 +112,14 @@ namespace EditorPanels
 
         if (m_RootDirectory.empty())
         {
-            ImGui::TextUnformatted("No content root configured.");
+            ImGui::TextWrapped("No content root configured.");
             ImGui::End();
+
             return;
         }
 
-        ImGui::Text("Root: %s", m_RootDirectory.string().c_str());
-        ImGui::Text("Current: %s", m_CurrentDirectory.string().c_str());
+        ImGui::TextWrapped("Root: %s", m_RootDirectory.string().c_str());
+        ImGui::TextWrapped("Current: %s", m_CurrentDirectory.string().c_str());
 
         if (m_CurrentDirectory != m_RootDirectory)
         {
@@ -131,9 +135,7 @@ namespace EditorPanels
                 {
                     const std::string l_RootStr = m_RootDirectory.string();
                     const std::string l_ParentStr = l_Parent.string();
-                    const bool l_InsideRoot =
-                        l_ParentStr.size() >= l_RootStr.size() &&
-                        l_ParentStr.rfind(l_RootStr, 0) == 0;
+                    const bool l_InsideRoot = l_ParentStr.size() >= l_RootStr.size() && l_ParentStr.rfind(l_RootStr, 0) == 0;
 
                     m_CurrentDirectory = l_InsideRoot ? l_Parent : m_RootDirectory;
                 }
@@ -146,7 +148,7 @@ namespace EditorPanels
 
         if (!m_StatusMessage.empty())
         {
-            ImGui::TextUnformatted(m_StatusMessage.c_str());
+            ImGui::TextWrapped(m_StatusMessage.c_str());
         }
 
         for (const auto& it_Entry : m_Entries)

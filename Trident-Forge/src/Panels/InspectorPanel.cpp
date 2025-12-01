@@ -44,12 +44,12 @@ namespace EditorPanels
         (void)l_WindowVisible;
         // Submit inspector contents unconditionally so dockspace tests retain the node regardless of collapse.
 
-        ImGui::Text("Selection: %s", m_SelectedLabel.c_str());
+        ImGui::TextWrapped("Selection: %s", m_SelectedLabel.c_str());
         ImGui::Separator();
 
         if (m_Registry == nullptr || m_SelectedEntity == 0)
         {
-            ImGui::TextUnformatted("No entity selected.");
+            ImGui::TextWrapped("No entity selected.");
             ImGui::End();
             return;
         }
@@ -119,12 +119,12 @@ namespace EditorPanels
                 default: break;
                 }
 
-                ImGui::Text("Primitive: %s", l_PrimitiveLabel);
+                ImGui::TextWrapped("Primitive: %s", l_PrimitiveLabel);
 
                 if (!l_Mesh.m_SourceAssetPath.empty())
                 {
-                    ImGui::Text("Source: %s", l_Mesh.m_SourceAssetPath.c_str());
-                    ImGui::Text("Mesh Index: %zu", l_Mesh.m_SourceMeshIndex);
+                    ImGui::TextWrapped("Source: %s", l_Mesh.m_SourceAssetPath.c_str());
+                    ImGui::TextWrapped("Mesh Index: %zu", l_Mesh.m_SourceMeshIndex);
                 }
             }
         }
@@ -171,7 +171,7 @@ namespace EditorPanels
 
         if (!l_HasAnyComponent)
         {
-            ImGui::TextUnformatted("Selected entity has no recognised components.");
+            ImGui::TextWrapped("Selected entity has no recognised components.");
         }
 
         ImGui::End();

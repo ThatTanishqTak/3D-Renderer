@@ -353,7 +353,6 @@ namespace Trident
 
         // Default dataset capture settings point at a local directory and remain disabled until requested.
         m_FrameDatasetCaptureDirectory = std::filesystem::current_path() / "DatasetCapture";
-        UpdateDatasetDirectoryBuffer();
         m_FrameDatasetCaptureInterval = 1;
         m_FrameDatasetCaptureEnabled = false;
 
@@ -2118,7 +2117,6 @@ namespace Trident
             m_FrameDatasetCaptureDirectory = directory;
         }
 
-        UpdateDatasetDirectoryBuffer();
         SyncFrameDatasetRecorder();
     }
 
@@ -5914,53 +5912,10 @@ namespace Trident
         TR_CORE_INFO("Performance capture exported to {}", l_FilePath.string().c_str());
     }
 
-    void Renderer::DrawDatasetCaptureUI()
-    {
-        if (ImGui::Begin("Dataset Capture"))
-        {
-            ImGui::TextWrapped("Control dataset capture at runtime to avoid unwanted disk writes.");
-
-            bool l_CaptureEnabled = m_FrameDatasetCaptureEnabled;
-            if (ImGui::Checkbox("Enable capture", &l_CaptureEnabled))
-            {
-                // Toggle capture without restarting the application so users can opt-in only when needed.
-                SetFrameDatasetCaptureEnabled(l_CaptureEnabled);
-            }
-
-            ImGui::Separator();
-
-            if (ImGui::InputText("Capture directory", m_FrameDatasetDirectoryBuffer.data(), m_FrameDatasetDirectoryBuffer.size()))
-            {
-                // Apply directory edits immediately so subsequent captures land in the desired folder.
-                SetFrameDatasetCaptureDirectory(std::filesystem::path(m_FrameDatasetDirectoryBuffer.data()));
-            }
-
-            int l_SampleInterval = static_cast<int>(m_FrameDatasetCaptureInterval);
-            if (ImGui::InputInt("Sample interval", &l_SampleInterval))
-            {
-                l_SampleInterval = std::max(1, l_SampleInterval);
-                SetFrameDatasetCaptureInterval(static_cast<uint32_t>(l_SampleInterval));
-            }
-
-            ImGui::Text("Current directory: %s", m_FrameDatasetCaptureDirectory.string().c_str());
-            ImGui::Text("Sampling every %u frame(s)", m_FrameDatasetCaptureInterval);
-        }
-
-        ImGui::End();
-    }
-
     void Renderer::SyncFrameDatasetRecorder()
     {
         m_FrameDatasetRecorder.SetCaptureDirectory(m_FrameDatasetCaptureDirectory);
         m_FrameDatasetRecorder.SetSampleInterval(m_FrameDatasetCaptureInterval);
         m_FrameDatasetRecorder.EnableCapture(m_FrameDatasetCaptureEnabled);
-    }
-
-    void Renderer::UpdateDatasetDirectoryBuffer()
-    {
-        const std::string l_PathString = m_FrameDatasetCaptureDirectory.string();
-        std::fill(m_FrameDatasetDirectoryBuffer.begin(), m_FrameDatasetDirectoryBuffer.end(), '\0');
-        const size_t l_CopyLength = std::min(l_PathString.size(), m_FrameDatasetDirectoryBuffer.size() - 1);
-        std::memcpy(m_FrameDatasetDirectoryBuffer.data(), l_PathString.c_str(), l_CopyLength);
     }
 }

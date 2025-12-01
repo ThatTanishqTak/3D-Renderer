@@ -29,7 +29,7 @@ namespace EditorPanels
         (void)l_WindowVisible;
         // Submit the window every frame so dockspace validation sees consistent nodes even when collapsed.
 
-        ImGui::TextUnformatted("Animation Graph Overview");
+        ImGui::TextWrapped("Animation Graph Overview");
         ImGui::Separator();
         ImGui::TextWrapped("%s", m_StatusText.c_str());
 

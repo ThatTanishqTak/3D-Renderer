@@ -29,7 +29,7 @@ namespace EditorPanels
         (void)l_WindowVisible;
         // Keep the window submission unconditional so dockspace layouts stay stable when toggling visibility.
 
-        ImGui::TextUnformatted("AI Diagnostics");
+        ImGui::TextWrapped("AI Diagnostics");
         ImGui::Separator();
         ImGui::TextWrapped("%s", m_DebugSummary.c_str());
 

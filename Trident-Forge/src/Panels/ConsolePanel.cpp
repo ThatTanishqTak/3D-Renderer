@@ -47,7 +47,7 @@ namespace EditorPanels
                 continue;
             }
 
-            ImGui::TextUnformatted(l_Message.m_Text.c_str());
+            ImGui::TextWrapped(l_Message.m_Text.c_str());
         }
 
         ImGui::End();
