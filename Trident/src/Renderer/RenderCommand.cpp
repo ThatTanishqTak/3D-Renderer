@@ -199,6 +199,42 @@ namespace Trident
         return Startup::GetRenderer().GetAiTextureDescriptor();
     }
 
+    void RenderCommand::SetFrameDatasetCaptureEnabled(bool enabled)
+    {
+        // Forward the runtime toggle so tooling can pause dataset capture when it is not required.
+        Startup::GetRenderer().SetFrameDatasetCaptureEnabled(enabled);
+    }
+
+    bool RenderCommand::IsFrameDatasetCaptureEnabled()
+    {
+        return Startup::GetRenderer().IsFrameDatasetCaptureEnabled();
+    }
+
+    void RenderCommand::SetFrameDatasetCaptureDirectory(const std::filesystem::path& directory)
+    {
+        Startup::GetRenderer().SetFrameDatasetCaptureDirectory(directory);
+    }
+
+    std::filesystem::path RenderCommand::GetFrameDatasetCaptureDirectory()
+    {
+        return Startup::GetRenderer().GetFrameDatasetCaptureDirectory();
+    }
+
+    void RenderCommand::SetFrameDatasetCaptureInterval(uint32_t interval)
+    {
+        Startup::GetRenderer().SetFrameDatasetCaptureInterval(interval);
+    }
+
+    uint32_t RenderCommand::GetFrameDatasetCaptureInterval()
+    {
+        return Startup::GetRenderer().GetFrameDatasetCaptureInterval();
+    }
+
+    void RenderCommand::DrawDatasetCaptureUI()
+    {
+        Startup::GetRenderer().DrawDatasetCaptureUI();
+    }
+
     bool RenderCommand::SetViewportRecordingEnabled(bool enabled, uint32_t viewportId, VkExtent2D extent, const std::filesystem::path& outputPath)
     {
         // Forward the recording toggle so UI panels can trigger capture sessions.

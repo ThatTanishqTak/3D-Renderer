@@ -127,6 +127,41 @@ namespace Trident
         void SetActiveRegistry(ECS::Registry* registry);
         bool HasRuntimeCamera() const { return m_RuntimeCamera != nullptr && m_RuntimeCameraReady; }
 
+        /**
+         * @brief Control whether AI dataset capture runs during rendering.
+         */
+        void SetFrameDatasetCaptureEnabled(bool enabled);
+
+        /**
+         * @brief Update the folder that stores captured dataset artefacts.
+         */
+        void SetFrameDatasetCaptureDirectory(const std::filesystem::path& directory);
+
+        /**
+         * @brief Inspect the currently configured dataset capture directory.
+         */
+        std::filesystem::path GetFrameDatasetCaptureDirectory() const { return m_FrameDatasetCaptureDirectory; }
+
+        /**
+         * @brief Adjust how frequently frames are sampled for dataset capture.
+         */
+        void SetFrameDatasetCaptureInterval(uint32_t interval);
+
+        /**
+         * @brief Query the sampling interval currently applied to dataset capture.
+         */
+        uint32_t GetFrameDatasetCaptureInterval() const { return m_FrameDatasetCaptureInterval; }
+
+        /**
+         * @brief Expose whether dataset capture is currently active.
+         */
+        bool IsFrameDatasetCaptureEnabled() const { return m_FrameDatasetCaptureEnabled; }
+
+        /**
+         * @brief Draw an ImGui panel that exposes dataset capture configuration.
+         */
+        void DrawDatasetCaptureUI();
+
         // Resolve a texture path to a renderer-managed slot, loading GPU resources and updating descriptor bindings
         // when necessary. This keeps editor tooling responsive when authors tweak materials.
         int32_t ResolveTextureSlot(const std::string& texturePath);
@@ -472,6 +507,10 @@ namespace Trident
         bool m_AiModelMissingWarningIssued = false;            // Prevents the missing model log from repeating every frame.
         bool m_AiModelInitialiseWarningIssued = false;         // Prevents repeated warnings when a supplied model fails to load.
         AI::FrameDatasetRecorder m_FrameDatasetRecorder;       // Helper that persists AI training samples for offline pipelines.
+        bool m_FrameDatasetCaptureEnabled = false;             // Indicates whether dataset capture is currently running.
+        uint32_t m_FrameDatasetCaptureInterval = 1;            // Frequency at which frames are sampled for dataset capture.
+        std::filesystem::path m_FrameDatasetCaptureDirectory;  // Target directory for captured dataset artefacts.
+        std::array<char, 512> m_FrameDatasetDirectoryBuffer{}; // Mutable buffer used by the dataset capture UI.
 
         bool m_ReadbackEnabled = false;                       // Indicates whether CPU readback is currently required by AI or recording.
         bool m_ViewportRecordingEnabled = false;               // Tracks whether viewport capture is active.
@@ -544,5 +583,7 @@ namespace Trident
         ViewportContext* FindViewportContext(uint32_t viewportId);
         void CreateOrResizeOffscreenResources(OffscreenTarget& target, VkExtent2D extent);
         const Camera* GetActiveCamera(const ViewportContext& context) const;
+        void SyncFrameDatasetRecorder();
+        void UpdateDatasetDirectoryBuffer();
     };
 }

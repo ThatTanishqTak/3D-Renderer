@@ -59,6 +59,18 @@ namespace Trident
         static float GetAiBlendStrength();
         // Placeholder hook for future UI that will surface the AI texture preview.
         static ImTextureID GetAiTextureDescriptor();
+        // Toggle dataset capture at runtime without relying on environment variables.
+        static void SetFrameDatasetCaptureEnabled(bool enabled);
+        // Surface the current dataset capture flag for UI panels.
+        static bool IsFrameDatasetCaptureEnabled();
+        // Update the dataset capture directory from configuration panels.
+        static void SetFrameDatasetCaptureDirectory(const std::filesystem::path& directory);
+        static std::filesystem::path GetFrameDatasetCaptureDirectory();
+        // Adjust how frequently frames are captured to reduce I/O pressure.
+        static void SetFrameDatasetCaptureInterval(uint32_t interval);
+        static uint32_t GetFrameDatasetCaptureInterval();
+        // Draw the dataset capture configuration panel when ImGui is active.
+        static void DrawDatasetCaptureUI();
         // Toggle viewport recording so UI panels can export animation clips.
         static bool SetViewportRecordingEnabled(bool enabled, uint32_t viewportId, VkExtent2D extent, const std::filesystem::path& outputPath);
         // Submit the latest frame to the recording path when readback completes.

@@ -2,10 +2,13 @@
 
 #include "Core/Utilities.h"
 
+#include <algorithm>
 #include <array>
+#include <condition_variable>
 #include <cstdio>
 #include <fstream>
 #include <iomanip>
+#include <mutex>
 #include <limits>
 #include <numeric>
 #include <sstream>
@@ -18,6 +21,12 @@ namespace Trident
     {
         FrameDatasetRecorder::FrameDatasetRecorder() = default;
 
+        FrameDatasetRecorder::~FrameDatasetRecorder()
+        {
+            // Stop the worker thread before the recorder is destroyed so outstanding writes finish cleanly.
+            StopWorker();
+        }
+
         void FrameDatasetRecorder::SetCaptureDirectory(const std::filesystem::path& directory)
         {
             m_CaptureDirectory = directory;
@@ -27,21 +36,46 @@ namespace Trident
         void FrameDatasetRecorder::EnableCapture(bool enable)
         {
             m_CaptureEnabled = enable;
+            m_StopWorker = !m_CaptureEnabled;
+            if (m_CaptureEnabled)
+            {
+                // Spin up the background thread so file writes do not block the render loop.
+                StartWorker();
+                m_FrameCounter = 0;
+            }
+            else
+            {
+                // Signal the worker to flush outstanding jobs before stopping.
+                m_QueueCondition.notify_all();
+                StopWorker();
+            }
             if (!m_CaptureEnabled)
             {
                 Reset();
             }
         }
 
+        void FrameDatasetRecorder::SetSampleInterval(uint32_t interval)
+        {
+            // Keep the interval within a safe range so capture never divides by zero.
+            m_CaptureSampleInterval = std::max<uint32_t>(1, interval);
+        }
+
         void FrameDatasetRecorder::Reset()
         {
             m_PendingSamples.clear();
             m_NextSampleIndex = 0;
+            m_FrameCounter = 0;
         }
 
         void FrameDatasetRecorder::RecordInputFrame(std::span<const float> frameData, VkExtent2D extent, uint32_t channelCount, std::span<const int64_t> tensorShape)
         {
             if (!m_CaptureEnabled)
+            {
+                return;
+            }
+
+            if (!ShouldCaptureThisFrame())
             {
                 return;
             }
@@ -75,13 +109,18 @@ namespace Trident
             };
             const std::span<const int64_t> l_ShapeSpan = tensorShape.empty() ? std::span<const int64_t>{ l_DefaultShape } : tensorShape;
 
-            if (!WriteNpyFile(l_InputPath, frameData, l_ShapeSpan))
-            {
-                TR_CORE_ERROR("FrameDatasetRecorder failed to persist frame input '{}'", l_InputPath.string());
-                return;
-            }
-
-            WriteMetadataFile(l_MetadataPath, extent, channelCount, l_ShapeSpan, "BGRA", true);
+            CaptureJob l_Job{};
+            l_Job.m_Type = JobType::Input;
+            l_Job.m_Index = l_Index;
+            l_Job.m_TargetPath = l_InputPath;
+            l_Job.m_MetadataPath = l_MetadataPath;
+            l_Job.m_Data.assign(frameData.begin(), frameData.end());
+            l_Job.m_Shape.assign(l_ShapeSpan.begin(), l_ShapeSpan.end());
+            l_Job.m_Extent = extent;
+            l_Job.m_ChannelCount = channelCount;
+            l_Job.m_ColorOrder = "BGRA";
+            l_Job.m_Normalised = true;
+            EnqueueJob(std::move(l_Job));
 
             PendingSample l_Pending{};
             l_Pending.m_Index = l_Index;
@@ -137,10 +176,13 @@ namespace Trident
             }
 
             const std::filesystem::path l_OutputPath = BuildOutputPath(l_Pending.m_Index);
-            if (!WriteNpyFile(l_OutputPath, outputData, l_Shape))
-            {
-                TR_CORE_ERROR("FrameDatasetRecorder failed to persist AI output '{}'", l_OutputPath.string());
-            }
+            CaptureJob l_Job{};
+            l_Job.m_Type = JobType::Output;
+            l_Job.m_Index = l_Pending.m_Index;
+            l_Job.m_TargetPath = l_OutputPath;
+            l_Job.m_Data.assign(outputData.begin(), outputData.end());
+            l_Job.m_Shape = std::move(l_Shape);
+            EnqueueJob(std::move(l_Job));
         }
 
         std::filesystem::path FrameDatasetRecorder::BuildInputPath(uint64_t index) const
@@ -321,6 +363,100 @@ namespace Trident
             l_Stream << "  \"colorOrder\": \"" << colorOrder << "\",\n";
             l_Stream << "  \"normalised\": " << (normalised ? "true" : "false") << "\n";
             l_Stream << "}\n";
+        }
+
+        void FrameDatasetRecorder::StartWorker()
+        {
+            if (m_WorkerRunning)
+            {
+                return;
+            }
+
+            m_StopWorker = false;
+            m_WorkerRunning = true;
+            m_WorkerThread = std::thread([this]()
+                {
+                    while (true)
+                    {
+                        CaptureJob l_Job{};
+
+                        {
+                            std::unique_lock<std::mutex> l_Lock(m_QueueMutex);
+                            m_QueueCondition.wait(l_Lock, [this]() { return m_StopWorker || !m_WriteQueue.empty(); });
+
+                            if (m_StopWorker && m_WriteQueue.empty())
+                            {
+                                break;
+                            }
+
+                            l_Job = std::move(m_WriteQueue.front());
+                            m_WriteQueue.pop_front();
+                        }
+
+                        ProcessJob(l_Job);
+                    }
+                });
+        }
+
+        void FrameDatasetRecorder::StopWorker()
+        {
+            if (!m_WorkerRunning)
+            {
+                return;
+            }
+
+            {
+                std::scoped_lock<std::mutex> l_Lock(m_QueueMutex);
+                m_StopWorker = true;
+            }
+
+            m_QueueCondition.notify_all();
+
+            if (m_WorkerThread.joinable())
+            {
+                m_WorkerThread.join();
+            }
+
+            m_WorkerRunning = false;
+        }
+
+        void FrameDatasetRecorder::EnqueueJob(CaptureJob job)
+        {
+            {
+                std::scoped_lock<std::mutex> l_Lock(m_QueueMutex);
+                m_WriteQueue.push_back(std::move(job));
+            }
+
+            m_QueueCondition.notify_one();
+        }
+
+        void FrameDatasetRecorder::ProcessJob(CaptureJob& job)
+        {
+            if (job.m_Type == JobType::Input)
+            {
+                if (!WriteNpyFile(job.m_TargetPath, job.m_Data, job.m_Shape))
+                {
+                    TR_CORE_ERROR("FrameDatasetRecorder failed to persist frame input '{}'", job.m_TargetPath.string());
+                    return;
+                }
+
+                WriteMetadataFile(job.m_MetadataPath, job.m_Extent, job.m_ChannelCount, job.m_Shape, job.m_ColorOrder, job.m_Normalised);
+            }
+            else
+            {
+                if (!WriteNpyFile(job.m_TargetPath, job.m_Data, job.m_Shape))
+                {
+                    TR_CORE_ERROR("FrameDatasetRecorder failed to persist AI output '{}'", job.m_TargetPath.string());
+                }
+            }
+        }
+
+        bool FrameDatasetRecorder::ShouldCaptureThisFrame()
+        {
+            ++m_FrameCounter;
+            const bool l_CaptureThisFrame = (m_FrameCounter % m_CaptureSampleInterval) == 0;
+
+            return l_CaptureThisFrame;
         }
     }
 }

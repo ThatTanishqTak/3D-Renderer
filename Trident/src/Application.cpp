@@ -115,6 +115,12 @@ namespace Trident
 
         if (m_ImGuiLayer)
         {
+            // Surface renderer tooling controls so dataset capture can be toggled at runtime.
+            RenderCommand::DrawDatasetCaptureUI();
+        }
+
+        if (m_ImGuiLayer)
+        {
             m_ImGuiLayer->EndFrame();
         }
 

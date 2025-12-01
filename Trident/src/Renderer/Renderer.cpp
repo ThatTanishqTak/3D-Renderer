@@ -351,6 +351,12 @@ namespace Trident
         m_AiDebugStats.m_TextureReady = m_AiTextureReady;
         m_AiDebugStats.m_ModelInitialised = m_FrameGenerator.IsInitialised();
 
+        // Default dataset capture settings point at a local directory and remain disabled until requested.
+        m_FrameDatasetCaptureDirectory = std::filesystem::current_path() / "DatasetCapture";
+        UpdateDatasetDirectoryBuffer();
+        m_FrameDatasetCaptureInterval = 1;
+        m_FrameDatasetCaptureEnabled = false;
+
         // Attempt to locate an AI model so frame interpolation can be ready before the first render.
         const bool l_ModelInitialised = TryInitialiseAiModel();
         m_AiDebugStats.m_ModelInitialised = l_ModelInitialised;
@@ -363,20 +369,15 @@ namespace Trident
             const char* l_CustomDirectory = std::getenv("TRIDENT_DATASET_CAPTURE_DIR");
             if (l_CustomDirectory != nullptr && std::strlen(l_CustomDirectory) > 0)
             {
-                m_FrameDatasetRecorder.SetCaptureDirectory(l_CustomDirectory);
-            }
-            else
-            {
-                const std::filesystem::path l_DefaultDirectory = std::filesystem::current_path() / "DatasetCapture";
-                m_FrameDatasetRecorder.SetCaptureDirectory(l_DefaultDirectory);
+                SetFrameDatasetCaptureDirectory(l_CustomDirectory);
             }
 
-            m_FrameDatasetRecorder.EnableCapture(true);
-            TR_CORE_INFO("Frame dataset capture enabled. Writing samples to '{}'", m_FrameDatasetRecorder.GetCaptureDirectory().string());
+            SetFrameDatasetCaptureEnabled(true);
+            TR_CORE_INFO("Frame dataset capture enabled. Writing samples to '{}'", m_FrameDatasetCaptureDirectory.string());
         }
         else
         {
-            m_FrameDatasetRecorder.EnableCapture(false);
+            SetFrameDatasetCaptureEnabled(false);
         }
     }
 
@@ -714,8 +715,11 @@ namespace Trident
             NormaliseAndReorderAiOutput(l_CompletedOutput, l_OutputShapeInfo, m_FrameReadbackExtent, m_FrameReadbackChannelCount);
             const std::array<int64_t, 4> l_OutputCaptureShape = BuildCanonicalNhwcShape(l_OutputShapeInfo, m_FrameReadbackExtent, m_FrameReadbackChannelCount);
 
-            // Persist the freshly produced AI tensor alongside the matching rasterised frame for offline training.
-            m_FrameDatasetRecorder.RecordAiOutput(l_CompletedOutput, l_OutputCaptureShape);
+            if (m_FrameDatasetCaptureEnabled)
+            {
+                // Persist the freshly produced AI tensor alongside the matching rasterised frame for offline training.
+                m_FrameDatasetRecorder.RecordAiOutput(l_CompletedOutput, l_OutputCaptureShape);
+            }
 
             m_AiInterpolationBuffer = std::move(l_CompletedOutput);
             m_AiTextureDirty = true;
@@ -755,8 +759,11 @@ namespace Trident
             return;
         }
 
-        // Cache the exact tensor submitted to the AI worker so the dataset stays perfectly synchronised.
-        m_FrameDatasetRecorder.RecordInputFrame(l_FrameReadback, m_FrameReadbackExtent, m_FrameReadbackChannelCount, l_InputCaptureShape);
+        if (m_FrameDatasetCaptureEnabled)
+        {
+            // Cache the exact tensor submitted to the AI worker so the dataset stays perfectly synchronised.
+            m_FrameDatasetRecorder.RecordInputFrame(l_FrameReadback, m_FrameReadbackExtent, m_FrameReadbackChannelCount, l_InputCaptureShape);
+        }
 
         a_RefreshStats();
 
@@ -2090,6 +2097,36 @@ namespace Trident
             // Reset the cached viewport camera when the underlying registry changes to avoid dangling entity references.
             m_ViewportCamera = std::numeric_limits<ECS::Entity>::max();
         }
+    }
+
+    void Renderer::SetFrameDatasetCaptureEnabled(bool enabled)
+    {
+        // Allow runtime toggles so tooling can pause dataset capture without requiring environment variable restarts.
+        m_FrameDatasetCaptureEnabled = enabled;
+        SyncFrameDatasetRecorder();
+    }
+
+    void Renderer::SetFrameDatasetCaptureDirectory(const std::filesystem::path& directory)
+    {
+        // Cache the directory for UI display and ensure the recorder points at a valid path even if the user clears the field.
+        if (directory.empty())
+        {
+            m_FrameDatasetCaptureDirectory = std::filesystem::current_path() / "DatasetCapture";
+        }
+        else
+        {
+            m_FrameDatasetCaptureDirectory = directory;
+        }
+
+        UpdateDatasetDirectoryBuffer();
+        SyncFrameDatasetRecorder();
+    }
+
+    void Renderer::SetFrameDatasetCaptureInterval(uint32_t interval)
+    {
+        // Clamp the interval to at least one so the modulus check in the recorder remains valid.
+        m_FrameDatasetCaptureInterval = std::max<uint32_t>(1, interval);
+        m_FrameDatasetRecorder.SetSampleInterval(m_FrameDatasetCaptureInterval);
     }
 
     void Renderer::SetClearColor(const glm::vec4& color)
@@ -5875,5 +5912,55 @@ namespace Trident
         l_File.close();
 
         TR_CORE_INFO("Performance capture exported to {}", l_FilePath.string().c_str());
+    }
+
+    void Renderer::DrawDatasetCaptureUI()
+    {
+        if (ImGui::Begin("Dataset Capture"))
+        {
+            ImGui::TextWrapped("Control dataset capture at runtime to avoid unwanted disk writes.");
+
+            bool l_CaptureEnabled = m_FrameDatasetCaptureEnabled;
+            if (ImGui::Checkbox("Enable capture", &l_CaptureEnabled))
+            {
+                // Toggle capture without restarting the application so users can opt-in only when needed.
+                SetFrameDatasetCaptureEnabled(l_CaptureEnabled);
+            }
+
+            ImGui::Separator();
+
+            if (ImGui::InputText("Capture directory", m_FrameDatasetDirectoryBuffer.data(), m_FrameDatasetDirectoryBuffer.size()))
+            {
+                // Apply directory edits immediately so subsequent captures land in the desired folder.
+                SetFrameDatasetCaptureDirectory(std::filesystem::path(m_FrameDatasetDirectoryBuffer.data()));
+            }
+
+            int l_SampleInterval = static_cast<int>(m_FrameDatasetCaptureInterval);
+            if (ImGui::InputInt("Sample interval", &l_SampleInterval))
+            {
+                l_SampleInterval = std::max(1, l_SampleInterval);
+                SetFrameDatasetCaptureInterval(static_cast<uint32_t>(l_SampleInterval));
+            }
+
+            ImGui::Text("Current directory: %s", m_FrameDatasetCaptureDirectory.string().c_str());
+            ImGui::Text("Sampling every %u frame(s)", m_FrameDatasetCaptureInterval);
+        }
+
+        ImGui::End();
+    }
+
+    void Renderer::SyncFrameDatasetRecorder()
+    {
+        m_FrameDatasetRecorder.SetCaptureDirectory(m_FrameDatasetCaptureDirectory);
+        m_FrameDatasetRecorder.SetSampleInterval(m_FrameDatasetCaptureInterval);
+        m_FrameDatasetRecorder.EnableCapture(m_FrameDatasetCaptureEnabled);
+    }
+
+    void Renderer::UpdateDatasetDirectoryBuffer()
+    {
+        const std::string l_PathString = m_FrameDatasetCaptureDirectory.string();
+        std::fill(m_FrameDatasetDirectoryBuffer.begin(), m_FrameDatasetDirectoryBuffer.end(), '\0');
+        const size_t l_CopyLength = std::min(l_PathString.size(), m_FrameDatasetDirectoryBuffer.size() - 1);
+        std::memcpy(m_FrameDatasetDirectoryBuffer.data(), l_PathString.c_str(), l_CopyLength);
     }
 }
