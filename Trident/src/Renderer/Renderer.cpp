@@ -434,9 +434,12 @@ namespace Trident
         l_DefaultContext.m_Info.Size = { static_cast<float>(m_Swapchain.GetExtent().width), static_cast<float>(m_Swapchain.GetExtent().height) };
         l_DefaultContext.m_CachedExtent = { 0, 0 };
 
-        // Prepare CPU-visible staging resources so AI tooling can safely consume rendered pixels.
-        RequestReadbackResize(m_Swapchain.GetExtent(), true);
-        ApplyPendingReadbackResize();
+        // Only allocate CPU-visible readback resources once a caller explicitly requests them.
+        if (m_ReadbackEnabled)
+        {
+            RequestReadbackResize(m_Swapchain.GetExtent(), true);
+            ApplyPendingReadbackResize();
+        }
 
         VkFenceCreateInfo l_FenceInfo{ VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
         l_FenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
@@ -580,8 +583,15 @@ namespace Trident
             return;
         }
 
+        // Enable readback only when AI processing or viewport recording explicitly requests it.
+        const bool l_ReadbackRequired = m_FrameGenerator.IsInitialised() || m_ViewportRecordingEnabled;
+        SetReadbackEnabled(l_ReadbackRequired, m_Swapchain.GetExtent());
+
         // Resolve any completed GPU readback before new commands reuse the staging buffers for this swapchain image.
-        ResolvePendingReadback(l_ImageIndex, l_FrameWallClock);
+        if (m_ReadbackEnabled)
+        {
+            ResolvePendingReadback(l_ImageIndex, l_FrameWallClock);
+        }
 
         UpdateUniformBuffer(l_ImageIndex);
 
@@ -880,8 +890,37 @@ namespace Trident
         return false;
     }
 
+    void Renderer::SetReadbackEnabled(bool enabled, VkExtent2D resizeTarget)
+    {
+        // Toggle CPU readback resources based on the current feature requirements.
+        if (m_ReadbackEnabled == enabled)
+        {
+            return;
+        }
+
+        m_ReadbackEnabled = enabled;
+
+        if (m_ReadbackEnabled)
+        {
+            RequestReadbackResize(resizeTarget, true);
+            ApplyPendingReadbackResize();
+
+            return;
+        }
+
+        // Clear pending resize requests and release staging buffers when readback is disabled.
+        m_ReadbackResizePending = false;
+        m_FrameReadbackPending.assign(m_FrameReadbackPending.size(), false);
+        DestroyReadbackResources();
+    }
+
     void Renderer::RequestReadbackResize(VkExtent2D targetExtent, bool force)
     {
+        if (!m_ReadbackEnabled)
+        {
+            return;
+        }
+
         // Cache the incoming request and mark the staging buffers dirty when the viewport geometry changes.
         VkExtent2D l_TargetExtent = targetExtent;
         if (l_TargetExtent.width == 0 || l_TargetExtent.height == 0)
@@ -1015,6 +1054,11 @@ namespace Trident
 
     void Renderer::ResolvePendingReadback(uint32_t imageIndex, std::chrono::system_clock::time_point captureTimestamp)
     {
+        if (!m_ReadbackEnabled)
+        {
+            return;
+        }
+
         if (imageIndex >= m_FrameReadbackBuffers.size())
         {
             return;
@@ -4787,7 +4831,7 @@ namespace Trident
 
         if (l_PrimaryViewportActive)
         {
-            if (imageIndex < m_FrameReadbackBuffers.size() && imageIndex < m_FrameReadbackPending.size())
+            if (m_ReadbackEnabled && imageIndex < m_FrameReadbackBuffers.size() && imageIndex < m_FrameReadbackPending.size())
             {
                 const bool l_ExtentMatches = (m_FrameReadbackExtent.width == l_PrimaryTarget->m_Extent.width) && (m_FrameReadbackExtent.height == l_PrimaryTarget->m_Extent.height);
                 VkBuffer l_ReadbackBuffer = m_FrameReadbackBuffers[imageIndex];
@@ -4826,6 +4870,11 @@ namespace Trident
                     // Resolution mismatches are expected once asynchronous readback arrives; skip the copy for now.
                     m_FrameReadbackPending[imageIndex] = false;
                 }
+            }
+            else if (imageIndex < m_FrameReadbackPending.size())
+            {
+                // Disable readback when it is not required so staging buffers are not touched.
+                m_FrameReadbackPending[imageIndex] = false;
             }
 
             // Multi-panel path: copy the rendered viewport into the swapchain image so every editor panel sees a synchronized back buffer.
@@ -5623,8 +5672,7 @@ namespace Trident
         {
             // Ensure readback buffers exist before toggling capture so we do not start a session without valid resources.
             // Size staging buffers to the viewport extent so the copy operation during recording lines up with the render target.
-            RequestReadbackResize(extent, true);
-            ApplyPendingReadbackResize();
+            SetReadbackEnabled(true, extent);
 
             const bool l_HasValidReadbackExtent = (m_FrameReadbackExtent.width > 0) && (m_FrameReadbackExtent.height > 0);
             const bool l_HasValidRecordingExtent = (extent.width > 0) && (extent.height > 0);
@@ -5634,6 +5682,9 @@ namespace Trident
             {
                 TR_CORE_WARN("Viewport recording unavailable. Extent {}x{} (readback {}x{}), channels {}.", extent.width, extent.height,
                     m_FrameReadbackExtent.width, m_FrameReadbackExtent.height, m_FrameReadbackChannelCount);
+
+                const bool l_AiReadbackRequired = m_FrameGenerator.IsInitialised();
+                SetReadbackEnabled(l_AiReadbackRequired, m_Swapchain.GetExtent());
 
                 return false;
             }
@@ -5684,6 +5735,10 @@ namespace Trident
 
                 m_ViewportRecordingEnabled = false;
                 m_ViewportRecordingSessionActive = false;
+
+                const bool l_AiReadbackRequired = m_FrameGenerator.IsInitialised();
+                SetReadbackEnabled(l_AiReadbackRequired, m_Swapchain.GetExtent());
+
                 return false;
             }
 
@@ -5706,6 +5761,10 @@ namespace Trident
                     TR_CORE_WARN("Video encoder failed to finalize output at {}", m_RecordingOutputPath.string());
                 }
             }
+
+            // Disable readback again unless AI processing still requires it.
+            const bool l_AiReadbackRequired = m_FrameGenerator.IsInitialised();
+            SetReadbackEnabled(l_AiReadbackRequired, m_Swapchain.GetExtent());
 
             return true;
         }

@@ -473,6 +473,7 @@ namespace Trident
         bool m_AiModelInitialiseWarningIssued = false;         // Prevents repeated warnings when a supplied model fails to load.
         AI::FrameDatasetRecorder m_FrameDatasetRecorder;       // Helper that persists AI training samples for offline pipelines.
 
+        bool m_ReadbackEnabled = false;                       // Indicates whether CPU readback is currently required by AI or recording.
         bool m_ViewportRecordingEnabled = false;               // Tracks whether viewport capture is active.
         uint32_t m_RecordingViewportId = s_InvalidViewportId;  // Active viewport being recorded.
         VkExtent2D m_RecordingExtent{ 0, 0 };                  // Resolution locked for the recording session.
@@ -487,6 +488,7 @@ namespace Trident
         // Core setup
         void ProcessAiFrame();
         bool TryInitialiseAiModel();
+        void SetReadbackEnabled(bool enabled, VkExtent2D resizeTarget);
         bool TryAcquireRenderedFrame(std::vector<float>& outPixels);
         std::optional<std::filesystem::path> ResolveAiModelPath() const;
         void RequestReadbackResize(VkExtent2D targetExtent, bool force = false);
