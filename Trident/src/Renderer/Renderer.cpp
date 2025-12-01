@@ -5569,9 +5569,28 @@ namespace Trident
                 return false;
             }
 
+            // YUV420P/H.264 encoders expect even-sized planes. Round any odd dimension up to the next even value so the
+            // encoder receives a compatible resolution while keeping user intent as close as possible.
+            VkExtent2D l_SanitizedExtent = extent;
+            if ((l_SanitizedExtent.width % 2U) != 0U)
+            {
+                ++l_SanitizedExtent.width;
+            }
+
+            if ((l_SanitizedExtent.height % 2U) != 0U)
+            {
+                ++l_SanitizedExtent.height;
+            }
+
+            if (l_SanitizedExtent.width != extent.width || l_SanitizedExtent.height != extent.height)
+            {
+                TR_CORE_WARN("Viewport recording extent {}x{} adjusted to {}x{} to satisfy even YUV420P dimensions.",
+                    extent.width, extent.height, l_SanitizedExtent.width, l_SanitizedExtent.height);
+            }
+
             m_ViewportFrameBuffer.clear();
             m_RecordingViewportId = viewportId;
-            m_RecordingExtent = extent;
+            m_RecordingExtent = l_SanitizedExtent;
             m_RecordingOutputPath = outputPath;
 
             if (!m_VideoEncoder)
@@ -5586,7 +5605,7 @@ namespace Trident
                 return false;
             }
 
-            const bool l_SessionStarted = m_VideoEncoder->BeginSession(outputPath, extent, 30);
+            const bool l_SessionStarted = m_VideoEncoder->BeginSession(outputPath, l_SanitizedExtent, 30);
             const bool l_SessionActive = l_SessionStarted && m_VideoEncoder->IsSessionActive();
 
             // Reject the start request if the encoder did not accept the session so the caller can surface an error.

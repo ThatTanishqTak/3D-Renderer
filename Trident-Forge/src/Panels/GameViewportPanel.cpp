@@ -143,6 +143,26 @@ namespace EditorPanels
             ImGui::InputText("Export Path", m_OutputPathBuffer.data(), m_OutputPathBuffer.size());
             ImGui::TextWrapped("Choose where the exported clip will be written before starting the capture. Missing folders are created automatically.");
 
+            // YUV420P/H.264 encoding requires even-sized planes. Round the viewport size up to the next even pixel so the
+            // renderer and encoder agree on a supported resolution before the user starts recording.
+            const VkExtent2D l_RawExtent{ static_cast<uint32_t>(m_ViewportInfo.Size.x), static_cast<uint32_t>(m_ViewportInfo.Size.y) };
+            VkExtent2D l_SanitizedExtent = l_RawExtent;
+            if ((l_SanitizedExtent.width % 2U) != 0U)
+            {
+                ++l_SanitizedExtent.width;
+            }
+
+            if ((l_SanitizedExtent.height % 2U) != 0U)
+            {
+                ++l_SanitizedExtent.height;
+            }
+
+            ImGui::Text("Capture Resolution: %ux%u", l_SanitizedExtent.width, l_SanitizedExtent.height);
+            if (l_SanitizedExtent.width != l_RawExtent.width || l_SanitizedExtent.height != l_RawExtent.height)
+            {
+                ImGui::TextUnformatted("Note: Rounded up to even dimensions for YUV420P export.");
+            }
+
             if (ImGui::Button("Start Clip Export"))
             {
                 m_TargetClipDuration = QueryClipDurationSeconds();
@@ -184,7 +204,7 @@ namespace EditorPanels
                 m_RecordingProgress = 0.0f;
 
                 const bool l_RecordingStarted = Trident::RenderCommand::SetViewportRecordingEnabled(true, m_ViewportInfo.ViewportID,
-                    { static_cast<uint32_t>(m_ViewportInfo.Size.x), static_cast<uint32_t>(m_ViewportInfo.Size.y) }, m_CurrentOutputPath);
+                    l_SanitizedExtent, m_CurrentOutputPath);
                 if (!l_RecordingStarted)
                 {
                     ImGui::TextUnformatted("Viewport recording could not start. Verify swapchain and encoder readiness.");
