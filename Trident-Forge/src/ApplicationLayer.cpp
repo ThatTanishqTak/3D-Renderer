@@ -75,6 +75,64 @@ void ApplicationLayer::Initialize()
             ImportDroppedAssets(droppedPaths);
         });
 
+    // Surface playback and export controls through the shared toolbar so the owning layer keeps the runtime wiring centralised.
+    m_EditorToolbar.SetOnPlayRequested([this]()
+        {
+            if (m_ActiveScene == nullptr)
+            {
+                return;
+            }
+
+            if (!m_ActiveScene->IsPlaying())
+            {
+                m_ActiveScene->Play();
+                Trident::RenderCommand::SetActiveRegistry(&m_ActiveScene->GetActiveRegistry());
+                RefreshRuntimeCameraBinding();
+            }
+        });
+
+    m_EditorToolbar.SetOnStopRequested([this]()
+        {
+            if (m_ActiveScene == nullptr)
+            {
+                return;
+            }
+
+            m_ActiveScene->Stop();
+            Trident::RenderCommand::SetActiveRegistry(&m_ActiveScene->GetEditorRegistry());
+            RefreshRuntimeCameraBinding();
+        });
+
+    m_EditorToolbar.SetOnSceneReset([this]()
+        {
+            if (m_ActiveScene == nullptr)
+            {
+                return;
+            }
+
+            m_ActiveScene->Stop();
+            Trident::RenderCommand::SetActiveRegistry(&m_ActiveScene->GetEditorRegistry());
+            RefreshRuntimeCameraBinding();
+        });
+
+    m_EditorToolbar.SetOnExportStart([this]()
+        {
+            // Defer recording to the game viewport panel so RenderCommand interactions remain centralised there.
+            m_GameViewportPanel.RequestExportStart();
+        });
+
+    m_EditorToolbar.SetOnExportStop([this]()
+        {
+            m_GameViewportPanel.RequestExportStop();
+        });
+
+    m_EditorToolbar.SetOnExportPathChanged([this](const std::string& exportPath)
+        {
+            m_GameViewportPanel.SetExportPath(exportPath);
+        });
+
+    m_EditorToolbar.SetExportPath(m_GameViewportPanel.GetExportPath());
+
     // Wire the hierarchy context menu into the layer so right-click creation routes through our helpers.
     m_SceneHierarchyPanel.SetContextMenuActions
     (
@@ -268,67 +326,25 @@ void ApplicationLayer::RenderSceneToolbar()
     const bool l_HasScene = (m_ActiveScene != nullptr);
     const bool l_IsPlaying = l_HasScene && m_ActiveScene->IsPlaying();
 
-    // A simple dockable window. No viewport anchoring, no magic positioning.
-    ImGui::Begin("Scene Controls", nullptr,
-        ImGuiWindowFlags_NoCollapse |
-        ImGuiWindowFlags_NoSavedSettings);
+    // Mirror runtime state into the toolbar so it can drive playback while staying decoupled from the layer internals.
+    m_EditorToolbar.SetSceneControlsEnabled(l_HasScene);
+    m_EditorToolbar.SetPlaybackState(l_IsPlaying ? EditorPanels::EditorToolbar::PlaybackState::Playing : EditorPanels::EditorToolbar::PlaybackState::Edit);
 
-    ImGui::BeginDisabled(!l_HasScene);
-    if (l_HasScene)
-    {
-        if (l_IsPlaying)
-        {
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.13f, 0.59f, 0.30f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.16f, 0.66f, 0.34f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.11f, 0.52f, 0.27f, 1.0f));
-        }
+    // Gather export details from the runtime viewport and forward them to the toolbar for display.
+    const EditorPanels::GameViewportPanel::ExportStatus l_ExportStatus = m_GameViewportPanel.GetExportStatus();
+    EditorPanels::EditorToolbar::ExportUiState l_ExportUiState{};
+    l_ExportUiState.m_HasRuntimeCamera = l_ExportStatus.m_HasRuntimeCamera;
+    l_ExportUiState.m_HasValidViewport = l_ExportStatus.m_HasValidViewport;
+    l_ExportUiState.m_RawExtent = l_ExportStatus.m_RawExtent;
+    l_ExportUiState.m_SanitizedExtent = l_ExportStatus.m_SanitizedExtent;
+    l_ExportUiState.m_IsRecording = l_ExportStatus.m_IsRecording;
+    l_ExportUiState.m_RecordingProgress = l_ExportStatus.m_RecordingProgress;
+    l_ExportUiState.m_OutputPath = l_ExportStatus.m_OutputPath;
+    l_ExportUiState.m_StatusMessage = l_ExportStatus.m_StatusMessage;
+    m_EditorToolbar.SetExportUiState(l_ExportUiState);
+    m_EditorToolbar.SetExportPath(l_ExportStatus.m_OutputPath);
 
-        if (ImGui::Button("Play"))
-        {
-            if (!l_IsPlaying)
-            {
-                m_ActiveScene->Play();
-                Trident::RenderCommand::SetActiveRegistry(&m_ActiveScene->GetActiveRegistry());
-                RefreshRuntimeCameraBinding();
-            }
-        }
-
-        if (l_IsPlaying)
-        {
-            ImGui::PopStyleColor(3);
-        }
-    }
-    else
-    {
-        ImGui::Button("Play");
-    }
-    ImGui::EndDisabled();
-
-    ImGui::SameLine();
-
-    ImGui::BeginDisabled(true);
-    ImGui::Button("Pause");
-    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-    {
-        ImGui::SetTooltip("Pause will be wired once time scaling exists.");
-    }
-    ImGui::EndDisabled();
-
-    ImGui::SameLine();
-
-    ImGui::BeginDisabled(!l_HasScene || !l_IsPlaying);
-    if (ImGui::Button("Stop"))
-    {
-        m_ActiveScene->Stop();
-        Trident::RenderCommand::SetActiveRegistry(&m_ActiveScene->GetEditorRegistry());
-        RefreshRuntimeCameraBinding();
-    }
-    ImGui::EndDisabled();
-
-    ImGui::SameLine();
-    ImGui::Text("Scene State: %s", l_IsPlaying ? "Playing" : "Editing");
-
-    ImGui::End();
+    m_EditorToolbar.Render();
 }
 
 void ApplicationLayer::HandleGlobalShortcuts()

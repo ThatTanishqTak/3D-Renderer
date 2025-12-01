@@ -8,8 +8,6 @@
 #include <chrono>
 #include <filesystem>
 #include <system_error>
-#include <cstdio>
-#include <cstring>
 
 namespace EditorPanels
 {
@@ -18,8 +16,7 @@ namespace EditorPanels
         m_ViewportInfo.ViewportID = 2U;
         // Seed the export path so the UI presents a writable destination before recording begins.
         m_CurrentOutputPath = "Assets/Export/ViewportCapture.mp4";
-        std::memset(m_OutputPathBuffer.data(), 0, m_OutputPathBuffer.size());
-        std::snprintf(m_OutputPathBuffer.data(), m_OutputPathBuffer.size(), "%s", m_CurrentOutputPath.c_str());
+        m_ExportStatusMessage = "Ready to export a clip.";
     }
 
     void GameViewportPanel::Render()
@@ -34,7 +31,7 @@ namespace EditorPanels
 
         SubmitViewportTexture(l_Available);
         RenderFrameRateOverlay();
-        RenderExportControls();
+        UpdateExportState();
 
         // Keep hover/focus state in sync with the render path so runtime shortcuts can respect ImGui focus rules.
         m_IsHovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows);
@@ -100,6 +97,47 @@ namespace EditorPanels
         m_Registry = registry;
     }
 
+    GameViewportPanel::ExportStatus GameViewportPanel::GetExportStatus() const
+    {
+        GameViewportPanel::ExportStatus l_Status{};
+        l_Status.m_HasRuntimeCamera = Trident::RenderCommand::HasRuntimeCamera();
+        l_Status.m_HasValidViewport = m_ViewportInfo.Size.x > 0.0f && m_ViewportInfo.Size.y > 0.0f;
+        l_Status.m_RawExtent = { static_cast<uint32_t>(m_ViewportInfo.Size.x), static_cast<uint32_t>(m_ViewportInfo.Size.y) };
+        l_Status.m_SanitizedExtent = CalculateSanitizedExtent();
+        l_Status.m_IsRecording = m_IsRecording;
+        l_Status.m_RecordingProgress = m_RecordingProgress;
+        l_Status.m_OutputPath = m_CurrentOutputPath;
+        l_Status.m_StatusMessage = m_ExportStatusMessage;
+
+        return l_Status;
+    }
+
+    void GameViewportPanel::SetExportPath(const std::string& exportPath)
+    {
+        // Mirror the toolbar path locally so recording requests always have a target destination.
+        m_CurrentOutputPath = exportPath;
+
+        if (m_CurrentOutputPath.empty())
+        {
+            m_CurrentOutputPath = "Assets/Export/ViewportCapture.mp4";
+        }
+    }
+
+    const std::string& GameViewportPanel::GetExportPath() const
+    {
+        return m_CurrentOutputPath;
+    }
+
+    void GameViewportPanel::RequestExportStart()
+    {
+        m_StartExportRequested = true;
+    }
+
+    void GameViewportPanel::RequestExportStop()
+    {
+        m_StopExportRequested = true;
+    }
+
     void GameViewportPanel::RenderFrameRateOverlay()
     {
         // Pull averaged frame timing data from the renderer so the runtime viewport can surface the current FPS.
@@ -121,130 +159,137 @@ namespace EditorPanels
         Trident::RenderCommand::SubmitText(m_ViewportInfo.ViewportID, l_TextPosition, l_TextColor, l_FpsLabel.str());
     }
 
-    void GameViewportPanel::RenderExportControls()
+    void GameViewportPanel::UpdateExportState()
     {
         const bool l_HasRuntimeCamera = Trident::RenderCommand::HasRuntimeCamera();
-        const bool l_ViewValid = m_ViewportInfo.Size.x > 0.0f && m_ViewportInfo.Size.y > 0.0f;
+        const bool l_HasValidViewport = m_ViewportInfo.Size.x > 0.0f && m_ViewportInfo.Size.y > 0.0f;
 
         if (!l_HasRuntimeCamera)
         {
-            ImGui::TextUnformatted("No runtime camera available for capture.");
-            return;
+            m_ExportStatusMessage = "No runtime camera available for capture.";
         }
-
-        if (!l_ViewValid)
+        else if (!l_HasValidViewport)
         {
-            ImGui::TextUnformatted("Viewport size is invalid for capture.");
-            return;
+            m_ExportStatusMessage = "Viewport size is invalid for capture.";
         }
-
-        if (!m_IsRecording)
+        else if (!m_IsRecording)
         {
-            ImGui::InputText("Export Path", m_OutputPathBuffer.data(), m_OutputPathBuffer.size());
-            ImGui::TextWrapped("Choose where the exported clip will be written before starting the capture. Missing folders are created automatically.");
+            m_ExportStatusMessage = "Ready to export a clip.";
+        }
 
-            // YUV420P/H.264 encoding requires even-sized planes. Round the viewport size up to the next even pixel so the
-            // renderer and encoder agree on a supported resolution before the user starts recording.
-            const VkExtent2D l_RawExtent{ static_cast<uint32_t>(m_ViewportInfo.Size.x), static_cast<uint32_t>(m_ViewportInfo.Size.y) };
-            VkExtent2D l_SanitizedExtent = l_RawExtent;
-            if ((l_SanitizedExtent.width % 2U) != 0U)
+        if (m_StartExportRequested)
+        {
+            m_StartExportRequested = false;
+
+            if (!l_HasRuntimeCamera || !l_HasValidViewport)
             {
-                ++l_SanitizedExtent.width;
+                return;
             }
 
-            if ((l_SanitizedExtent.height % 2U) != 0U)
+            m_TargetClipDuration = QueryClipDurationSeconds();
+            if (m_TargetClipDuration <= 0.0f)
             {
-                ++l_SanitizedExtent.height;
+                m_TargetClipDuration = 3.0f; // Fallback duration when no clip data is available.
             }
 
-            ImGui::Text("Capture Resolution: %ux%u", l_SanitizedExtent.width, l_SanitizedExtent.height);
-            if (l_SanitizedExtent.width != l_RawExtent.width || l_SanitizedExtent.height != l_RawExtent.height)
+            if (m_CurrentOutputPath.empty())
             {
-                ImGui::TextUnformatted("Note: Rounded up to even dimensions for YUV420P export.");
+                m_CurrentOutputPath = "Assets/Export/ViewportCapture.mp4";
             }
 
-            if (ImGui::Button("Start Clip Export"))
+            // Ensure the parent directory exists before asking the renderer to start recording.
+            std::filesystem::path l_OutputPath(m_CurrentOutputPath);
+            std::filesystem::path l_ParentDirectory = l_OutputPath.parent_path();
+            if (l_ParentDirectory.empty())
             {
-                m_TargetClipDuration = QueryClipDurationSeconds();
-                if (m_TargetClipDuration <= 0.0f)
-                {
-                    m_TargetClipDuration = 3.0f; // Fallback duration when no clip data is available.
-                }
+                l_ParentDirectory = std::filesystem::path("Assets/Export");
+                l_OutputPath = l_ParentDirectory / l_OutputPath;
+                m_CurrentOutputPath = l_OutputPath.string();
+            }
 
-                // Capture the path from the UI buffer so the renderer writes to the user-selected destination.
-                m_CurrentOutputPath = std::string(m_OutputPathBuffer.data());
+            std::error_code l_DirectoryError{};
+            const bool l_DirectoryReady = std::filesystem::exists(l_ParentDirectory) || std::filesystem::create_directories(l_ParentDirectory, l_DirectoryError);
+            if (!l_DirectoryReady)
+            {
+                m_ExportStatusMessage = "Unable to prepare export directory.";
+                return;
+            }
 
-                // Fall back to the default asset export folder when the user has not provided a path.
-                if (m_CurrentOutputPath.empty())
-                {
-                    m_CurrentOutputPath = "Assets/Export/ViewportCapture.mp4";
-                    std::snprintf(m_OutputPathBuffer.data(), m_OutputPathBuffer.size(), "%s", m_CurrentOutputPath.c_str());
-                }
+            m_RecordingStartTime = std::chrono::steady_clock::now();
+            m_RecordingProgress = 0.0f;
 
-                // Ensure the parent directory exists before asking the renderer to start recording.
-                std::filesystem::path l_OutputPath(m_CurrentOutputPath);
-                std::filesystem::path l_ParentDirectory = l_OutputPath.parent_path();
-                if (l_ParentDirectory.empty())
-                {
-                    l_ParentDirectory = std::filesystem::path("Assets/Export");
-                    l_OutputPath = l_ParentDirectory / l_OutputPath;
-                    m_CurrentOutputPath = l_OutputPath.string();
-                    std::snprintf(m_OutputPathBuffer.data(), m_OutputPathBuffer.size(), "%s", m_CurrentOutputPath.c_str());
-                }
-
-                std::error_code l_DirectoryError{};
-                const bool l_DirectoryReady = std::filesystem::exists(l_ParentDirectory) || std::filesystem::create_directories(l_ParentDirectory, l_DirectoryError);
-                if (!l_DirectoryReady)
-                {
-                    ImGui::TextUnformatted("Unable to prepare export directory.");
-                    return;
-                }
-
-                m_RecordingStartTime = std::chrono::steady_clock::now();
-                m_RecordingProgress = 0.0f;
-
-                const bool l_RecordingStarted = Trident::RenderCommand::SetViewportRecordingEnabled(true, m_ViewportInfo.ViewportID,
-                    l_SanitizedExtent, m_CurrentOutputPath);
-                if (!l_RecordingStarted)
-                {
-                    ImGui::TextUnformatted("Viewport recording could not start. Verify swapchain and encoder readiness.");
-                    m_IsRecording = false;
-                }
-                else
-                {
-                    m_IsRecording = true;
-                }
+            const VkExtent2D l_SanitizedExtent = CalculateSanitizedExtent();
+            const bool l_RecordingStarted = Trident::RenderCommand::SetViewportRecordingEnabled(true, m_ViewportInfo.ViewportID,
+                l_SanitizedExtent, m_CurrentOutputPath);
+            if (!l_RecordingStarted)
+            {
+                m_ExportStatusMessage = "Viewport recording could not start. Verify swapchain and encoder readiness.";
+                m_IsRecording = false;
+            }
+            else
+            {
+                m_IsRecording = true;
+                m_ExportStatusMessage = "Export started.";
             }
         }
-        else
+
+        if (m_IsRecording)
         {
             const auto l_Now = std::chrono::steady_clock::now();
             const float l_Elapsed = std::chrono::duration<float>(l_Now - m_RecordingStartTime).count();
             m_RecordingProgress = std::min(1.0f, l_Elapsed / m_TargetClipDuration);
 
-            ImGui::Text("Exporting clip... %.0f%%", m_RecordingProgress * 100.0f);
-            ImGui::Text("Output: %s", m_CurrentOutputPath.c_str());
-
             if (l_Elapsed >= m_TargetClipDuration)
             {
-                const bool l_StopRequested = Trident::RenderCommand::SetViewportRecordingEnabled(false, m_ViewportInfo.ViewportID,
-                    { static_cast<uint32_t>(m_ViewportInfo.Size.x), static_cast<uint32_t>(m_ViewportInfo.Size.y) }, m_CurrentOutputPath);
-                if (l_StopRequested)
-                {
-                    m_IsRecording = false;
-                }
+                m_StopExportRequested = true;
             }
-
-            if (ImGui::Button("Stop Export"))
+            else
             {
-                const bool l_StopRequested = Trident::RenderCommand::SetViewportRecordingEnabled(false, m_ViewportInfo.ViewportID,
-                    { static_cast<uint32_t>(m_ViewportInfo.Size.x), static_cast<uint32_t>(m_ViewportInfo.Size.y) }, m_CurrentOutputPath);
-                if (l_StopRequested)
-                {
-                    m_IsRecording = false;
-                }
+                m_ExportStatusMessage = "Exporting clip...";
             }
         }
+
+        if (m_StopExportRequested)
+        {
+            m_StopExportRequested = false;
+
+            if (!m_IsRecording)
+            {
+                return;
+            }
+
+            const VkExtent2D l_Extent{ static_cast<uint32_t>(m_ViewportInfo.Size.x), static_cast<uint32_t>(m_ViewportInfo.Size.y) };
+            const bool l_StopRequested = Trident::RenderCommand::SetViewportRecordingEnabled(false, m_ViewportInfo.ViewportID,
+                l_Extent, m_CurrentOutputPath);
+            if (l_StopRequested)
+            {
+                m_IsRecording = false;
+                m_ExportStatusMessage = "Export stopped.";
+            }
+            else
+            {
+                m_ExportStatusMessage = "Viewport recording could not stop.";
+            }
+        }
+    }
+
+    VkExtent2D GameViewportPanel::CalculateSanitizedExtent() const
+    {
+        // YUV420P/H.264 encoding requires even-sized planes. Round the viewport size up to the next even pixel so the
+        // renderer and encoder agree on a supported resolution before the user starts recording.
+        const VkExtent2D l_RawExtent{ static_cast<uint32_t>(m_ViewportInfo.Size.x), static_cast<uint32_t>(m_ViewportInfo.Size.y) };
+        VkExtent2D l_SanitizedExtent = l_RawExtent;
+        if ((l_SanitizedExtent.width % 2U) != 0U)
+        {
+            ++l_SanitizedExtent.width;
+        }
+
+        if ((l_SanitizedExtent.height % 2U) != 0U)
+        {
+            ++l_SanitizedExtent.height;
+        }
+
+        return l_SanitizedExtent;
     }
 
     float GameViewportPanel::QueryClipDurationSeconds() const

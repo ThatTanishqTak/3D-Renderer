@@ -10,7 +10,7 @@
 #include <chrono>
 #include <string>
 #include <filesystem>
-#include <array>
+#include <vulkan/vulkan.h>
 
 namespace EditorPanels
 {
@@ -32,10 +32,32 @@ namespace EditorPanels
         void SetAssetDropHandler(const std::function<void(const std::vector<std::string>&)>& onAssetsDropped);
         void SetRegistry(Trident::ECS::Registry* registry);
 
+        /**
+         * @brief Records the most recent export configuration so other panels can drive clip capture.
+         */
+        struct ExportStatus
+        {
+            bool m_HasRuntimeCamera = false;
+            bool m_HasValidViewport = false;
+            VkExtent2D m_RawExtent{ 0U, 0U };
+            VkExtent2D m_SanitizedExtent{ 0U, 0U };
+            bool m_IsRecording = false;
+            float m_RecordingProgress = 0.0f;
+            std::string m_OutputPath;
+            std::string m_StatusMessage;
+        };
+
+        [[nodiscard]] ExportStatus GetExportStatus() const;
+        void SetExportPath(const std::string& exportPath);
+        [[nodiscard]] const std::string& GetExportPath() const;
+        void RequestExportStart();
+        void RequestExportStop();
+
     private:
         void SubmitViewportTexture(const ImVec2& viewportSize);
         void RenderFrameRateOverlay();
-        void RenderExportControls();
+        void UpdateExportState();
+        [[nodiscard]] VkExtent2D CalculateSanitizedExtent() const;
         float QueryClipDurationSeconds() const;
 
     private:
@@ -50,6 +72,8 @@ namespace EditorPanels
         std::chrono::steady_clock::time_point m_RecordingStartTime{}; // Clock used to track progress.
         std::string m_CurrentOutputPath; // Destination path reported to the user.
         float m_RecordingProgress = 0.0f; // Normalised progress for the UI.
-        std::array<char, 260> m_OutputPathBuffer{}; // UI buffer used to collect the export path.
+        bool m_StartExportRequested = false; // Flags a start request driven by the toolbar.
+        bool m_StopExportRequested = false; // Flags a stop request driven by the toolbar.
+        std::string m_ExportStatusMessage; // Surfaces the most recent export status to the toolbar.
     };
 }

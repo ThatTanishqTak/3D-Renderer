@@ -11,6 +11,7 @@
 #include "Panels/ContentBrowserPanel.h"
 #include "Panels/SceneHierarchyPanel.h"
 #include "Panels/InspectorPanel.h"
+#include "Panels/EditorToolbar.h"
 #include "Panels/AIDebugPanel.h"
 #include "Panels/AnimationGraphPanel.h"
 #include "Panels/GizmoState.h"
@@ -84,6 +85,7 @@ private:
     std::string MakeUniqueName(const std::string& baseName) const;
 
 private:
+    EditorPanels::EditorToolbar m_EditorToolbar;
     EditorPanels::SceneViewportPanel m_SceneViewportPanel;
     EditorPanels::GameViewportPanel m_GameViewportPanel;
     EditorPanels::ContentBrowserPanel m_ContentBrowserPanel;
