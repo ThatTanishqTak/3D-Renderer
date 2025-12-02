@@ -5,6 +5,7 @@
 #include <vector>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 
 #include "Renderer/Vertex.h"
 #include "Renderer/UniformBuffer.h"
@@ -26,7 +27,10 @@ namespace Trident
         uint32_t FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
         void CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory);
         void CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size, CommandBufferPool& pool);
-        void DestroyBuffer(VkBuffer buffer, VkDeviceMemory memory);
+        void DestroyBuffer(VkBuffer buffer, VkDeviceMemory memory, VkFence fence = VK_NULL_HANDLE, size_t frameIndex = std::numeric_limits<size_t>::max());
+        void ProcessPendingDestroys(VkFence completedFence, size_t completedFrameIndex);
+        void FlushPendingDestroys();
+        void SetCurrentFrame(size_t frameIndex) { m_CurrentFrame = frameIndex; }
 
     private:
         // Utility helpers
@@ -39,6 +43,16 @@ namespace Trident
             VkDeviceMemory Memory = VK_NULL_HANDLE;
         };
 
+        struct PendingDestruction
+        {
+            VkBuffer Buffer = VK_NULL_HANDLE;
+            VkDeviceMemory Memory = VK_NULL_HANDLE;
+            VkFence Fence = VK_NULL_HANDLE;
+            size_t FrameIndex = 0;
+        };
+
         std::vector<Allocation> m_Allocations;
+        std::vector<PendingDestruction> m_PendingDestroys;
+        size_t m_CurrentFrame = 0;
     };
 }

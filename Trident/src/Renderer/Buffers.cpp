@@ -11,6 +11,9 @@ namespace Trident
 {
     void Buffers::Cleanup()
     {
+        // Ensure any queued destruction requests are processed before clearing tracked allocations.
+        FlushPendingDestroys();
+
         for (auto& it_Allocation : m_Allocations)
         {
             if (it_Allocation.Buffer != VK_NULL_HANDLE)
@@ -268,27 +271,116 @@ namespace Trident
         pool.Release(l_CommandBuffer);
     }
 
-    void Buffers::DestroyBuffer(VkBuffer buffer, VkDeviceMemory memory)
+    void Buffers::DestroyBuffer(VkBuffer buffer, VkDeviceMemory memory, VkFence fence, size_t frameIndex)
     {
-        if (buffer != VK_NULL_HANDLE)
+        if (buffer == VK_NULL_HANDLE && memory == VK_NULL_HANDLE)
         {
-            vkDestroyBuffer(Startup::GetDevice(), buffer, nullptr);
+            return;
         }
 
-        if (memory != VK_NULL_HANDLE)
-        {
-            vkFreeMemory(Startup::GetDevice(), memory, nullptr);
-        }
+        // Track the most recent frame so callers that do not provide an explicit frame index still schedule the
+        // destruction against the frame currently in flight.
+        const size_t l_FrameIndex = (frameIndex == std::numeric_limits<size_t>::max()) ? m_CurrentFrame : frameIndex;
 
-        auto it = std::find_if(m_Allocations.begin(), m_Allocations.end(),
-            [&](const Allocation& alloc)
+        // Queue the request so it can be drained once the GPU finishes using the resource.
+        m_PendingDestroys.push_back({ buffer, memory, fence, l_FrameIndex });
+    }
+
+    void Buffers::ProcessPendingDestroys(VkFence completedFence, size_t completedFrameIndex)
+    {
+        VkDevice l_Device = Startup::GetDevice();
+        auto l_DestroyImmediate = [&](const PendingDestruction& l_Pending)
             {
-                return alloc.Buffer == buffer && alloc.Memory == memory;
-            });
+                // Clean up the buffer and memory once it is safe to do so.
+                if (l_Pending.Buffer != VK_NULL_HANDLE)
+                {
+                    vkDestroyBuffer(l_Device, l_Pending.Buffer, nullptr);
+                }
 
-        if (it != m_Allocations.end())
+                if (l_Pending.Memory != VK_NULL_HANDLE)
+                {
+                    vkFreeMemory(l_Device, l_Pending.Memory, nullptr);
+                }
+
+                auto l_Tracked = std::find_if(m_Allocations.begin(), m_Allocations.end(),
+                    [&](const Allocation& l_Alloc)
+                    {
+                        return l_Alloc.Buffer == l_Pending.Buffer && l_Alloc.Memory == l_Pending.Memory;
+                    });
+
+                if (l_Tracked != m_Allocations.end())
+                {
+                    m_Allocations.erase(l_Tracked);
+                }
+            };
+
+        auto it_Pending = m_PendingDestroys.begin();
+        while (it_Pending != m_PendingDestroys.end())
         {
-            m_Allocations.erase(it);
+            const bool l_MatchesFence = (it_Pending->Fence != VK_NULL_HANDLE && it_Pending->Fence == completedFence);
+            const bool l_MatchesFrame = (it_Pending->Fence == VK_NULL_HANDLE && it_Pending->FrameIndex == completedFrameIndex);
+
+            bool l_CanDestroy = false;
+            if (l_MatchesFence)
+            {
+                // Only recycle the resource once the fence indicates GPU work is complete.
+                l_CanDestroy = (vkGetFenceStatus(l_Device, it_Pending->Fence) == VK_SUCCESS);
+            }
+            else if (l_MatchesFrame)
+            {
+                // The caller has already waited for the frame fence, so the queued resource can be released.
+                l_CanDestroy = true;
+            }
+
+            if (l_CanDestroy)
+            {
+                l_DestroyImmediate(*it_Pending);
+                it_Pending = m_PendingDestroys.erase(it_Pending);
+            }
+            else
+            {
+                ++it_Pending;
+            }
         }
+    }
+
+    void Buffers::FlushPendingDestroys()
+    {
+        // Ensure the device is idle before forcing destruction so that queued work cannot access freed resources.
+        if (!m_PendingDestroys.empty())
+        {
+            vkDeviceWaitIdle(Startup::GetDevice());
+        }
+
+        auto l_DestroyImmediate = [&](const PendingDestruction& l_Pending)
+            {
+                if (l_Pending.Buffer != VK_NULL_HANDLE)
+                {
+                    vkDestroyBuffer(Startup::GetDevice(), l_Pending.Buffer, nullptr);
+                }
+
+                if (l_Pending.Memory != VK_NULL_HANDLE)
+                {
+                    vkFreeMemory(Startup::GetDevice(), l_Pending.Memory, nullptr);
+                }
+
+                auto l_Tracked = std::find_if(m_Allocations.begin(), m_Allocations.end(),
+                    [&](const Allocation& l_Alloc)
+                    {
+                        return l_Alloc.Buffer == l_Pending.Buffer && l_Alloc.Memory == l_Pending.Memory;
+                    });
+
+                if (l_Tracked != m_Allocations.end())
+                {
+                    m_Allocations.erase(l_Tracked);
+                }
+            };
+
+        for (const PendingDestruction& it_Pending : m_PendingDestroys)
+        {
+            l_DestroyImmediate(it_Pending);
+        }
+
+        m_PendingDestroys.clear();
     }
 }

@@ -75,11 +75,17 @@ namespace Trident
     {
         if (!m_SessionActive)
         {
+            // Guard against writing frames when the recording session is not active.
+            TR_CORE_WARN("Video encoder rejected frame {} because the session is not active.", frame.m_FrameIndex);
+
             return false;
         }
 
         if (frame.m_Pixels.empty())
         {
+            // Prevent writing frames that do not contain any pixel data.
+            TR_CORE_WARN("Video encoder rejected frame {} because the pixel buffer was empty.", frame.m_FrameIndex);
+
             return false;
         }
 

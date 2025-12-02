@@ -575,6 +575,10 @@ namespace Trident
             vkWaitForFences(Startup::GetDevice(), 1, &l_InFlightFence, VK_TRUE, UINT64_MAX);
         }
 
+        // Set the frame index for deferred destruction so buffer recycling tracks the correct fence slot.
+        m_Buffers.SetCurrentFrame(m_Commands.CurrentFrame());
+        m_Buffers.ProcessPendingDestroys(l_InFlightFence, m_Commands.CurrentFrame());
+
         uint32_t l_ImageIndex = 0;
         if (!AcquireNextImage(l_ImageIndex, l_InFlightFence))
         {
@@ -5705,25 +5709,6 @@ namespace Trident
     {
         if (enabled)
         {
-            // Ensure readback buffers exist before toggling capture so we do not start a session without valid resources.
-            // Size staging buffers to the viewport extent so the copy operation during recording lines up with the render target.
-            SetReadbackEnabled(true, extent);
-
-            const bool l_HasValidReadbackExtent = (m_FrameReadbackExtent.width > 0) && (m_FrameReadbackExtent.height > 0);
-            const bool l_HasValidRecordingExtent = (extent.width > 0) && (extent.height > 0);
-            const bool l_HasValidChannelCount = (m_FrameReadbackChannelCount > 0);
-
-            if (!l_HasValidReadbackExtent || !l_HasValidRecordingExtent || !l_HasValidChannelCount)
-            {
-                TR_CORE_WARN("Viewport recording unavailable. Extent {}x{} (readback {}x{}), channels {}.", extent.width, extent.height,
-                    m_FrameReadbackExtent.width, m_FrameReadbackExtent.height, m_FrameReadbackChannelCount);
-
-                const bool l_AiReadbackRequired = m_FrameGenerator.IsInitialised();
-                SetReadbackEnabled(l_AiReadbackRequired, m_Swapchain.GetExtent());
-
-                return false;
-            }
-
             // YUV420P/H.264 encoders expect even-sized planes. Round any odd dimension up to the next even value so the
             // encoder receives a compatible resolution while keeping user intent as close as possible.
             VkExtent2D l_SanitizedExtent = extent;
@@ -5742,6 +5727,29 @@ namespace Trident
                 TR_CORE_WARN("Viewport recording extent {}x{} adjusted to {}x{} to satisfy even YUV420P dimensions.",
                     extent.width, extent.height, l_SanitizedExtent.width, l_SanitizedExtent.height);
             }
+
+            // Ensure readback buffers exist and match the sanitized resolution so staging, readback, and encoder dimensions stay aligned.
+            SetReadbackEnabled(true, l_SanitizedExtent);
+            RequestReadbackResize(l_SanitizedExtent, true);
+            ApplyPendingReadbackResize();
+
+            const bool l_HasValidReadbackExtent = (m_FrameReadbackExtent.width > 0) && (m_FrameReadbackExtent.height > 0);
+            const bool l_HasValidRecordingExtent = (l_SanitizedExtent.width > 0) && (l_SanitizedExtent.height > 0);
+            const bool l_HasValidChannelCount = (m_FrameReadbackChannelCount > 0);
+
+            if (!l_HasValidReadbackExtent || !l_HasValidRecordingExtent || !l_HasValidChannelCount)
+            {
+                TR_CORE_WARN("Viewport recording unavailable. Extent {}x{} (readback {}x{}), channels {}.", l_SanitizedExtent.width, l_SanitizedExtent.height,
+                    m_FrameReadbackExtent.width, m_FrameReadbackExtent.height, m_FrameReadbackChannelCount);
+
+                const bool l_AiReadbackRequired = m_FrameGenerator.IsInitialised();
+                SetReadbackEnabled(l_AiReadbackRequired, m_Swapchain.GetExtent());
+
+                return false;
+            }
+
+            // Keep recording state consistent with the active readback buffers so encoded frames and staging share the same extent.
+            l_SanitizedExtent = m_FrameReadbackExtent;
 
             m_ViewportFrameBuffer.clear();
             m_RecordingViewportId = viewportId;
