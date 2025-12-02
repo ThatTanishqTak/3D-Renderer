@@ -57,7 +57,6 @@ if(NOT EXISTS "${TRIDENT_FFMPEG_MARKER}")
   )
 
   # Extract the archive into vendor/FFmpeg.
-  # For .zip archives, 'tar xvf' works with CMake's built-in tar.
   execute_process(
     COMMAND ${CMAKE_COMMAND} -E tar xvf "${TRIDENT_FFMPEG_ARCHIVE}"
     WORKING_DIRECTORY "${FFMPEG_ROOT}"

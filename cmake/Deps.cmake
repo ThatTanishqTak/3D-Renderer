@@ -1,8 +1,6 @@
 ﻿include(FetchContent)
 
-# -------------------------------------------------
 # GLFW
-# -------------------------------------------------
 FetchContent_Declare(
   glfw
   GIT_REPOSITORY https://github.com/glfw/glfw.git
@@ -10,9 +8,7 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(glfw)
 
-# -------------------------------------------------
 # ImGui (docking branch)
-# -------------------------------------------------
 FetchContent_Declare(
   imgui
   GIT_REPOSITORY https://github.com/ocornut/imgui.git
@@ -44,9 +40,7 @@ target_include_directories(imgui PUBLIC
 
 target_link_libraries(imgui PUBLIC glfw Vulkan::Vulkan)
 
-# -------------------------------------------------
 # ONNX Runtime (pre-built CPU, x64 Windows)
-# -------------------------------------------------
 # We rely on the locally committed pre-built SDK that ships ONNX IR 12+
 # support and is compatible with Visual Studio 2022 / MSVC in C++20 mode.
 set(ORT_VERSION "1.23.2" CACHE STRING "ONNX Runtime version")
@@ -101,9 +95,7 @@ endif()
 trident_assert_not_lfs_pointer("${ORT_LIB}" "ONNX Runtime import library")
 trident_assert_not_lfs_pointer("${ORT_DLL}" "ONNX Runtime DLL")
 
-# -------------------------------------------------
 # Imported targets (modern CMake)
-# -------------------------------------------------
 add_library(onnxruntime_headers INTERFACE)
 target_include_directories(onnxruntime_headers INTERFACE "${ORT_INCLUDE}")
 

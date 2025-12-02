@@ -10,8 +10,7 @@ namespace EditorPanels
 {
     void EditorToolbar::Render()
     {
-        const ImGuiWindowFlags l_WindowFlags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar;
-        const bool l_WindowVisible = ImGui::Begin("##EditorToolbar", nullptr, l_WindowFlags);
+        const bool l_WindowVisible = ImGui::Begin("EditorToolbar", nullptr, 0);
         (void)l_WindowVisible;
         // Always push toolbar contents so dockspace validation sees this fixed-position tool strip even when hidden.
 

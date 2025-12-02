@@ -30,6 +30,32 @@ namespace Trident
             return false;
         }
 
+        const std::string l_Extension = m_OutputPath.extension().string();
+        std::string l_NormalisedExtension = l_Extension;
+        std::transform(l_NormalisedExtension.begin(), l_NormalisedExtension.end(), l_NormalisedExtension.begin(), [](unsigned char c)
+            {
+                return static_cast<char>(std::tolower(c));
+            });
+
+        const bool l_UsingFfmpeg = (l_NormalisedExtension == ".mp4" || l_NormalisedExtension == ".mov" || l_NormalisedExtension == ".avi");
+        if (l_UsingFfmpeg)
+        {
+            const bool l_IsWidthOdd = (m_OutputExtent.width % 2u) != 0u;
+            const bool l_IsHeightOdd = (m_OutputExtent.height % 2u) != 0u;
+
+            if (l_IsWidthOdd || l_IsHeightOdd)
+            {
+                const uint32_t l_OriginalWidth = m_OutputExtent.width;
+                const uint32_t l_OriginalHeight = m_OutputExtent.height;
+
+                // Ensure dimensions conform to the YUV420P chroma subsampling requirements used by the H.264 encoder.
+                m_OutputExtent.width += (m_OutputExtent.width % 2u);
+                m_OutputExtent.height += (m_OutputExtent.height % 2u);
+
+                TR_CORE_WARN("Video encoder adjusted odd dimensions {}x{} to {}x{} for FFmpeg H.264 output because YUV420P requires even width and height.", l_OriginalWidth, l_OriginalHeight, m_OutputExtent.width, m_OutputExtent.height);
+            }
+        }
+
         if (!InitialiseCodec())
         {
             TR_CORE_WARN("Video encoder rejected begin request because codec initialisation failed.");

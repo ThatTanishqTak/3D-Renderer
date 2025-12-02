@@ -16,9 +16,7 @@ target_link_options(${PROJECT_NAME} PRIVATE
     $<$<CONFIG:Release>:/ENTRY:mainCRTStartup>
 )
 
-# -----------------------------------------------------------------
 # Shader compilation
-# -----------------------------------------------------------------
 find_program(GLSLANG_VALIDATOR glslangValidator HINTS $ENV{VULKAN_SDK}/Bin)
 set(SHADER_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/Assets/Shaders)
 set(SHADER_BIN_DIR ${SHADER_SRC_DIR})
@@ -50,9 +48,7 @@ else()
   message(WARNING "glslangValidator not found; relying on runtime shader compilation.")
 endif()
 
-# -----------------------------------------------------------------
 # Copy assets
-# -----------------------------------------------------------------
 set(ASSETS_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/Assets)
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
@@ -61,9 +57,7 @@ add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
     COMMENT "Copying assets to runtime output..."
 )
 
-# -----------------------------------------------------------------
 # Copy ONNX Runtime DLL next to the executable
-# -----------------------------------------------------------------
 set(ONNXRUNTIME_BUNDLED_DLL "${CMAKE_SOURCE_DIR}/Trident/vendor/onnxruntime/lib/onnxruntime.dll")
 
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
