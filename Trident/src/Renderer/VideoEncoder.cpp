@@ -128,6 +128,8 @@ namespace Trident
 
         m_SessionActive = false;
 
+        bool l_SessionSuccess = true;
+
         if (m_UsingFfmpegContainer && m_FfmpegCodecContext != nullptr)
         {
             // Flush any buffered frames before writing the trailer.
@@ -156,7 +158,14 @@ namespace Trident
                 }
             }
 
-            av_write_trailer(m_FfmpegFormatContext);
+            // Surface trailer write failures because the output file can be unusable if the container footer is missing.
+            const int32_t l_TrailerResult = av_write_trailer(m_FfmpegFormatContext);
+            if (l_TrailerResult < 0)
+            {
+                TR_CORE_ERROR("Video encoder failed to finalize FFmpeg output at {} (error {}).", m_OutputPath.string(), l_TrailerResult);
+
+                l_SessionSuccess = false;
+            }
         }
         else if (m_OutputStream.is_open())
         {
@@ -164,11 +173,18 @@ namespace Trident
             m_OutputStream.close();
         }
 
-        TR_CORE_INFO("Video encoder finalized output at {} ({} frames)", m_OutputPath.string(), m_FrameCounter);
+        if (l_SessionSuccess)
+        {
+            TR_CORE_INFO("Video encoder finalized output at {} ({} frames)", m_OutputPath.string(), m_FrameCounter);
+        }
+        else
+        {
+            TR_CORE_WARN("Video encoder session ended with errors at {} ({} frames)", m_OutputPath.string(), m_FrameCounter);
+        }
 
         ResetSession();
 
-        return true;
+        return l_SessionSuccess;
     }
 
     bool VideoEncoder::InitialiseCodec()
