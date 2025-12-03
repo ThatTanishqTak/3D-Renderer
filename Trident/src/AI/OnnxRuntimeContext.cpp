@@ -188,8 +188,7 @@ namespace Trident
             const std::optional<uint64_t> l_MaxSupportedIr = ParseMaxSupportedIrVersion(l_RuntimeMessage);
 
             std::ostringstream l_Stream;
-            l_Stream << "ONNX Runtime " << l_RuntimeVersion << " rejected model '"
-                << modelPath.string()
+            l_Stream << "ONNX Runtime " << l_RuntimeVersion << " rejected model '"<< modelPath.string()
                 << "' because it targets an ONNX IR version newer than the bundled runtime understands.";
 
             if (l_ModelIr)

@@ -919,6 +919,7 @@ namespace Trident
         }
 
         // Clear pending resize requests and release staging buffers when readback is disabled.
+        vkDeviceWaitIdle(Startup::GetDevice());
         m_ReadbackResizePending = false;
         m_FrameReadbackPending.assign(m_FrameReadbackPending.size(), false);
         DestroyReadbackResources();
@@ -990,6 +991,7 @@ namespace Trident
             }
 
             // Either the swapchain is minimised or we encountered an unsupported format; clear any stale allocations.
+            vkDeviceWaitIdle(Startup::GetDevice());
             DestroyReadbackResources();
 
             m_LastReadbackExtent = { 0, 0 };
