@@ -12,10 +12,10 @@ namespace Trident
 {
     namespace
     {
-        constexpr float s_MinimumOrthographicSize = 0.01f; ///< Prevents degenerate volumes that break precision.
-        constexpr float s_MinimumFieldOfView = 1.0f;        ///< Guards against invalid perspective projections.
-        constexpr float s_MaximumFieldOfView = 179.0f;      ///< Prevents inverted frustums when approaching 180 degrees.
-        constexpr float s_MinimumClipDistance = 0.001f;     ///< Protects against zero clip plane distances.
+        constexpr float s_MinimumOrthographicSize = 0.01f; // Prevents degenerate volumes that break precision.
+        constexpr float s_MinimumFieldOfView = 1.0f;        // Guards against invalid perspective projections.
+        constexpr float s_MaximumFieldOfView = 179.0f;      // Prevents inverted frustums when approaching 180 degrees.
+        constexpr float s_MinimumClipDistance = 0.001f;     // Protects against zero clip plane distances.
     }
 
     EditorCamera::EditorCamera()

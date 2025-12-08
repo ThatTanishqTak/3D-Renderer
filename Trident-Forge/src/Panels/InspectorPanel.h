@@ -4,6 +4,7 @@
 #include "ECS/Registry.h"
 
 #include <string>
+#include <limits>
 
 namespace EditorPanels
 {
@@ -22,9 +23,11 @@ namespace EditorPanels
         void SetSelectionLabel(const std::string& label);
 
     private:
+        static constexpr Trident::ECS::Entity s_InvalidEntity = std::numeric_limits<Trident::ECS::Entity>::max(); ///< Sentinel used to represent the absence of a selection.
+
         Trident::GizmoState* m_GizmoState = nullptr; ///< Shared gizmo state pointer to align viewport and inspector modes.
         Trident::ECS::Registry* m_Registry = nullptr; ///< Registry pointer used to query components for the selected entity.
-        Trident::ECS::Entity m_SelectedEntity = 0; ///< Currently selected entity whose components will be displayed.
+        Trident::ECS::Entity m_SelectedEntity = s_InvalidEntity; ///< Currently selected entity whose components will be displayed.
         std::string m_SelectedLabel = "None"; ///< Cached display label describing the current selection.
     };
 }

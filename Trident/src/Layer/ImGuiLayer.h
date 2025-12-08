@@ -63,7 +63,7 @@ namespace Trident
         private:
             // Track whether Init has received graphics handles. Useful for guarding future work.
             bool m_IsInitialized = false;
-            bool m_IsImGuiContextReady = false; ///< Guards against double initialisation and protects draw calls.
+            bool m_IsImGuiContextReady = false; // Guards against double initialisation and protects draw calls.
 
             // Cached handles for eventual ImGui hookup with Vulkan.
             GLFWwindow* m_Window = nullptr;
@@ -77,8 +77,8 @@ namespace Trident
             VkCommandPool m_CommandPool = VK_NULL_HANDLE;
 
             // ImGui state -------------------------------------------------------
-            ImGuiContext* m_ImGuiContext = nullptr; ///< Owned ImGui context bound to this layer.
-            VkDescriptorPool m_ImGuiDescriptorPool = VK_NULL_HANDLE; ///< Dedicated pool for ImGui descriptor allocations.
+            ImGuiContext* m_ImGuiContext = nullptr; // Owned ImGui context bound to this layer.
+            VkDescriptorPool m_ImGuiDescriptorPool = VK_NULL_HANDLE; // Dedicated pool for ImGui descriptor allocations.
         };
     }
 }

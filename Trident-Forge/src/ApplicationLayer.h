@@ -94,56 +94,56 @@ private:
     EditorPanels::ConsolePanel m_ConsolePanel;
     EditorPanels::AIDebugPanel m_AIDebugPanel;
     EditorPanels::AnimationGraphPanel m_AnimationGraphPanel;
-    Trident::GizmoState m_GizmoState{}; ///< Shared gizmo configuration propagated across viewport/inspector panels.
+    Trident::GizmoState m_GizmoState{}; // Shared gizmo configuration propagated across viewport/inspector panels.
 
-    std::unique_ptr<Trident::Scene> m_ActiveScene;   ///< Owns the scene bridge responsible for play/edit registry swaps.
+    std::unique_ptr<Trident::Scene> m_ActiveScene;   // Owns the scene bridge responsible for play/edit registry swaps.
 
-    Trident::EditorCamera m_EditorCamera;           ///< Viewport camera providing authoring controls.
-    Trident::RuntimeCamera m_RuntimeCamera;         ///< Gameplay camera routed into the dedicated runtime viewport.
+    Trident::EditorCamera m_EditorCamera;           // Viewport camera providing authoring controls.
+    Trident::RuntimeCamera m_RuntimeCamera;         // Gameplay camera routed into the dedicated runtime viewport.
 
     // Orientation state (degrees)
-    float m_EditorYawDegrees = -90.0f;              ///< Horizontal orbit angle stored in degrees for clarity.
-    float m_EditorPitchDegrees = -20.0f;            ///< Vertical orbit angle clamped to avoid gimbal flips.
+    float m_EditorYawDegrees = -90.0f;              // Horizontal orbit angle stored in degrees for clarity.
+    float m_EditorPitchDegrees = -20.0f;            // Vertical orbit angle clamped to avoid gimbal flips.
 
     // Translation speed
-    float m_CameraMoveSpeed = 5.0f;                 ///< Baseline translation speed in world units per second.
-    float m_CameraBoostMultiplier = 4.0f;           ///< Speed multiplier engaged while shift is held.
+    float m_CameraMoveSpeed = 5.0f;                 // Baseline translation speed in world units per second.
+    float m_CameraBoostMultiplier = 4.0f;           // Speed multiplier engaged while shift is held.
 
     // Mouse sensitivity
-    float m_MouseRotationSpeed = 0.2f;              ///< Degrees rotated per pixel of mouse movement.
-    float m_MouseZoomSpeed = 2.0f;                  ///< Distance moved along the forward vector per wheel notch.
+    float m_MouseRotationSpeed = 0.2f;              // Degrees rotated per pixel of mouse movement.
+    float m_MouseZoomSpeed = 2.0f;                  // Distance moved along the forward vector per wheel notch.
 
     // Cursor tracking
-    bool m_IsRotateOrbitActive = false;             ///< Flags whether the current frame is processing an orbit drag.
-    bool m_ResetRotateOrbitReference = true;        ///< Ensures the next drag discards the initial delta for stability.
+    bool m_IsRotateOrbitActive = false;             // Flags whether the current frame is processing an orbit drag.
+    bool m_ResetRotateOrbitReference = true;        // Ensures the next drag discards the initial delta for stability.
 
     // Orbit + framing
-    glm::vec3 m_CameraPivot{ 0.0f, 0.0f, 0.0f };    ///< Orbit center used by Alt+LMB and Frame (F).
-    float m_OrbitDistance = 8.0f;               ///< Distance from pivot when orbiting.
-    float m_MinOrbitDistance = 0.05f;           ///< Clamp to avoid flipping at the pivot.
+    glm::vec3 m_CameraPivot{ 0.0f, 0.0f, 0.0f };    // Orbit center used by Alt+LMB and Frame (F).
+    float m_OrbitDistance = 8.0f;               // Distance from pivot when orbiting.
+    float m_MinOrbitDistance = 0.05f;           // Clamp to avoid flipping at the pivot.
 
     // Smoothing
-    float m_PosSmoothing = 12.0f;               ///< Higher is snappier, 0 disables smoothing.
+    float m_PosSmoothing = 12.0f;               // Higher is snappier, 0 disables smoothing.
     float m_RotSmoothing = 14.0f;
     glm::vec3 m_TargetPosition{ 0.0f, 3.0f, 8.0f };
     float m_TargetYawDegrees = -90.0f;
     float m_TargetPitchDegrees = -20.0f;
 
     // Pan/dolly tuning
-    float m_PanSpeedFactor = 1.0f;             ///< Scales with orbit distance for consistent feel.
-    float m_DollySpeedFactor = 0.15f;               ///< Used for Alt+RMB/scroll while orbiting.
+    float m_PanSpeedFactor = 1.0f;             // Scales with orbit distance for consistent feel.
+    float m_DollySpeedFactor = 0.15f;               // Used for Alt+RMB/scroll while orbiting.
 
     // Fly speed limits
     float m_MinMoveSpeed = 10.1f;
     float m_MaxMoveSpeed = 50.0f;
 
-    Trident::ECS::Entity m_BoundRuntimeCameraEntity = std::numeric_limits<Trident::ECS::Entity>::max(); ///< Tracks the last entity routed into the runtime viewport.
-    std::unordered_map<std::string, Trident::Animation::Skeleton> m_ImportedSkeletonAssets; ///< Retains skeletons keyed by their normalized asset path for future animation lookups.
-    std::unordered_map<std::string, std::vector<Trident::Animation::AnimationClip>> m_ImportedAnimationLibraries; ///< Stores imported clip libraries alongside their asset identifiers for later runtime use.
+    Trident::ECS::Entity m_BoundRuntimeCameraEntity = std::numeric_limits<Trident::ECS::Entity>::max(); // Tracks the last entity routed into the runtime viewport.
+    std::unordered_map<std::string, Trident::Animation::Skeleton> m_ImportedSkeletonAssets; // Retains skeletons keyed by their normalized asset path for future animation lookups.
+    std::unordered_map<std::string, std::vector<Trident::Animation::AnimationClip>> m_ImportedAnimationLibraries; // Stores imported clip libraries alongside their asset identifiers for later runtime use.
 
-    std::filesystem::path m_CurrentScenePath; ///< Tracks the most recent location used to save or load the active scene.
-    std::string m_SceneIoTooltip; ///< Holds the most recent scene I/O status message for display in the toolbar.
-    bool m_LastSceneIoFailed = false; ///< Flags whether the last scene I/O operation reported a failure so the UI can highlight it.
-    bool m_OpenSaveSceneAsPopup = false; ///< Requests the save-as dialog to open on the next render tick.
-    bool m_OpenLoadScenePopup = false; ///< Requests the load dialog to open on the next render tick.
+    std::filesystem::path m_CurrentScenePath; // Tracks the most recent location used to save or load the active scene.
+    std::string m_SceneIoTooltip; // Holds the most recent scene I/O status message for display in the toolbar.
+    bool m_LastSceneIoFailed = false; // Flags whether the last scene I/O operation reported a failure so the UI can highlight it.
+    bool m_OpenSaveSceneAsPopup = false; // Requests the save-as dialog to open on the next render tick.
+    bool m_OpenLoadScenePopup = false; // Requests the load dialog to open on the next render tick.
 };

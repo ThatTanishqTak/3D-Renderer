@@ -1,8 +1,5 @@
 #include "InspectorPanel.h"
 
-#include <imgui.h>
-#include <string>
-#include <cstring>
 #include "ECS/Components/TagComponent.h"
 #include "ECS/Components/TransformComponent.h"
 #include "ECS/Components/MeshComponent.h"
@@ -10,13 +7,15 @@
 
 #include <imgui.h>
 #include <string>
+#include <cstring>
 
 namespace EditorPanels
 {
     void InspectorPanel::Update()
     {
         // Rebuild the display label when the selection changes so Render can focus on UI presentation.
-        if (m_Registry == nullptr || m_SelectedEntity == 0)
+        // Skip label construction when no valid selection is present so stale IDs are not shown in the inspector.
+        if (m_Registry == nullptr || m_SelectedEntity == s_InvalidEntity)
         {
             m_SelectedLabel = "None";
             return;
@@ -47,7 +46,8 @@ namespace EditorPanels
         ImGui::TextWrapped("Selection: %s", m_SelectedLabel.c_str());
         ImGui::Separator();
 
-        if (m_Registry == nullptr || m_SelectedEntity == 0)
+        // Abort rendering when the selection sentinel is active so UI widgets do not operate on invalid entities.
+        if (m_Registry == nullptr || m_SelectedEntity == s_InvalidEntity)
         {
             ImGui::TextWrapped("No entity selected.");
             ImGui::End();

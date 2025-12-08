@@ -58,22 +58,22 @@ namespace Trident
 
             static TransformDecomposition DecomposeBindTransform(const Bone& bone);
 
-            AnimationAssetService* m_AssetService = nullptr; ///< Shared service resolving skeletons and animation clips.
-            size_t m_SkeletonHandle = AnimationAssetService::s_InvalidHandle; ///< Runtime skeleton handle.
-            size_t m_AnimationHandle = AnimationAssetService::s_InvalidHandle; ///< Runtime animation library handle.
-            size_t m_ClipIndex = AnimationAssetService::s_InvalidHandle; ///< Active clip index within the animation library.
+            AnimationAssetService* m_AssetService = nullptr; // Shared service resolving skeletons and animation clips.
+            size_t m_SkeletonHandle = AnimationAssetService::s_InvalidHandle; // Runtime skeleton handle.
+            size_t m_AnimationHandle = AnimationAssetService::s_InvalidHandle; // Runtime animation library handle.
+            size_t m_ClipIndex = AnimationAssetService::s_InvalidHandle; // Active clip index within the animation library.
 
-            float m_CurrentTimeSeconds = 0.0f; ///< Normalised playback position within the clip.
-            float m_PlaybackSpeed = 1.0f; ///< Scalar applied to incoming delta time before advancing playback.
-            bool m_IsLooping = true; ///< Indicates whether playback should wrap around when reaching the clip end.
-            bool m_IsPlaying = true; ///< Flag toggled by callers to pause or resume animation advancement.
+            float m_CurrentTimeSeconds = 0.0f; // Normalised playback position within the clip.
+            float m_PlaybackSpeed = 1.0f; // Scalar applied to incoming delta time before advancing playback.
+            bool m_IsLooping = true; // Indicates whether playback should wrap around when reaching the clip end.
+            bool m_IsPlaying = true; // Flag toggled by callers to pause or resume animation advancement.
 
-            std::vector<glm::mat4> m_PoseMatrices{}; ///< Cached matrices representing the evaluated pose.
-            std::vector<glm::vec3> m_TranslationScratch{}; ///< Scratch buffer storing per-bone translations during evaluation.
-            std::vector<glm::quat> m_RotationScratch{}; ///< Scratch buffer storing per-bone rotations during evaluation.
-            std::vector<glm::vec3> m_ScaleScratch{}; ///< Scratch buffer storing per-bone scales during evaluation.
-            std::vector<glm::mat4> m_LocalTransforms{}; ///< Scratch buffer holding local transforms for each bone.
-            std::vector<glm::mat4> m_GlobalTransforms{}; ///< Scratch buffer holding hierarchical global transforms.
+            std::vector<glm::mat4> m_PoseMatrices{}; // Cached matrices representing the evaluated pose.
+            std::vector<glm::vec3> m_TranslationScratch{}; // Scratch buffer storing per-bone translations during evaluation.
+            std::vector<glm::quat> m_RotationScratch{}; // Scratch buffer storing per-bone rotations during evaluation.
+            std::vector<glm::vec3> m_ScaleScratch{}; // Scratch buffer storing per-bone scales during evaluation.
+            std::vector<glm::mat4> m_LocalTransforms{}; // Scratch buffer holding local transforms for each bone.
+            std::vector<glm::mat4> m_GlobalTransforms{}; // Scratch buffer holding hierarchical global transforms.
         };
     }
 }

@@ -31,7 +31,8 @@ namespace EditorPanels
         {
             for (Trident::ECS::Entity it_Entity : m_Registry->GetEntities())
             {
-                const bool l_IsSelected = it_Entity == m_SelectedEntity;
+                // Track selection using an explicit sentinel so entity ID 0 remains selectable (e.g. default camera).
+                const bool l_IsSelected = m_SelectedEntity != s_InvalidEntity && it_Entity == m_SelectedEntity;
 
                 std::string l_Label;
                 if (m_Registry->HasComponent<Trident::TagComponent>(it_Entity))

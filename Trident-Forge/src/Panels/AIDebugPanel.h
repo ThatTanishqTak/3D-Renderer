@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <limits>
 
 namespace Trident::ECS
 {
@@ -32,8 +33,10 @@ namespace EditorPanels
         void SetSelectedEntity(Trident::ECS::Entity entity);
 
     private:
+        static constexpr Trident::ECS::Entity s_InvalidEntity = std::numeric_limits<Trident::ECS::Entity>::max(); ///< Sentinel indicating no selection has been provided.
+
         Trident::ECS::Registry* m_Registry = nullptr;
-        Trident::ECS::Entity m_SelectedEntity = 0;
+        Trident::ECS::Entity m_SelectedEntity = s_InvalidEntity;
         std::string m_DebugSummary = "No selection";
     };
 }

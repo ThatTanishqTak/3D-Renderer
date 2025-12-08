@@ -56,18 +56,18 @@ namespace Trident
 
             struct AssetRecord
             {
-                std::string m_AssetId;                                 ///< Original identifier used as the lookup key.
-                size_t m_Handle = s_InvalidHandle;                     ///< Unique handle handed back to ECS components.
-                Skeleton m_Skeleton{};                                 ///< Skeleton hierarchy baked from the asset.
-                std::vector<AnimationClip> m_Clips{};                  ///< Animation clips authored in the asset.
-                std::unordered_map<std::string, size_t> m_ClipLookup;  ///< Mapping from clip name to clip index.
+                std::string m_AssetId;                                 // Original identifier used as the lookup key.
+                size_t m_Handle = s_InvalidHandle;                     // Unique handle handed back to ECS components.
+                Skeleton m_Skeleton{};                                 // Skeleton hierarchy baked from the asset.
+                std::vector<AnimationClip> m_Clips{};                  // Animation clips authored in the asset.
+                std::unordered_map<std::string, size_t> m_ClipLookup;  // Mapping from clip name to clip index.
             };
 
             AssetRecord* LoadAssetIfNeeded(const std::string& assetId);
 
-            size_t m_NextHandle = 1;                                   ///< Incrementing counter to keep handles stable.
-            std::unordered_map<std::string, size_t> m_IdToHandle{};    ///< Mapping from asset identifier to cached handle.
-            std::unordered_map<size_t, AssetRecord> m_Assets{};        ///< Storage for loaded skeleton/clip data.
+            size_t m_NextHandle = 1;                                   // Incrementing counter to keep handles stable.
+            std::unordered_map<std::string, size_t> m_IdToHandle{};    // Mapping from asset identifier to cached handle.
+            std::unordered_map<size_t, AssetRecord> m_Assets{};        // Storage for loaded skeleton/clip data.
         };
     }
 }

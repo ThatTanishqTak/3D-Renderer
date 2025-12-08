@@ -65,18 +65,18 @@ namespace Trident
         glm::quat BuildOrientation() const;
 
     private:
-        glm::vec3 m_Position{ 0.0f, 0.0f, 5.0f };   ///< Camera location used to seed the view matrix.
-        glm::vec3 m_Rotation{ 0.0f };                ///< Euler rotation in degrees for simple gizmo integration.
-        glm::vec2 m_ViewportSize{ 1280.0f, 720.0f }; ///< Backing viewport dimensions for aspect ratio calculations.
-        float m_FieldOfView{ 60.0f };                ///< Perspective vertical field of view in degrees.
-        float m_OrthographicSize{ 20.0f };           ///< Height of the orthographic frustum in world units.
-        float m_NearClip{ 0.1f };                    ///< Near clipping plane distance.
-        float m_FarClip{ 1000.0f };                  ///< Far clipping plane distance.
-        ProjectionType m_ProjectionType{ ProjectionType::Perspective }; ///< Active projection mode.
+        glm::vec3 m_Position{ 0.0f, 0.0f, 5.0f };   // Camera location used to seed the view matrix.
+        glm::vec3 m_Rotation{ 0.0f };                // Euler rotation in degrees for simple gizmo integration.
+        glm::vec2 m_ViewportSize{ 1280.0f, 720.0f }; // Backing viewport dimensions for aspect ratio calculations.
+        float m_FieldOfView{ 60.0f };                // Perspective vertical field of view in degrees.
+        float m_OrthographicSize{ 20.0f };           // Height of the orthographic frustum in world units.
+        float m_NearClip{ 0.1f };                    // Near clipping plane distance.
+        float m_FarClip{ 1000.0f };                  // Far clipping plane distance.
+        ProjectionType m_ProjectionType{ ProjectionType::Perspective }; // Active projection mode.
 
-        mutable glm::mat4 m_ViewMatrix{ 1.0f };          ///< Cached view matrix rebuilt on demand.
-        mutable glm::mat4 m_ProjectionMatrix{ 1.0f };    ///< Cached projection matrix rebuilt when configuration changes.
-        mutable bool m_ViewDirty{ true };                ///< Flag telling GetViewMatrix() to rebuild the cache.
-        mutable bool m_ProjectionDirty{ true };          ///< Flag telling GetProjectionMatrix() to rebuild the cache.
+        mutable glm::mat4 m_ViewMatrix{ 1.0f };          // Cached view matrix rebuilt on demand.
+        mutable glm::mat4 m_ProjectionMatrix{ 1.0f };    // Cached projection matrix rebuilt when configuration changes.
+        mutable bool m_ViewDirty{ true };                // Flag telling GetViewMatrix() to rebuild the cache.
+        mutable bool m_ProjectionDirty{ true };          // Flag telling GetProjectionMatrix() to rebuild the cache.
     };
 }

@@ -49,12 +49,12 @@ namespace Trident
         void InitialiseDefaultEntities();
 
     private:
-        ECS::Registry* m_Registry{ nullptr };          ///< Points to either the editor or runtime registry depending on play state.
-        ECS::Registry* m_EditorRegistry{ nullptr };    ///< Non-owning pointer used to restore the editor registry when leaving play mode.
-        std::unique_ptr<ECS::Registry> m_RuntimeRegistry; ///< Owns the transient runtime registry while the scene is playing.
-        std::string m_SceneName{ "Untitled" };         ///< Friendly label persisted inside the .trident file header.
-        bool m_IsPlaying{ false };                      ///< Indicates whether the scene is currently in play mode.
-        size_t m_LoadedEntityCount{ 0 };                ///< Helper counter used for logging during deserialisation.
-        std::unique_ptr<ECS::AnimationSystem> m_AnimationSystem; ///< Drives skeletal animation playback during runtime.
+        ECS::Registry* m_Registry{ nullptr };          // Points to either the editor or runtime registry depending on play state.
+        ECS::Registry* m_EditorRegistry{ nullptr };    // Non-owning pointer used to restore the editor registry when leaving play mode.
+        std::unique_ptr<ECS::Registry> m_RuntimeRegistry; // Owns the transient runtime registry while the scene is playing.
+        std::string m_SceneName{ "Untitled" };         // Friendly label persisted inside the .trident file header.
+        bool m_IsPlaying{ false };                      // Indicates whether the scene is currently in play mode.
+        size_t m_LoadedEntityCount{ 0 };                // Helper counter used for logging during deserialisation.
+        std::unique_ptr<ECS::AnimationSystem> m_AnimationSystem; // Drives skeletal animation playback during runtime.
     };
 }

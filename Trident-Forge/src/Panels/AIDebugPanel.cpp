@@ -13,7 +13,8 @@ namespace EditorPanels
     void AIDebugPanel::Update()
     {
         // Without a runtime AI system the panel reports basic selection context.
-        if (m_SelectedEntity == 0)
+        // Report lack of selection using the explicit sentinel so entity ID 0 can be debugged normally.
+        if (m_SelectedEntity == s_InvalidEntity)
         {
             m_DebugSummary = "No entity selected";
         }

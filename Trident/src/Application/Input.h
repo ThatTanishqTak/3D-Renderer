@@ -68,8 +68,8 @@ namespace Trident
             return l_Index < Count;
         }
 
-        static constexpr size_t s_MaxKeys = 512;           ///< Mirrors GLFW's key range with slack for future bindings.
-        static constexpr size_t s_MaxMouseButtons = 8;     ///< Covers primary/extra mouse buttons.
+        static constexpr size_t s_MaxKeys = 512;           // Mirrors GLFW's key range with slack for future bindings.
+        static constexpr size_t s_MaxMouseButtons = 8;     // Covers primary/extra mouse buttons.
 
         std::array<bool, s_MaxKeys> m_CurrentKeyState{};
         std::array<bool, s_MaxKeys> m_PreviousKeyState{};

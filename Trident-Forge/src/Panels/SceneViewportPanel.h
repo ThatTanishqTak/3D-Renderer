@@ -7,6 +7,7 @@
 #include <imgui.h>
 #include <functional>
 #include <vector>
+#include <limits>
 
 namespace EditorPanels
 {
@@ -40,14 +41,15 @@ namespace EditorPanels
         void SubmitViewportTexture(const ImVec2& viewportSize);
 
     private:
-        Trident::ViewportInfo m_ViewportInfo{}; ///< Mirrors the renderer viewport configuration for the scene view.
-        bool m_IsHovered = false; ///< Tracks whether the viewport window is hovered for tool input routing.
-        bool m_IsFocused = false; ///< Tracks whether the viewport window has keyboard focus for shortcuts.
-        ImVec2 m_BoundsMin{ 0.0f, 0.0f }; ///< Cached minimum bound used for hit-testing OS drag-and-drop coordinates.
-        ImVec2 m_BoundsMax{ 0.0f, 0.0f }; ///< Cached maximum bound used for hit-testing OS drag-and-drop coordinates.
-        Trident::GizmoState* m_GizmoState = nullptr; ///< Shared gizmo state pointer so inspector/viewport remain synchronized.
-        Trident::ECS::Registry* m_Registry = nullptr; ///< Active registry supplied by the scene bridge for entity queries.
-        Trident::ECS::Entity m_SelectedEntity = 0; ///< Currently selected entity identifier mirrored from the hierarchy.
-        std::function<void(const std::vector<std::string>&)> m_OnAssetsDropped; ///< Callback invoked when assets are dropped.
+        static constexpr Trident::ECS::Entity s_InvalidEntity = std::numeric_limits<Trident::ECS::Entity>::max(); // Sentinel representing no selection provided by the hierarchy.
+        Trident::ViewportInfo m_ViewportInfo{}; // Mirrors the renderer viewport configuration for the scene view.
+        bool m_IsHovered = false; // Tracks whether the viewport window is hovered for tool input routing.
+        bool m_IsFocused = false; // Tracks whether the viewport window has keyboard focus for shortcuts.
+        ImVec2 m_BoundsMin{ 0.0f, 0.0f }; // Cached minimum bound used for hit-testing OS drag-and-drop coordinates.
+        ImVec2 m_BoundsMax{ 0.0f, 0.0f }; // Cached maximum bound used for hit-testing OS drag-and-drop coordinates.
+        Trident::GizmoState* m_GizmoState = nullptr; // Shared gizmo state pointer so inspector/viewport remain synchronized.
+        Trident::ECS::Registry* m_Registry = nullptr; // Active registry supplied by the scene bridge for entity queries.
+        Trident::ECS::Entity m_SelectedEntity = s_InvalidEntity; // Currently selected entity identifier mirrored from the hierarchy.
+        std::function<void(const std::vector<std::string>&)> m_OnAssetsDropped; // Callback invoked when assets are dropped.
     };
 }

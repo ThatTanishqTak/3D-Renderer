@@ -107,37 +107,37 @@ namespace Trident
              */
             struct FrameJob
             {
-                std::vector<float> m_InputTensor; ///< Flattened tensor data copied from the renderer readback.
+                std::vector<float> m_InputTensor; // Flattened tensor data copied from the renderer readback.
             };
 
             struct TensorBinding
             {
-                std::string m_Name{};                ///< Graph binding name used during inference runs.
-                std::vector<int64_t> m_Shape{};      ///< Cached tensor shape describing the expected dimensions.
-                size_t m_ElementCount = 0;           ///< Flattened element count derived from the shape for validation.
+                std::string m_Name{};                // Graph binding name used during inference runs.
+                std::vector<int64_t> m_Shape{};      // Cached tensor shape describing the expected dimensions.
+                size_t m_ElementCount = 0;           // Flattened element count derived from the shape for validation.
             };
 
             bool CacheModelBindings(const Ort::Session& session);
             void ResetState();
             void WorkerLoop();
 
-            std::string m_ModelKey{};                                   ///< Identifier supplied to OnnxRuntimeContext.
-            AI::OnnxRuntimeContext* m_RuntimeContext = nullptr;          ///< Pointer to the shared runtime controller.
-            bool m_IsInitialised = false;                                ///< Guard flag checked before scheduling inference.
-            std::vector<TensorBinding> m_InputBindings;                  ///< Cached description of model inputs.
-            std::vector<TensorBinding> m_OutputBindings;                 ///< Cached description of model outputs.
-            std::vector<float> m_LastOutputTensor;                       ///< Flattened buffer storing the latest AI result.
-            std::deque<FrameJob> m_PendingJobs;                          ///< Queue of frames waiting to be processed asynchronously.
-            std::deque<std::vector<float>> m_CompletedOutputs;           ///< Queue of freshly generated AI outputs awaiting consumption.
-            mutable std::mutex m_QueueMutex;                             ///< Guards pending job access. Marked mutable so const inspectors can lock safely.
-            mutable std::mutex m_OutputMutex;                            ///< Guards completed output queue and cached tensor.
-            std::condition_variable m_QueueCondition;                    ///< Signals the worker thread when new jobs arrive.
-            std::thread m_WorkerThread;                                  ///< Dedicated worker responsible for running inference.
-            bool m_WorkerShouldStop = false;                             ///< Latch toggled during shutdown so the worker exits gracefully.
-            double m_LastInferenceMilliseconds = 0.0;                    ///< Timing for the most recent inference run measured in milliseconds.
-            double m_TotalInferenceMilliseconds = 0.0;                   ///< Accumulated duration of all completed inference runs.
-            uint64_t m_CompletedInferenceCount = 0;                      ///< Number of jobs that produced an output tensor.
-            size_t m_PendingJobCount = 0;                                ///< Cached size of the pending job queue for quick inspection.
+            std::string m_ModelKey{};                                   // Identifier supplied to OnnxRuntimeContext.
+            AI::OnnxRuntimeContext* m_RuntimeContext = nullptr;          // Pointer to the shared runtime controller.
+            bool m_IsInitialised = false;                                // Guard flag checked before scheduling inference.
+            std::vector<TensorBinding> m_InputBindings;                  // Cached description of model inputs.
+            std::vector<TensorBinding> m_OutputBindings;                 // Cached description of model outputs.
+            std::vector<float> m_LastOutputTensor;                       // Flattened buffer storing the latest AI result.
+            std::deque<FrameJob> m_PendingJobs;                          // Queue of frames waiting to be processed asynchronously.
+            std::deque<std::vector<float>> m_CompletedOutputs;           // Queue of freshly generated AI outputs awaiting consumption.
+            mutable std::mutex m_QueueMutex;                             // Guards pending job access. Marked mutable so const inspectors can lock safely.
+            mutable std::mutex m_OutputMutex;                            // Guards completed output queue and cached tensor.
+            std::condition_variable m_QueueCondition;                    // Signals the worker thread when new jobs arrive.
+            std::thread m_WorkerThread;                                  // Dedicated worker responsible for running inference.
+            bool m_WorkerShouldStop = false;                             // Latch toggled during shutdown so the worker exits gracefully.
+            double m_LastInferenceMilliseconds = 0.0;                    // Timing for the most recent inference run measured in milliseconds.
+            double m_TotalInferenceMilliseconds = 0.0;                   // Accumulated duration of all completed inference runs.
+            uint64_t m_CompletedInferenceCount = 0;                      // Number of jobs that produced an output tensor.
+            size_t m_PendingJobCount = 0;                                // Cached size of the pending job queue for quick inspection.
         };
     }
 }

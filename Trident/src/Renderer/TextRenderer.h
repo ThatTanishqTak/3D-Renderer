@@ -44,32 +44,32 @@ namespace Trident
     private:
         struct Glyph
         {
-            glm::vec2 m_Offset{ 0.0f }; ///< Offset from the pen position to the quad origin in screen-space pixels.
-            glm::vec2 m_Size{ 0.0f };   ///< Width/height of the rendered quad in pixels.
-            glm::vec2 m_UVMin{ 0.0f };  ///< Normalised atlas coordinates (top-left) used for sampling.
-            glm::vec2 m_UVMax{ 0.0f };  ///< Normalised atlas coordinates (bottom-right) used for sampling.
-            float m_Advance = 0.0f;     ///< Horizontal advance applied to the pen after emitting this glyph.
+            glm::vec2 m_Offset{ 0.0f }; // Offset from the pen position to the quad origin in screen-space pixels.
+            glm::vec2 m_Size{ 0.0f };   // Width/height of the rendered quad in pixels.
+            glm::vec2 m_UVMin{ 0.0f };  // Normalised atlas coordinates (top-left) used for sampling.
+            glm::vec2 m_UVMax{ 0.0f };  // Normalised atlas coordinates (bottom-right) used for sampling.
+            float m_Advance = 0.0f;     // Horizontal advance applied to the pen after emitting this glyph.
         };
 
         struct TextVertex
         {
-            glm::vec2 m_Position{ 0.0f }; ///< Screen-space coordinates relative to the viewport origin.
-            glm::vec2 m_UV{ 0.0f };       ///< Atlas texture coordinates.
-            glm::vec4 m_Color{ 1.0f };    ///< RGBA colour packed directly into the vertex stream.
+            glm::vec2 m_Position{ 0.0f }; // Screen-space coordinates relative to the viewport origin.
+            glm::vec2 m_UV{ 0.0f };       // Atlas texture coordinates.
+            glm::vec4 m_Color{ 1.0f };    // RGBA colour packed directly into the vertex stream.
         };
 
         struct TextCommand
         {
-            glm::vec2 m_Position{ 0.0f }; ///< Top-left anchor in pixels relative to the viewport.
-            glm::vec4 m_Color{ 1.0f };    ///< Base colour applied to every glyph in the command.
-            std::u32string m_Text;        ///< UTF-32 sequence so glyph lookup becomes a direct map access.
+            glm::vec2 m_Position{ 0.0f }; // Top-left anchor in pixels relative to the viewport.
+            glm::vec4 m_Color{ 1.0f };    // Base colour applied to every glyph in the command.
+            std::u32string m_Text;        // UTF-32 sequence so glyph lookup becomes a direct map access.
         };
 
         struct PerFrameBuffer
         {
             VkBuffer m_Buffer = VK_NULL_HANDLE;
             VkDeviceMemory m_Memory = VK_NULL_HANDLE;
-            size_t m_Capacity = 0; ///< Number of vertices the buffer can currently hold.
+            size_t m_Capacity = 0; // Number of vertices the buffer can currently hold.
         };
 
     private:

@@ -28,7 +28,7 @@ namespace Trident
         private:
             void UpdateComponent(Registry& registry, Entity entity, float deltaTime);
 
-            Animation::AnimationPlayer m_Player; ///< Shared player reusing scratch buffers for deterministic sampling.
+            Animation::AnimationPlayer m_Player; // Shared player reusing scratch buffers for deterministic sampling.
         };
     }
 }

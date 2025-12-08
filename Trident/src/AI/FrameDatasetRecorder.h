@@ -80,36 +80,36 @@ namespace Trident
 
             struct CaptureJob
             {
-                JobType m_Type = JobType::Input;                        ///< Identifies which persistence path to execute.
-                uint64_t m_Index = 0;                                   ///< Monotonic identifier shared between input and output files.
-                std::filesystem::path m_TargetPath{};                   ///< Destination file path for the NPY payload.
-                std::filesystem::path m_MetadataPath{};                 ///< Destination for the JSON metadata (input frames only).
-                std::vector<float> m_Data;                              ///< Copy of the tensor data so background threads own the memory.
-                std::vector<int64_t> m_Shape;                           ///< Shape description accompanying the tensor.
-                VkExtent2D m_Extent{ 0, 0 };                            ///< Captured extent for metadata files.
-                uint32_t m_ChannelCount = 0;                            ///< Channel count for metadata files.
-                std::string m_ColorOrder;                               ///< Channel ordering label persisted to metadata.
-                bool m_Normalised = false;                              ///< Tracks whether the tensor was normalised before capture.
+                JobType m_Type = JobType::Input;                        // Identifies which persistence path to execute.
+                uint64_t m_Index = 0;                                   // Monotonic identifier shared between input and output files.
+                std::filesystem::path m_TargetPath{};                   // Destination file path for the NPY payload.
+                std::filesystem::path m_MetadataPath{};                 // Destination for the JSON metadata (input frames only).
+                std::vector<float> m_Data;                              // Copy of the tensor data so background threads own the memory.
+                std::vector<int64_t> m_Shape;                           // Shape description accompanying the tensor.
+                VkExtent2D m_Extent{ 0, 0 };                            // Captured extent for metadata files.
+                uint32_t m_ChannelCount = 0;                            // Channel count for metadata files.
+                std::string m_ColorOrder;                               // Channel ordering label persisted to metadata.
+                bool m_Normalised = false;                              // Tracks whether the tensor was normalised before capture.
             };
 
             struct PendingSample
             {
-                uint64_t m_Index = 0;                                ///< Monotonic identifier shared between input and output files.
+                uint64_t m_Index = 0;                                // Monotonic identifier shared between input and output files.
             };
 
-            std::filesystem::path m_CaptureDirectory{};              ///< Root folder used for dataset capture.
-            bool m_CaptureEnabled = false;                           ///< Flag indicating whether capture is active.
-            bool m_DirectoryPrepared = false;                        ///< Tracks whether the directory hierarchy exists.
-            uint64_t m_NextSampleIndex = 0;                          ///< Counter used when naming capture files.
-            std::deque<PendingSample> m_PendingSamples;              ///< Queue linking inputs to their eventual outputs.
-            uint64_t m_FrameCounter = 0;                             ///< Counter used to enforce the sampling interval.
-            uint32_t m_CaptureSampleInterval = 1;                    ///< Interval that determines how often frames are captured.
-            std::deque<CaptureJob> m_WriteQueue;                     ///< Pending jobs awaiting background persistence.
-            std::mutex m_QueueMutex;                                 ///< Protects the write queue from concurrent access.
-            std::condition_variable m_QueueCondition;                ///< Signals the worker thread when new jobs arrive.
-            std::thread m_WorkerThread;                              ///< Background worker that performs disk writes.
-            bool m_StopWorker = false;                               ///< Signals the worker thread to finish after draining jobs.
-            bool m_WorkerRunning = false;                            ///< Tracks whether the worker thread is active.
+            std::filesystem::path m_CaptureDirectory{};              // Root folder used for dataset capture.
+            bool m_CaptureEnabled = false;                           // Flag indicating whether capture is active.
+            bool m_DirectoryPrepared = false;                        // Tracks whether the directory hierarchy exists.
+            uint64_t m_NextSampleIndex = 0;                          // Counter used when naming capture files.
+            std::deque<PendingSample> m_PendingSamples;              // Queue linking inputs to their eventual outputs.
+            uint64_t m_FrameCounter = 0;                             // Counter used to enforce the sampling interval.
+            uint32_t m_CaptureSampleInterval = 1;                    // Interval that determines how often frames are captured.
+            std::deque<CaptureJob> m_WriteQueue;                     // Pending jobs awaiting background persistence.
+            std::mutex m_QueueMutex;                                 // Protects the write queue from concurrent access.
+            std::condition_variable m_QueueCondition;                // Signals the worker thread when new jobs arrive.
+            std::thread m_WorkerThread;                              // Background worker that performs disk writes.
+            bool m_StopWorker = false;                               // Signals the worker thread to finish after draining jobs.
+            bool m_WorkerRunning = false;                            // Tracks whether the worker thread is active.
 
             std::filesystem::path BuildInputPath(uint64_t index) const;
             std::filesystem::path BuildOutputPath(uint64_t index) const;

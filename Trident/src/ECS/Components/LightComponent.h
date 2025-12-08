@@ -24,14 +24,14 @@ namespace Trident
             Point = 1,
         };
 
-        Type m_Type = Type::Directional;           ///< Light classification guiding shading logic.
-        glm::vec3 m_Color{ 1.0f, 0.98f, 0.92f };   ///< Emissive colour applied to the light.
-        float m_Intensity = 5.0f;                  ///< Scalar brightness multiplier.
-        glm::vec3 m_Direction{ -0.5f, -1.0f, -0.3f }; ///< Facing vector for directional lights.
-        float m_Range = 10.0f;                     ///< Influence radius for point lights (units in world space).
-        bool m_Enabled = true;                     ///< Simple toggle so lights can be muted without deletion.
-        bool m_ShadowCaster = false;               ///< Reserved for shadow settings integration.
-        bool m_Reserved0 = false;                  ///< Padding + placeholder for clustered shading controls.
-        bool m_Reserved1 = false;                  ///< Additional padding for std140 friendliness if promoted later.
+        Type m_Type = Type::Directional;           // Light classification guiding shading logic.
+        glm::vec3 m_Color{ 1.0f, 0.98f, 0.92f };   // Emissive colour applied to the light.
+        float m_Intensity = 5.0f;                  // Scalar brightness multiplier.
+        glm::vec3 m_Direction{ -0.5f, -1.0f, -0.3f }; // Facing vector for directional lights.
+        float m_Range = 10.0f;                     // Influence radius for point lights (units in world space).
+        bool m_Enabled = true;                     // Simple toggle so lights can be muted without deletion.
+        bool m_ShadowCaster = false;               // Reserved for shadow settings integration.
+        bool m_Reserved0 = false;                  // Padding + placeholder for clustered shading controls.
+        bool m_Reserved1 = false;                  // Additional padding for std140 friendliness if promoted later.
     };
 }
