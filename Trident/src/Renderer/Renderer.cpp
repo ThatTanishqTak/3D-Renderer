@@ -87,33 +87,33 @@ namespace
     /**
      * @brief Extract the NHWC layout information from the model supplied tensor shape.
      */
-    TensorShapeInfo ParseTensorShapeNhwc(std::span<const int64_t> a_Shape)
+    TensorShapeInfo ParseTensorShapeNhwc(std::span<const int64_t> shape)
     {
         TensorShapeInfo l_Info{};
-        if (a_Shape.empty())
+        if (shape.empty())
         {
             return l_Info;
         }
 
-        if (a_Shape.size() == 4)
+        if (shape.size() == 4)
         {
             l_Info.m_IsValid = true;
             l_Info.m_HasExplicitBatch = true;
             l_Info.m_IsChannelsLast = true;
-            l_Info.m_Batch = a_Shape[0];
-            l_Info.m_Height = a_Shape[1];
-            l_Info.m_Width = a_Shape[2];
-            l_Info.m_Channels = a_Shape[3];
+            l_Info.m_Batch = shape[0];
+            l_Info.m_Height = shape[1];
+            l_Info.m_Width = shape[2];
+            l_Info.m_Channels = shape[3];
         }
-        else if (a_Shape.size() == 3)
+        else if (shape.size() == 3)
         {
             l_Info.m_IsValid = true;
             l_Info.m_HasExplicitBatch = false;
             l_Info.m_IsChannelsLast = true;
             l_Info.m_Batch = 1;
-            l_Info.m_Height = a_Shape[0];
-            l_Info.m_Width = a_Shape[1];
-            l_Info.m_Channels = a_Shape[2];
+            l_Info.m_Height = shape[0];
+            l_Info.m_Width = shape[1];
+            l_Info.m_Channels = shape[2];
         }
 
         return l_Info;
@@ -122,50 +122,47 @@ namespace
     /**
      * @brief Replace dynamic tensor dimensions with a sensible runtime fallback.
      */
-    int64_t ResolveTensorDimension(int64_t a_Value, int64_t a_Fallback)
+    int64_t ResolveTensorDimension(int64_t value, int64_t fallback)
     {
-        if (a_Value <= 0)
+        if (value <= 0)
         {
-            return a_Fallback;
+            return fallback;
         }
 
-        return a_Value;
+        return value;
     }
 
     /**
      * @brief Build a canonical NHWC shape so downstream systems can treat the tensor consistently.
      */
-    std::array<int64_t, 4> BuildCanonicalNhwcShape(const TensorShapeInfo& a_Shape, VkExtent2D a_FallbackExtent, uint32_t a_FallbackChannels)
+    std::array<int64_t, 4> BuildCanonicalNhwcShape(const TensorShapeInfo& shape, VkExtent2D fallbackExtent, uint32_t fallbackChannels)
     {
-        const int64_t l_Height = ResolveTensorDimension(a_Shape.m_Height, static_cast<int64_t>(a_FallbackExtent.height));
-        const int64_t l_Width = ResolveTensorDimension(a_Shape.m_Width, static_cast<int64_t>(a_FallbackExtent.width));
-        const int64_t l_Channels = ResolveTensorDimension(a_Shape.m_Channels, static_cast<int64_t>(a_FallbackChannels));
+        const int64_t l_Height = ResolveTensorDimension(shape.m_Height, static_cast<int64_t>(fallbackExtent.height));
+        const int64_t l_Width = ResolveTensorDimension(shape.m_Width, static_cast<int64_t>(fallbackExtent.width));
+        const int64_t l_Channels = ResolveTensorDimension(shape.m_Channels, static_cast<int64_t>(fallbackChannels));
 
         return
         {
-            1,
-            std::max<int64_t>(l_Height, 0),
-            std::max<int64_t>(l_Width, 0),
-            std::max<int64_t>(l_Channels, 0)
+            1, std::max<int64_t>(l_Height, 0), std::max<int64_t>(l_Width, 0), std::max<int64_t>(l_Channels, 0)
         };
     }
 
     /**
      * @brief Convert a raw tensor shape into a debug-friendly string representation.
      */
-    std::string BuildShapeDebugString(std::span<const int64_t> a_Shape)
+    std::string BuildShapeDebugString(std::span<const int64_t> shape)
     {
-        if (a_Shape.empty())
+        if (shape.empty())
         {
             return "[]";
         }
 
         std::ostringstream l_Stream;
         l_Stream << '[';
-        for (size_t it_Index = 0; it_Index < a_Shape.size(); ++it_Index)
+        for (size_t it_Index = 0; it_Index < shape.size(); ++it_Index)
         {
-            l_Stream << a_Shape[it_Index];
-            const bool l_IsLast = (it_Index + 1) == a_Shape.size();
+            l_Stream << shape[it_Index];
+            const bool l_IsLast = (it_Index + 1) == shape.size();
             if (!l_IsLast)
             {
                 l_Stream << ", ";
@@ -179,15 +176,14 @@ namespace
     /**
      * @brief Convert the AI output tensor into normalised BGRA data that matches the swapchain format.
      */
-    void NormaliseAndReorderAiOutput(std::vector<float>& a_Data, const TensorShapeInfo& a_Shape,
-        VkExtent2D a_FallbackExtent, uint32_t a_FallbackChannels)
+    void NormaliseAndReorderAiOutput(std::vector<float>& data, const TensorShapeInfo& shape, VkExtent2D fallbackExtent, uint32_t fallbackChannels)
     {
-        if (a_Data.empty())
+        if (data.empty())
         {
             return;
         }
 
-        const std::array<int64_t, 4> l_CanonicalShape = BuildCanonicalNhwcShape(a_Shape, a_FallbackExtent, a_FallbackChannels);
+        const std::array<int64_t, 4> l_CanonicalShape = BuildCanonicalNhwcShape(shape, fallbackExtent, fallbackChannels);
         const int64_t l_ChannelCount64 = l_CanonicalShape[3];
         if (l_ChannelCount64 <= 0)
         {
@@ -201,15 +197,15 @@ namespace
             return;
         }
 
-        if (a_Data.size() % l_ChannelCount != 0)
+        if (data.size() % l_ChannelCount != 0)
         {
-            TR_CORE_WARN("AI output tensor element count ({}) did not align with the channel count ({}).", a_Data.size(), l_ChannelCount);
+            TR_CORE_WARN("AI output tensor element count ({}) did not align with the channel count ({}).", data.size(), l_ChannelCount);
             return;
         }
 
-        const size_t l_PixelCount = a_Data.size() / l_ChannelCount;
+        const size_t l_PixelCount = data.size() / l_ChannelCount;
 
-        const auto [l_MinIt, l_MaxIt] = std::minmax_element(a_Data.begin(), a_Data.end());
+        const auto [l_MinIt, l_MaxIt] = std::minmax_element(data.begin(), data.end());
         const float l_MinValue = *l_MinIt;
         const float l_MaxValue = *l_MaxIt;
         constexpr float s_Tolerance = 1.0e-3f;
@@ -218,7 +214,7 @@ namespace
 
         if (l_Scale != 1.0f)
         {
-            for (float& l_Value : a_Data)
+            for (float& l_Value : data)
             {
                 l_Value *= l_Scale;
             }
@@ -229,11 +225,11 @@ namespace
             for (size_t it_Pixel = 0; it_Pixel < l_PixelCount; ++it_Pixel)
             {
                 const size_t l_BaseIndex = it_Pixel * l_ChannelCount;
-                std::swap(a_Data[l_BaseIndex], a_Data[l_BaseIndex + 2]);
+                std::swap(data[l_BaseIndex], data[l_BaseIndex + 2]);
             }
         }
 
-        for (float& l_Value : a_Data)
+        for (float& l_Value : data)
         {
             l_Value = std::clamp(l_Value, 0.0f, 1.0f);
         }
@@ -1108,8 +1104,7 @@ namespace Trident
         }
 
         const uint8_t* l_SourceBytes = static_cast<const uint8_t*>(l_Mapped);
-        const size_t l_PixelCount = static_cast<size_t>(m_FrameReadbackExtent.width) *
-            static_cast<size_t>(m_FrameReadbackExtent.height);
+        const size_t l_PixelCount = static_cast<size_t>(m_FrameReadbackExtent.width) * static_cast<size_t>(m_FrameReadbackExtent.height);
         const size_t l_TotalElements = l_PixelCount * static_cast<size_t>(m_FrameReadbackChannelCount);
 
         m_PendingFrameReadback.resize(l_TotalElements);
@@ -1971,8 +1966,7 @@ namespace Trident
 
     void Renderer::DestroyImGuiTexture(ImGuiTexture& texture)
     {
-        // Safe guard every handle so the method tolerates partially initialised textures
-        // created during error paths.
+        // Safe guard every handle so the method tolerates partially initialised textures created during error paths.
         if (texture.m_Sampler != VK_NULL_HANDLE)
         {
             vkDestroySampler(Startup::GetDevice(), texture.m_Sampler, nullptr);
@@ -2156,11 +2150,11 @@ namespace Trident
         return reinterpret_cast<ImTextureID>(nullptr);
     }
 
-    VkDescriptorSet Renderer::GetViewportTexture(uint32_t viewportId) const
+    VkDescriptorSet Renderer::GetViewportTexture(uint32_t viewportID) const
     {
         // Provide the descriptor set that ImGui::Image expects when the viewport is active.
         // The active camera routing happens elsewhere; this helper only surfaces the render target texture to ImGui.
-        const ViewportContext* l_Context = FindViewportContext(viewportId);
+        const ViewportContext* l_Context = FindViewportContext(viewportID);
         if (!l_Context || !IsValidViewport(l_Context->m_Info))
         {
             return VK_NULL_HANDLE;
@@ -2187,9 +2181,9 @@ namespace Trident
         return GetActiveCamera(*l_Context);
     }
 
-    glm::mat4 Renderer::GetViewportViewMatrix(uint32_t viewportId) const
+    glm::mat4 Renderer::GetViewportViewMatrix(uint32_t viewportID) const
     {
-        const ViewportContext* l_Context = FindViewportContext(viewportId);
+        const ViewportContext* l_Context = FindViewportContext(viewportID);
         const Camera* l_Camera = l_Context ? GetActiveCamera(*l_Context) : nullptr;
         if (!l_Camera)
         {
@@ -2199,9 +2193,9 @@ namespace Trident
         return l_Camera->GetViewMatrix();
     }
 
-    glm::mat4 Renderer::GetViewportProjectionMatrix(uint32_t viewportId) const
+    glm::mat4 Renderer::GetViewportProjectionMatrix(uint32_t viewportID) const
     {
-        const ViewportContext* l_Context = FindViewportContext(viewportId);
+        const ViewportContext* l_Context = FindViewportContext(viewportID);
         const Camera* l_Camera = l_Context ? GetActiveCamera(*l_Context) : nullptr;
         if (!l_Camera)
         {
@@ -2211,11 +2205,11 @@ namespace Trident
         return l_Camera->GetProjectionMatrix();
     }
 
-    std::vector<CameraOverlayInstance> Renderer::GetCameraOverlayInstances(uint32_t viewportId) const
+    std::vector<CameraOverlayInstance> Renderer::GetCameraOverlayInstances(uint32_t viewportID) const
     {
         std::vector<CameraOverlayInstance> l_Instances{};
 
-        const ViewportContext* l_Context = FindViewportContext(viewportId);
+        const ViewportContext* l_Context = FindViewportContext(viewportID);
         if (!l_Context || !IsValidViewport(l_Context->m_Info))
         {
             // Without a valid viewport the overlay has nowhere to draw, so bail out early.
@@ -2333,14 +2327,14 @@ namespace Trident
         return l_Instances;
     }
 
-    void Renderer::SetViewport(uint32_t viewportId, const ViewportInfo& info)
+    void Renderer::SetViewport(uint32_t viewportID, const ViewportInfo& info)
     {
         const uint32_t l_PreviousViewportId = m_ActiveViewportId;
-        m_ActiveViewportId = viewportId;
+        m_ActiveViewportId = viewportID;
 
-        ViewportContext& l_Context = GetOrCreateViewportContext(viewportId);
+        ViewportContext& l_Context = GetOrCreateViewportContext(viewportID);
         l_Context.m_Info = info;
-        l_Context.m_Info.ViewportID = viewportId;
+        l_Context.m_Info.ViewportID = viewportID;
 
         auto a_UpdateCameraSize = [info](Camera* targetCamera)
             {
@@ -2351,7 +2345,7 @@ namespace Trident
                 }
             };
 
-        if (viewportId == 1U)
+        if (viewportID == 1U)
         {
             // Explicitly size the editor camera against the editor viewport. If it is missing fall back so rendering continues.
             if (m_EditorCamera)
@@ -2363,7 +2357,7 @@ namespace Trident
                 a_UpdateCameraSize(m_RuntimeCamera);
             }
         }
-        else if (viewportId == 2U)
+        else if (viewportID == 2U)
         {
             // Runtime viewport pulls from the gameplay camera, falling back to editor output for inactive simulations.
             if (m_RuntimeCamera)
@@ -2399,7 +2393,7 @@ namespace Trident
 
         if (l_RequestedExtent.width == 0 || l_RequestedExtent.height == 0)
         {
-            DestroyOffscreenResources(viewportId);
+            DestroyOffscreenResources(viewportID);
 
             return;
         }
@@ -2518,8 +2512,7 @@ namespace Trident
 
             if (l_MeshComponent.m_MeshIndex >= m_MeshDrawInfo.size())
             {
-                // The component references geometry that has not been uploaded yet. Future streaming
-                // work can patch this once asynchronous loading lands.
+                // The component references geometry that has not been uploaded yet. Future streaming work can patch this once asynchronous loading lands.
                 continue;
             }
 
@@ -2689,8 +2682,7 @@ namespace Trident
 
         for (size_t it_Index = 0; it_Index < m_BonePaletteBuffers.size(); ++it_Index)
         {
-            m_Buffers.DestroyBuffer(m_BonePaletteBuffers[it_Index],
-                (it_Index < m_BonePaletteMemory.size()) ? m_BonePaletteMemory[it_Index] : VK_NULL_HANDLE);
+            m_Buffers.DestroyBuffer(m_BonePaletteBuffers[it_Index], (it_Index < m_BonePaletteMemory.size()) ? m_BonePaletteMemory[it_Index] : VK_NULL_HANDLE);
         }
 
         m_BonePaletteBuffers.clear();
@@ -3116,8 +3108,7 @@ namespace Trident
         l_BarrierToTransfer.srcAccessMask = 0;
         l_BarrierToTransfer.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
 
-        vkCmdPipelineBarrier(l_CommandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
-            0, 0, nullptr, 0, nullptr, 1, &l_BarrierToTransfer);
+        vkCmdPipelineBarrier(l_CommandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &l_BarrierToTransfer);
 
         VkBufferImageCopy l_CopyRegion{};
         l_CopyRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -3143,8 +3134,7 @@ namespace Trident
         l_BarrierToShader.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
         l_BarrierToShader.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 
-        vkCmdPipelineBarrier(l_CommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-            0, 0, nullptr, 0, nullptr, 1, &l_BarrierToShader);
+        vkCmdPipelineBarrier(l_CommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &l_BarrierToShader);
 
         m_Commands.EndSingleTimeCommands(l_CommandBuffer);
 
@@ -3296,8 +3286,7 @@ namespace Trident
 
         if (m_TextureSlots.size() >= Pipeline::s_MaxMaterialTextures)
         {
-            TR_CORE_WARN("Material texture budget ({}) exhausted. {} will fall back to the default slot.",
-                Pipeline::s_MaxMaterialTextures, normalizedPath.c_str());
+            TR_CORE_WARN("Material texture budget ({}) exhausted. {} will fall back to the default slot.", Pipeline::s_MaxMaterialTextures, normalizedPath.c_str());
         }
         else if (!textureData.Pixels.empty())
         {
@@ -3991,14 +3980,14 @@ namespace Trident
         m_SkyboxDescriptorSets.clear();
     }
 
-    void Renderer::DestroyOffscreenResources(uint32_t viewportId)
+    void Renderer::DestroyOffscreenResources(uint32_t viewportID)
     {
-        if (viewportId == 0)
+        if (viewportID == 0)
         {
             return;
         }
 
-        ViewportContext* l_Context = FindViewportContext(viewportId);
+        ViewportContext* l_Context = FindViewportContext(viewportID);
         if (l_Context == nullptr)
         {
             return;
@@ -4086,14 +4075,14 @@ namespace Trident
         m_ActiveViewportId = 0;
     }
 
-    Renderer::ViewportContext& Renderer::GetOrCreateViewportContext(uint32_t viewportId)
+    Renderer::ViewportContext& Renderer::GetOrCreateViewportContext(uint32_t viewportID)
     {
-        auto [it_Context, l_Inserted] = m_ViewportContexts.try_emplace(viewportId);
+        auto [it_Context, l_Inserted] = m_ViewportContexts.try_emplace(viewportID);
         ViewportContext& l_Context = it_Context->second;
 
         if (l_Inserted)
         {
-            l_Context.m_Info.ViewportID = viewportId;
+            l_Context.m_Info.ViewportID = viewportID;
             l_Context.m_Target.m_Extent = { 0, 0 };
             l_Context.m_Target.m_CurrentLayout = VK_IMAGE_LAYOUT_UNDEFINED;
             l_Context.m_Target.m_DepthLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -4102,9 +4091,9 @@ namespace Trident
         return l_Context;
     }
 
-    const Renderer::ViewportContext* Renderer::FindViewportContext(uint32_t viewportId) const
+    const Renderer::ViewportContext* Renderer::FindViewportContext(uint32_t viewportID) const
     {
-        const auto it_Context = m_ViewportContexts.find(viewportId);
+        const auto it_Context = m_ViewportContexts.find(viewportID);
         if (it_Context == m_ViewportContexts.end())
         {
             return nullptr;
@@ -4113,9 +4102,9 @@ namespace Trident
         return &it_Context->second;
     }
 
-    Renderer::ViewportContext* Renderer::FindViewportContext(uint32_t viewportId)
+    Renderer::ViewportContext* Renderer::FindViewportContext(uint32_t viewportID)
     {
-        return const_cast<ViewportContext*>(static_cast<const Renderer*>(this)->FindViewportContext(viewportId));
+        return const_cast<ViewportContext*>(static_cast<const Renderer*>(this)->FindViewportContext(viewportID));
     }
 
     const Camera* Renderer::GetActiveCamera(const ViewportContext& context) const
@@ -4933,9 +4922,7 @@ namespace Trident
             l_BlitRegion.dstOffsets[0] = { 0, 0, 0 };
             l_BlitRegion.dstOffsets[1] = { static_cast<int32_t>(m_Swapchain.GetExtent().width), static_cast<int32_t>(m_Swapchain.GetExtent().height), 1 };
 
-            vkCmdBlitImage(l_CommandBuffer,
-                l_PrimaryTarget->m_Image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                l_SwapchainImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            vkCmdBlitImage(l_CommandBuffer, l_PrimaryTarget->m_Image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, l_SwapchainImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                 1, &l_BlitRegion, VK_FILTER_LINEAR);
 
             // After the blit the ImGui descriptor still expects shader read, so return the offscreen image to that layout.
@@ -5640,7 +5627,7 @@ namespace Trident
         m_ViewportCamera = entity;
     }
 
-    void Renderer::SubmitText(uint32_t viewportId, const glm::vec2& position, const glm::vec4& color, std::string_view text)
+    void Renderer::SubmitText(uint32_t viewportID, const glm::vec2& position, const glm::vec4& color, std::string_view text)
     {
         if (text.empty())
         {
@@ -5648,25 +5635,25 @@ namespace Trident
         }
 
         TextSubmission l_Submission{};
-        l_Submission.m_ViewportId = viewportId;
+        l_Submission.m_ViewportId = viewportID;
         l_Submission.m_Position = position;
         l_Submission.m_Color = color;
         l_Submission.m_Text.assign(text.begin(), text.end());
         // TODO: Surface localization-aware font selection once the editor exposes language packs.
-        m_TextSubmissionQueue[viewportId].emplace_back(std::move(l_Submission));
+        m_TextSubmissionQueue[viewportID].emplace_back(std::move(l_Submission));
     }
 
-    void Renderer::SetTransform(const Transform& props)
+    void Renderer::SetTransform(const Transform& transform)
     {
         if (m_Registry)
         {
             if (!m_Registry->HasComponent<Transform>(m_Entity))
             {
-                m_Registry->AddComponent<Transform>(m_Entity, props);
+                m_Registry->AddComponent<Transform>(m_Entity, transform);
             }
             else
             {
-                m_Registry->GetComponent<Transform>(m_Entity) = props;
+                m_Registry->GetComponent<Transform>(m_Entity) = transform;
             }
         }
     }
@@ -5707,7 +5694,7 @@ namespace Trident
         }
     }
 
-    bool Renderer::SetViewportRecordingEnabled(bool enabled, uint32_t viewportId, VkExtent2D extent, const std::filesystem::path& outputPath)
+    bool Renderer::SetViewportRecordingEnabled(bool enabled, uint32_t viewportID, VkExtent2D extent, const std::filesystem::path& outputPath)
     {
         if (enabled)
         {
@@ -5754,7 +5741,7 @@ namespace Trident
             l_SanitizedExtent = m_FrameReadbackExtent;
 
             m_ViewportFrameBuffer.clear();
-            m_RecordingViewportId = viewportId;
+            m_RecordingViewportId = viewportID;
             m_RecordingExtent = l_SanitizedExtent;
             m_RecordingOutputPath = outputPath;
 
@@ -5776,7 +5763,7 @@ namespace Trident
             // Reject the start request if the encoder did not accept the session so the caller can surface an error.
             if (!l_SessionActive)
             {
-                TR_CORE_ERROR("Failed to start video encoding session for viewport {} at {}", viewportId, outputPath.string());
+                TR_CORE_ERROR("Failed to start video encoding session for viewport {} at {}", viewportID, outputPath.string());
 
                 m_ViewportRecordingEnabled = false;
                 m_ViewportRecordingSessionActive = false;
