@@ -119,6 +119,18 @@ namespace Trident
         return Startup::GetRenderer().GetTransform();
     }
 
+    glm::mat4 RenderCommand::GetWorldTransform(ECS::Entity entity)
+    {
+        // Surface the resolved world matrix so gizmos can respect scene graph relationships.
+        return Startup::GetRenderer().GetWorldTransform(entity);
+    }
+
+    void RenderCommand::SetWorldTransform(ECS::Entity entity, const glm::mat4& worldTransform)
+    {
+        // Push edits back through the renderer so hierarchy-aware transform propagation stays consistent.
+        Startup::GetRenderer().SetWorldTransform(entity, worldTransform);
+    }
+
     ViewportInfo RenderCommand::GetViewport()
     {
         return Startup::GetRenderer().GetViewport();

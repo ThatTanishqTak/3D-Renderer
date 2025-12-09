@@ -39,6 +39,8 @@ namespace Trident
         static void SetPerformanceCaptureEnabled(bool enabled);
 
         static Transform GetTransform();
+        static glm::mat4 GetWorldTransform(ECS::Entity entity);
+        static void SetWorldTransform(ECS::Entity entity, const glm::mat4& worldTransform);
         static ViewportInfo GetViewport();
         static VkDescriptorSet GetViewportTexture(uint32_t viewportId);
         static glm::mat4 GetViewportViewMatrix(uint32_t viewportId);

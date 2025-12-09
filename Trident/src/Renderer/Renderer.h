@@ -226,6 +226,8 @@ namespace Trident
         void SubmitText(uint32_t viewportId, const glm::vec2& position, const glm::vec4& color, std::string_view text);
 
         Transform GetTransform() const;
+        glm::mat4 GetWorldTransform(ECS::Entity entity) const;
+        void SetWorldTransform(ECS::Entity entity, const glm::mat4& worldTransform);
         ViewportInfo GetViewport() const;
         VkDescriptorSet GetViewportTexture(uint32_t viewportId) const;
         ECS::Entity GetViewportCamera() const { return m_ViewportCamera; }

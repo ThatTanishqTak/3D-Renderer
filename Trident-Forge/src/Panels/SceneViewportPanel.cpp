@@ -63,14 +63,8 @@ namespace EditorPanels
                 ImGuizmo::SetDrawlist();
                 ImGuizmo::SetRect(m_BoundsMin.x, m_BoundsMin.y, m_BoundsMax.x - m_BoundsMin.x, m_BoundsMax.y - m_BoundsMin.y);
 
-                // Compose the current transform into a matrix ImGuizmo can manipulate.
-                Trident::Transform l_CurrentTransform = m_Registry->GetComponent<Trident::Transform>(m_SelectedEntity);
-                glm::mat4 l_ModelMatrix{ 1.0f };
-                l_ModelMatrix = glm::translate(l_ModelMatrix, l_CurrentTransform.Position);
-                l_ModelMatrix = glm::rotate(l_ModelMatrix, glm::radians(l_CurrentTransform.Rotation.x), glm::vec3{ 1.0f, 0.0f, 0.0f });
-                l_ModelMatrix = glm::rotate(l_ModelMatrix, glm::radians(l_CurrentTransform.Rotation.y), glm::vec3{ 0.0f, 1.0f, 0.0f });
-                l_ModelMatrix = glm::rotate(l_ModelMatrix, glm::radians(l_CurrentTransform.Rotation.z), glm::vec3{ 0.0f, 0.0f, 1.0f });
-                l_ModelMatrix = glm::scale(l_ModelMatrix, l_CurrentTransform.Scale);
+                // Request the resolved world transform so gizmo edits preserve scene graph relationships.
+                glm::mat4 l_ModelMatrix = Trident::RenderCommand::GetWorldTransform(m_SelectedEntity);
 
                 // Apply ImGuizmo manipulation and sync edits back to the registry and renderer when authors adjust the gizmo.
                 if (ImGuizmo::Manipulate(glm::value_ptr(l_ViewMatrix), glm::value_ptr(l_ProjectionMatrix), l_Operation, ImGuizmo::LOCAL,
@@ -79,15 +73,10 @@ namespace EditorPanels
                     glm::vec3 l_Translation{};
                     glm::vec3 l_Rotation{};
                     glm::vec3 l_Scale{};
-                    ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(l_ModelMatrix), glm::value_ptr(l_Translation),
-                        glm::value_ptr(l_Rotation), glm::value_ptr(l_Scale));
+                    ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(l_ModelMatrix), glm::value_ptr(l_Translation), glm::value_ptr(l_Rotation), glm::value_ptr(l_Scale));
 
-                    l_CurrentTransform.Position = l_Translation;
-                    l_CurrentTransform.Rotation = l_Rotation;
-                    l_CurrentTransform.Scale = l_Scale;
-
-                    m_Registry->GetComponent<Trident::Transform>(m_SelectedEntity) = l_CurrentTransform;
-                    Trident::RenderCommand::SetTransform(l_CurrentTransform);
+                    // Push the decomposed world values through the scene graph so children remain aligned.
+                    Trident::RenderCommand::SetWorldTransform(m_SelectedEntity, l_ModelMatrix);
                 }
             }
         }

@@ -39,6 +39,8 @@
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/matrix_inverse.hpp>
+#include <glm/gtx/matrix_decompose.hpp>
+#include <glm/gtx/quaternion.hpp>
 #include <imgui_impl_vulkan.h>
 
 namespace
@@ -245,6 +247,27 @@ namespace
         l_Mat = glm::scale(l_Mat, transform.Scale);
 
         return l_Mat;
+    }
+
+    Trident::Transform DecomposeWorldTransform(const glm::mat4& worldTransform, const Trident::Transform& fallback)
+    {
+        // Convert the provided matrix back into authorable TRS values, preserving a fallback when decomposition fails.
+        Trident::Transform l_Result = fallback;
+        glm::vec3 l_Scale{ 1.0f };
+        glm::quat l_Rotation{ 1.0f, 0.0f, 0.0f, 0.0f };
+        glm::vec3 l_Translation{ 0.0f };
+        glm::vec3 l_Skew{ 0.0f };
+        glm::vec4 l_Perspective{ 0.0f };
+
+        if (glm::decompose(worldTransform, l_Scale, l_Rotation, l_Translation, l_Skew, l_Perspective))
+        {
+            l_Rotation = glm::normalize(l_Rotation);
+            l_Result.Position = l_Translation;
+            l_Result.Scale = l_Scale;
+            l_Result.Rotation = glm::degrees(glm::eulerAngles(l_Rotation));
+        }
+
+        return l_Result;
     }
 
     glm::mat3 BuildRotationMatrix(const Trident::Transform& transform)
@@ -5666,6 +5689,45 @@ namespace Trident
         }
 
         return {};
+    }
+
+    glm::mat4 Renderer::GetWorldTransform(ECS::Entity entity) const
+    {
+        // Resolve the world matrix from the scene graph; fall back to identity when no transform exists.
+        if (m_Registry && m_Registry->HasComponent<Transform>(entity))
+        {
+            return ComposeTransform(m_Registry->GetComponent<Transform>(entity));
+        }
+
+        return glm::mat4{ 1.0f };
+    }
+
+    void Renderer::SetWorldTransform(ECS::Entity entity, const glm::mat4& worldTransform)
+    {
+        if (!m_Registry)
+        {
+            return;
+        }
+
+        Transform l_Fallback{};
+        if (m_Registry->HasComponent<Transform>(entity))
+        {
+            l_Fallback = m_Registry->GetComponent<Transform>(entity);
+        }
+
+        const Transform l_Decomposed = DecomposeWorldTransform(worldTransform, l_Fallback);
+
+        if (!m_Registry->HasComponent<Transform>(entity))
+        {
+            m_Registry->AddComponent<Transform>(entity, l_Decomposed);
+        }
+        else
+        {
+            m_Registry->GetComponent<Transform>(entity) = l_Decomposed;
+        }
+
+        // Keep the renderer's entity selection aligned with the transform being edited by the gizmo.
+        m_Entity = entity;
     }
 
     void Renderer::SetPerformanceCaptureEnabled(bool enabled)
