@@ -28,18 +28,22 @@ namespace EditorPanels
 
         SubmitViewportTexture(l_Available);
 
-        // Cache the screen-space bounds so external drop handlers can test OS-level cursor positions reliably
-        const ImVec2 l_ContentMin = ImGui::GetWindowContentRegionMin();
-        const ImVec2 l_ContentMax = ImGui::GetWindowContentRegionMax();
-        const ImVec2 l_WindowPos = ImGui::GetWindowPos();
+        //// Cache the screen-space bounds so external drop handlers can test OS-level cursor positions reliably
+        //const ImVec2 l_ContentMin = ImGui::GetWindowContentRegionMin();
+        //const ImVec2 l_ContentMax = ImGui::GetWindowContentRegionMax();
+        //const ImVec2 l_WindowPos = ImGui::GetWindowPos();
 
-        m_BoundsMin = { l_WindowPos.x + l_ContentMin.x, l_WindowPos.y + l_ContentMin.y };
-        m_BoundsMax = { l_WindowPos.x + l_ContentMax.x, l_WindowPos.y + l_ContentMax.y };
+        //m_BoundsMin = { l_WindowPos.x + l_ContentMin.x, l_WindowPos.y + l_ContentMin.y };
+        //m_BoundsMax = { l_WindowPos.x + l_ContentMax.x, l_WindowPos.y + l_ContentMax.y };
 
         // Draw an ImGuizmo-style overlay when the tool is enabled and the selected entity exposes a transform component.
         if (m_GizmoState != nullptr && m_GizmoState->m_ShowGizmos && m_Registry != nullptr && m_SelectedEntity != s_InvalidEntity
             && m_Registry->HasComponent<Trident::Transform>(m_SelectedEntity))
         {
+            // Reassert the scene viewport as active so the renderer keeps the editor camera bound while the gizmo runs.
+            // Without this, ImGuizmo might sample runtime camera matrices mid-motion and the gizmo would drift away.
+            Trident::RenderCommand::SetViewport(m_ViewportInfo.ViewportID, m_ViewportInfo);
+
             // Build the view and projection matrices from the renderer so the gizmo aligns with the scene camera.
             const glm::mat4 l_ViewMatrix = Trident::RenderCommand::GetViewportViewMatrix(m_ViewportInfo.ViewportID);
             const glm::mat4 l_ProjectionMatrix = Trident::RenderCommand::GetViewportProjectionMatrix(m_ViewportInfo.ViewportID);
@@ -155,10 +159,23 @@ namespace EditorPanels
         if (l_TextureId != ImTextureID{ 0 } && viewportSize.x > 0.0f && viewportSize.y > 0.0f)
         {
             ImGui::Image(l_TextureId, viewportSize, ImVec2(0, 0), ImVec2(1, 1));
+
+            // Use the *actual* image rect as viewport bounds
+            ImVec2 l_ImageMin = ImGui::GetItemRectMin();
+            ImVec2 l_ImageMax = ImGui::GetItemRectMax();
+
+            m_BoundsMin = l_ImageMin;
+            m_BoundsMax = l_ImageMax;
         }
         else
         {
             ImGui::TextWrapped("Viewport unavailable");
+
+            // Fallback: no valid image, so bounds are empty
+            ImVec2 l_TextMin = ImGui::GetItemRectMin();
+            ImVec2 l_TextMax = ImGui::GetItemRectMax();
+            m_BoundsMin = l_TextMin;
+            m_BoundsMax = l_TextMax;
         }
     }
 }
