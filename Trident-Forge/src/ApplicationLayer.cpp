@@ -263,6 +263,8 @@ void ApplicationLayer::Update()
 
     // Push the hierarchy selection into the inspector before it performs validation.
     const Trident::ECS::Entity l_SelectedEntity = m_SceneHierarchyPanel.GetSelectedEntity();
+    // Synchronize renderer overlays with the hierarchy selection and clear stale gizmos when nothing is selected.
+    Trident::RenderCommand::SetSelectedEntity(l_SelectedEntity);
     m_InspectorPanel.SetSelectedEntity(l_SelectedEntity);
     // Mirror the selection for the viewport so camera pivots follow the same entity l_Focus.
     m_SceneViewportPanel.SetSelectedEntity(l_SelectedEntity);
