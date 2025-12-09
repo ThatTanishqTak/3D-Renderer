@@ -1,6 +1,11 @@
 #include "SceneViewportPanel.h"
 
 #include "Renderer/RenderCommand.h"
+#include "ECS/Components/TransformComponent.h"
+
+#include <ImGuizmo.h>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
 
 #include <string>
 
@@ -23,9 +28,6 @@ namespace EditorPanels
 
         SubmitViewportTexture(l_Available);
 
-        m_IsHovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows);
-        m_IsFocused = ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows);
-
         // Cache the screen-space bounds so external drop handlers can test OS-level cursor positions reliably
         const ImVec2 l_ContentMin = ImGui::GetWindowContentRegionMin();
         const ImVec2 l_ContentMax = ImGui::GetWindowContentRegionMax();
@@ -33,6 +35,69 @@ namespace EditorPanels
 
         m_BoundsMin = { l_WindowPos.x + l_ContentMin.x, l_WindowPos.y + l_ContentMin.y };
         m_BoundsMax = { l_WindowPos.x + l_ContentMax.x, l_WindowPos.y + l_ContentMax.y };
+
+        // Draw an ImGuizmo-style overlay when the tool is enabled and the selected entity exposes a transform component.
+        if (m_GizmoState != nullptr && m_GizmoState->m_ShowGizmos && m_Registry != nullptr && m_SelectedEntity != s_InvalidEntity
+            && m_Registry->HasComponent<Trident::Transform>(m_SelectedEntity))
+        {
+            // Build the view and projection matrices from the renderer so the gizmo aligns with the scene camera.
+            const glm::mat4 l_ViewMatrix = Trident::RenderCommand::GetViewportViewMatrix(m_ViewportInfo.ViewportID);
+            const glm::mat4 l_ProjectionMatrix = Trident::RenderCommand::GetViewportProjectionMatrix(m_ViewportInfo.ViewportID);
+
+            // Select the operations to draw based on the gizmo toggles and exit early when nothing is enabled.
+            ImGuizmo::OPERATION l_Operation = static_cast<ImGuizmo::OPERATION>(0);
+            if (m_GizmoState->m_TranslateEnabled)
+            {
+                l_Operation = static_cast<ImGuizmo::OPERATION>(l_Operation | ImGuizmo::TRANSLATE);
+            }
+            if (m_GizmoState->m_RotateEnabled)
+            {
+                l_Operation = static_cast<ImGuizmo::OPERATION>(l_Operation | ImGuizmo::ROTATE);
+            }
+            if (m_GizmoState->m_ScaleEnabled)
+            {
+                l_Operation = static_cast<ImGuizmo::OPERATION>(l_Operation | ImGuizmo::SCALE);
+            }
+
+            if (l_Operation != static_cast<ImGuizmo::OPERATION>(0))
+            {
+                // Initialize the draw list and render area so ImGuizmo overlays the viewport texture correctly.
+                ImGuizmo::BeginFrame();
+                ImGuizmo::SetOrthographic(false);
+                ImGuizmo::SetDrawlist();
+                ImGuizmo::SetRect(m_BoundsMin.x, m_BoundsMin.y, m_BoundsMax.x - m_BoundsMin.x, m_BoundsMax.y - m_BoundsMin.y);
+
+                // Compose the current transform into a matrix ImGuizmo can manipulate.
+                Trident::Transform l_CurrentTransform = m_Registry->GetComponent<Trident::Transform>(m_SelectedEntity);
+                glm::mat4 l_ModelMatrix{ 1.0f };
+                l_ModelMatrix = glm::translate(l_ModelMatrix, l_CurrentTransform.Position);
+                l_ModelMatrix = glm::rotate(l_ModelMatrix, glm::radians(l_CurrentTransform.Rotation.x), glm::vec3{ 1.0f, 0.0f, 0.0f });
+                l_ModelMatrix = glm::rotate(l_ModelMatrix, glm::radians(l_CurrentTransform.Rotation.y), glm::vec3{ 0.0f, 1.0f, 0.0f });
+                l_ModelMatrix = glm::rotate(l_ModelMatrix, glm::radians(l_CurrentTransform.Rotation.z), glm::vec3{ 0.0f, 0.0f, 1.0f });
+                l_ModelMatrix = glm::scale(l_ModelMatrix, l_CurrentTransform.Scale);
+
+                // Apply ImGuizmo manipulation and sync edits back to the registry and renderer when authors adjust the gizmo.
+                if (ImGuizmo::Manipulate(glm::value_ptr(l_ViewMatrix), glm::value_ptr(l_ProjectionMatrix), l_Operation, ImGuizmo::LOCAL,
+                    glm::value_ptr(l_ModelMatrix)))
+                {
+                    glm::vec3 l_Translation{};
+                    glm::vec3 l_Rotation{};
+                    glm::vec3 l_Scale{};
+                    ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(l_ModelMatrix), glm::value_ptr(l_Translation),
+                        glm::value_ptr(l_Rotation), glm::value_ptr(l_Scale));
+
+                    l_CurrentTransform.Position = l_Translation;
+                    l_CurrentTransform.Rotation = l_Rotation;
+                    l_CurrentTransform.Scale = l_Scale;
+
+                    m_Registry->GetComponent<Trident::Transform>(m_SelectedEntity) = l_CurrentTransform;
+                    Trident::RenderCommand::SetTransform(l_CurrentTransform);
+                }
+            }
+        }
+
+        m_IsHovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows);
+        m_IsFocused = ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows);
 
         ImGui::End();
     }

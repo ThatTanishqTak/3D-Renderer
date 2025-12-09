@@ -35,7 +35,6 @@ namespace Trident
     private:
         // Utility helpers
 
-
     private:
         struct Allocation
         {
