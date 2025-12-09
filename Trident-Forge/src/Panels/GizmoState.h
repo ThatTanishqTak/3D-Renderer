@@ -8,8 +8,8 @@ namespace Trident
     struct GizmoState
     {
         bool m_ShowGizmos = true; // Controls whether gizmos are rendered in the viewport.
-        bool m_TranslateEnabled = true; // Toggles translation handles for position adjustments.
-        bool m_RotateEnabled = true; // Toggles rotation handles for orientation edits.
-        bool m_ScaleEnabled = true; // Toggles scale handles for uniform/non-uniform scaling.
+        bool m_TranslateEnabled = true; // Only translation is active by default so tools start in a predictable state.
+        bool m_RotateEnabled = false; // Rotation toggles off so the gizmo operates in a single mode at a time.
+        bool m_ScaleEnabled = false; // Scale toggles off so translate/rotate/scale remain mutually exclusive.
     };
 }

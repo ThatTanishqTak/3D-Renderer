@@ -97,6 +97,41 @@ namespace EditorPanels
                 ImGui::DragFloat3("Position", &l_Transform.Position.x, 0.1f);
                 ImGui::DragFloat3("Rotation", &l_Transform.Rotation.x, 0.5f);
                 ImGui::DragFloat3("Scale", &l_Transform.Scale.x, 0.1f);
+
+                // Present gizmo mode toggles so only one operation is active at a time.
+                if (m_GizmoState != nullptr)
+                {
+                    int l_ModeIndex = 0; // Default to translate when no other mode is active to avoid null operations.
+                    if (m_GizmoState->m_RotateEnabled)
+                    {
+                        l_ModeIndex = 1;
+                    }
+                    else if (m_GizmoState->m_ScaleEnabled)
+                    {
+                        l_ModeIndex = 2;
+                    }
+
+                    // Use radio buttons to force mutual exclusivity between translate/rotate/scale modes.
+                    if (ImGui::RadioButton("Translate", l_ModeIndex == 0))
+                    {
+                        l_ModeIndex = 0;
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::RadioButton("Rotate", l_ModeIndex == 1))
+                    {
+                        l_ModeIndex = 1;
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::RadioButton("Scale", l_ModeIndex == 2))
+                    {
+                        l_ModeIndex = 2;
+                    }
+
+                    // Apply the selected mode back into the shared gizmo state so the viewport uses a single operation.
+                    m_GizmoState->m_TranslateEnabled = l_ModeIndex == 0;
+                    m_GizmoState->m_RotateEnabled = l_ModeIndex == 1;
+                    m_GizmoState->m_ScaleEnabled = l_ModeIndex == 2;
+                }
             }
         }
 

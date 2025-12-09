@@ -44,22 +44,18 @@ namespace EditorPanels
             const glm::mat4 l_ViewMatrix = Trident::RenderCommand::GetViewportViewMatrix(m_ViewportInfo.ViewportID);
             const glm::mat4 l_ProjectionMatrix = Trident::RenderCommand::GetViewportProjectionMatrix(m_ViewportInfo.ViewportID);
 
-            // Select the operations to draw based on the gizmo toggles and exit early when nothing is enabled.
-            ImGuizmo::OPERATION l_Operation = static_cast<ImGuizmo::OPERATION>(0);
-            if (m_GizmoState->m_TranslateEnabled)
-            {
-                l_Operation = static_cast<ImGuizmo::OPERATION>(l_Operation | ImGuizmo::TRANSLATE);
-            }
+            // Choose a single gizmo operation so ImGuizmo renders one mode at a time.
+            ImGuizmo::OPERATION l_Operation = ImGuizmo::TRANSLATE;
             if (m_GizmoState->m_RotateEnabled)
             {
-                l_Operation = static_cast<ImGuizmo::OPERATION>(l_Operation | ImGuizmo::ROTATE);
+                l_Operation = ImGuizmo::ROTATE;
             }
-            if (m_GizmoState->m_ScaleEnabled)
+            else if (m_GizmoState->m_ScaleEnabled)
             {
-                l_Operation = static_cast<ImGuizmo::OPERATION>(l_Operation | ImGuizmo::SCALE);
+                l_Operation = ImGuizmo::SCALE;
             }
 
-            if (l_Operation != static_cast<ImGuizmo::OPERATION>(0))
+            if (m_GizmoState->m_TranslateEnabled || m_GizmoState->m_RotateEnabled || m_GizmoState->m_ScaleEnabled)
             {
                 // Initialize the draw list and render area so ImGuizmo overlays the viewport texture correctly.
                 ImGuizmo::BeginFrame();
