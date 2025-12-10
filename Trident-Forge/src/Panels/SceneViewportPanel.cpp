@@ -13,6 +13,7 @@ namespace EditorPanels
 {
     SceneViewportPanel::SceneViewportPanel()
     {
+        // ID 1 is typically reserved for the Editor Scene Viewport
         m_ViewportInfo.ViewportID = 1U;
     }
 
@@ -20,29 +21,32 @@ namespace EditorPanels
     {
         const bool l_WindowVisible = ImGui::Begin("Scene Viewport");
         (void)l_WindowVisible;
-        // Always render viewport internals so dockspace and viewport tests see consistent submission even when collapsed
 
+        // Setup Viewport Size & Render Target
         const ImVec2 l_Available = ImGui::GetContentRegionAvail();
         m_ViewportInfo.Size = { l_Available.x, l_Available.y };
+
+        // Notify renderer of the current viewport size for resizing offscreen buffers
         Trident::RenderCommand::SetViewport(m_ViewportInfo.ViewportID, m_ViewportInfo);
 
+        // Render the texture from the GPU
         SubmitViewportTexture(l_Available);
 
-        // Draw an ImGuizmo-style overlay when the tool is enabled and the selected entity exposes a transform component.
+        // Check if Gizmos are enabled, a valid entity is selected, and it has a Transform component
         if (m_GizmoState != nullptr && m_GizmoState->m_ShowGizmos && m_Registry != nullptr && m_SelectedEntity != s_InvalidEntity
             && m_Registry->HasComponent<Trident::Transform>(m_SelectedEntity))
         {
-            // Reassert the scene viewport as active so the renderer keeps the editor camera bound while the gizmo runs.
-            // Without this, ImGuizmo might sample runtime camera matrices mid-motion and the gizmo would drift away.
-            // Calling SetViewport right before requesting matrices guarantees ImGuizmo uses the editor camera when manipulating entities.
+            // IMPORTANT: Reassert the viewport. This ensures RenderCommand internal state (like the active camera)
+            // is set to the Editor Camera before we ask for matrices.
             Trident::RenderCommand::SetViewport(m_ViewportInfo.ViewportID, m_ViewportInfo);
 
-            // Pull view/projection directly from the editor camera to avoid runtime camera fallbacks that caused gizmos to drift
-            // as soon as the editor camera moved. Sampling the dedicated editor matrices keeps overlays locked to the entity.
-            const glm::mat4 l_ViewMatrix = Trident::RenderCommand::GetEditorCameraViewMatrix();
-            const glm::mat4 l_ProjectionMatrix = Trident::RenderCommand::GetEditorCameraProjectionMatrix();
+            // Get Camera Matrices
+            glm::mat4 l_ViewMatrix = Trident::RenderCommand::GetEditorCameraViewMatrix();
+            glm::mat4 l_ProjectionMatrix = Trident::RenderCommand::GetEditorCameraProjectionMatrix();
 
-            // Choose a single gizmo operation so ImGuizmo renders one mode at a time.
+            l_ProjectionMatrix[1][1] *= -1.0f;
+
+            // Determine Gizmo Operation (Translate, Rotate, or Scale)
             ImGuizmo::OPERATION l_Operation = ImGuizmo::TRANSLATE;
             if (m_GizmoState->m_RotateEnabled)
             {
@@ -55,29 +59,36 @@ namespace EditorPanels
 
             if (m_GizmoState->m_TranslateEnabled || m_GizmoState->m_RotateEnabled || m_GizmoState->m_ScaleEnabled)
             {
-                // Initialize the draw list and render area so ImGuizmo overlays the viewport texture correctly.
+                // Setup ImGuizmo Drawing
                 ImGuizmo::BeginFrame();
                 ImGuizmo::SetOrthographic(false);
                 ImGuizmo::SetDrawlist();
+
+                // Set the rect to match the viewport bounds calculated in SubmitViewportTexture/Update
                 ImGuizmo::SetRect(m_BoundsMin.x, m_BoundsMin.y, m_BoundsMax.x - m_BoundsMin.x, m_BoundsMax.y - m_BoundsMin.y);
 
-                // Request the resolved world transform so gizmo edits preserve scene graph relationships.
+                // Get Current Transform
                 glm::mat4 l_ModelMatrix = Trident::RenderCommand::GetWorldTransform(m_SelectedEntity);
 
-                // Apply ImGuizmo manipulation and sync edits back to the registry and renderer when authors adjust the gizmo.
+                // Draw and Handle Manipulation
+                // Snap is currently not implemented but can be passed as the last argument if needed
                 if (ImGuizmo::Manipulate(glm::value_ptr(l_ViewMatrix), glm::value_ptr(l_ProjectionMatrix), l_Operation, ImGuizmo::LOCAL, glm::value_ptr(l_ModelMatrix)))
                 {
+                    // If manipulated, update the entity
                     glm::vec3 l_Translation{};
                     glm::vec3 l_Rotation{};
                     glm::vec3 l_Scale{};
+
+                    // Decompose the new matrix back into TRS components
                     ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(l_ModelMatrix), glm::value_ptr(l_Translation), glm::value_ptr(l_Rotation), glm::value_ptr(l_Scale));
 
-                    // Push the decomposed world values through the scene graph so children remain aligned.
+                    // Send updated transform back to the engine
                     Trident::RenderCommand::SetWorldTransform(m_SelectedEntity, l_ModelMatrix);
                 }
             }
         }
 
+        // Update Hover/Focus state for input blocking
         m_IsHovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows);
         m_IsFocused = ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows);
 
@@ -86,7 +97,7 @@ namespace EditorPanels
 
     void SceneViewportPanel::Update()
     {
-        // Handle ImGui drag-and-drop payloads that originate from inside the editor
+        // Handle Asset Drag & Drop from Content Browser
         if (m_OnAssetsDropped && ImGui::BeginDragDropTarget())
         {
             if (const ImGuiPayload* l_Payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM"))
@@ -99,76 +110,46 @@ namespace EditorPanels
         }
     }
 
-    glm::vec2 SceneViewportPanel::GetViewportSize() const
-    {
-        return m_ViewportInfo.Size;
-    }
-
-    bool SceneViewportPanel::IsHovered() const
-    {
-        return m_IsHovered;
-    }
-
-    bool SceneViewportPanel::IsFocused() const
-    {
-        return m_IsFocused;
-    }
+    // Getters and Setters implementation
+    glm::vec2 SceneViewportPanel::GetViewportSize() const { return m_ViewportInfo.Size; }
+    bool SceneViewportPanel::IsHovered() const { return m_IsHovered; }
+    bool SceneViewportPanel::IsFocused() const { return m_IsFocused; }
 
     bool SceneViewportPanel::ContainsPoint(const ImVec2& screenPoint) const
     {
         return screenPoint.x >= m_BoundsMin.x && screenPoint.x <= m_BoundsMax.x && screenPoint.y >= m_BoundsMin.y && screenPoint.y <= m_BoundsMax.y;
     }
 
-    Trident::ECS::Entity SceneViewportPanel::GetSelectedEntity() const
-    {
-        return m_SelectedEntity;
-    }
-
-    void SceneViewportPanel::SetGizmoState(Trident::GizmoState* gizmoState)
-    {
-        m_GizmoState = gizmoState;
-    }
+    Trident::ECS::Entity SceneViewportPanel::GetSelectedEntity() const { return m_SelectedEntity; }
+    void SceneViewportPanel::SetGizmoState(Trident::GizmoState* gizmoState) { m_GizmoState = gizmoState; }
 
     void SceneViewportPanel::SetAssetDropHandler(const std::function<void(const std::vector<std::string>&)>& onAssetsDropped)
     {
         m_OnAssetsDropped = onAssetsDropped;
     }
 
-    void SceneViewportPanel::SetSelectedEntity(Trident::ECS::Entity entity)
-    {
-        m_SelectedEntity = entity;
-    }
-
-    void SceneViewportPanel::SetRegistry(Trident::ECS::Registry* registry)
-    {
-        m_Registry = registry;
-    }
+    void SceneViewportPanel::SetSelectedEntity(Trident::ECS::Entity entity) { m_SelectedEntity = entity; }
+    void SceneViewportPanel::SetRegistry(Trident::ECS::Registry* registry) { m_Registry = registry; }
 
     void SceneViewportPanel::SubmitViewportTexture(const ImVec2& viewportSize)
     {
         const VkDescriptorSet l_DescriptorSet = Trident::RenderCommand::GetViewportTexture(m_ViewportInfo.ViewportID);
+        // Cast to ImTextureID (void*) for ImGui
         const ImTextureID l_TextureId = reinterpret_cast<ImTextureID>(l_DescriptorSet);
 
         if (l_TextureId != ImTextureID{ 0 } && viewportSize.x > 0.0f && viewportSize.y > 0.0f)
         {
             ImGui::Image(l_TextureId, viewportSize, ImVec2(0, 0), ImVec2(1, 1));
 
-            // Use the *actual* image rect as viewport bounds
-            ImVec2 l_ImageMin = ImGui::GetItemRectMin();
-            ImVec2 l_ImageMax = ImGui::GetItemRectMax();
-
-            m_BoundsMin = l_ImageMin;
-            m_BoundsMax = l_ImageMax;
+            // Cache the screen-space bounds of the image for ImGuizmo hit testing
+            m_BoundsMin = ImGui::GetItemRectMin();
+            m_BoundsMax = ImGui::GetItemRectMax();
         }
         else
         {
             ImGui::TextWrapped("Viewport unavailable");
-
-            // Fallback: no valid image, so bounds are empty
-            ImVec2 l_TextMin = ImGui::GetItemRectMin();
-            ImVec2 l_TextMax = ImGui::GetItemRectMax();
-            m_BoundsMin = l_TextMin;
-            m_BoundsMax = l_TextMax;
+            m_BoundsMin = ImGui::GetItemRectMin();
+            m_BoundsMax = ImGui::GetItemRectMax();
         }
     }
 }
