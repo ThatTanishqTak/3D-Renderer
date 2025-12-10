@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cctype>
 #include <string>
+#include <utility>
 
 extern "C"
 {
@@ -63,6 +64,18 @@ namespace Trident
             return false;
         }
 
+        if (m_UsingFfmpegContainer)
+        {
+            // Spin up the worker so that encoding and scaling run off the render thread.
+            if (!StartFfmpegWorker())
+            {
+                TR_CORE_WARN("Video encoder rejected begin request because the FFmpeg worker could not start.");
+
+                ResetSession();
+                return false;
+            }
+        }
+
         m_SessionActive = true;
         m_SessionStartTime = std::chrono::system_clock::now();
         m_TargetFrameDuration = std::chrono::nanoseconds(1'000'000'000ull / static_cast<uint64_t>(m_TargetFps));
@@ -91,38 +104,48 @@ namespace Trident
 
         if (frame.m_Extent.width != m_OutputExtent.width || frame.m_Extent.height != m_OutputExtent.height)
         {
-            TR_CORE_WARN("Video encoder rejected frame {} because the extent {}x{} does not match the session extent {}x{}.", frame.m_FrameIndex, frame.m_Extent.width, 
+            TR_CORE_WARN("Video encoder rejected frame {} because the extent {}x{} does not match the session extent {}x{}.", frame.m_FrameIndex, frame.m_Extent.width,
                 frame.m_Extent.height, m_OutputExtent.width, m_OutputExtent.height);
 
             return false;
         }
 
-        bool l_Written = false;
         if (m_UsingFfmpegContainer)
         {
-            l_Written = WriteFrameToFfmpeg(frame);
+            // Queue the frame so the worker can handle scaling and encoding.
+            if (!m_FfmpegWorkerRunning || !m_FfmpegWorkerInitialised)
+            {
+                TR_CORE_WARN("Video encoder rejected frame {} because the FFmpeg worker is not ready.", frame.m_FrameIndex);
+
+                return false;
+            }
+
+            {
+                std::lock_guard<std::mutex> l_QueueLock(m_FfmpegQueueMutex);
+                m_FfmpegFrameQueue.push(frame);
+            }
+            m_FfmpegQueueCondition.notify_one();
+
+            return true;
         }
         else if (m_UsingY4mContainer)
         {
-            l_Written = WriteFrameToY4m(frame);
-        }
-        else
-        {
-            TR_CORE_WARN("Video encoder session is inactive because no valid container was initialised. Frame {} was ignored.", frame.m_FrameIndex);
+            const bool l_Written = WriteFrameToY4m(frame);
+            if (!l_Written)
+            {
+                TR_CORE_WARN("Video encoder failed to write frame {} to {}.", frame.m_FrameIndex, m_OutputPath.string());
 
-            return false;
-        }
+                return false;
+            }
 
-        if (!l_Written)
-        {
-            TR_CORE_WARN("Video encoder failed to write frame {} to {}.", frame.m_FrameIndex, m_OutputPath.string());
+            ++m_FrameCounter;
 
-            return false;
+            return true;
         }
 
-        ++m_FrameCounter;
+        TR_CORE_WARN("Video encoder session is inactive because no valid container was initialised. Frame {} was ignored.", frame.m_FrameIndex);
 
-        return true;
+        return false;
     }
 
     bool VideoEncoder::EndSession()
@@ -136,42 +159,10 @@ namespace Trident
 
         bool l_SessionSuccess = true;
 
-        if (m_UsingFfmpegContainer && m_FfmpegCodecContext != nullptr)
+        if (m_UsingFfmpegContainer)
         {
-            // Flush any buffered frames before writing the trailer.
-            const int32_t l_SendResult = avcodec_send_frame(m_FfmpegCodecContext, nullptr);
-            if (l_SendResult >= 0)
-            {
-                while (true)
-                {
-                    const int32_t l_ReceiveResult = avcodec_receive_packet(m_FfmpegCodecContext, m_FfmpegPacket);
-                    if (l_ReceiveResult == AVERROR(EAGAIN) || l_ReceiveResult == AVERROR_EOF)
-                    {
-                        break;
-                    }
-
-                    if (l_ReceiveResult < 0)
-                    {
-                        TR_CORE_WARN("Video encoder failed to flush buffered packets for {}.", m_OutputPath.string());
-
-                        break;
-                    }
-
-                    m_FfmpegPacket->stream_index = m_FfmpegStream->index;
-                    av_packet_rescale_ts(m_FfmpegPacket, m_FfmpegCodecContext->time_base, m_FfmpegStream->time_base);
-                    av_write_frame(m_FfmpegFormatContext, m_FfmpegPacket);
-                    av_packet_unref(m_FfmpegPacket);
-                }
-            }
-
-            // Surface trailer write failures because the output file can be unusable if the container footer is missing.
-            const int32_t l_TrailerResult = av_write_trailer(m_FfmpegFormatContext);
-            if (l_TrailerResult < 0)
-            {
-                TR_CORE_ERROR("Video encoder failed to finalize FFmpeg output at {} (error {}).", m_OutputPath.string(), l_TrailerResult);
-
-                l_SessionSuccess = false;
-            }
+            StopFfmpegWorker();
+            l_SessionSuccess = m_FfmpegWorkerInitialised && m_FfmpegWorkerSessionSuccess;
         }
         else if (m_OutputStream.is_open())
         {
@@ -207,13 +198,8 @@ namespace Trident
 
         if (l_UsingFFmpeg)
         {
-            // Use FFmpeg to handle compressed containers on supported platforms.
-            m_UsingFfmpegContainer = InitialiseFfmpegEncoder();
-
-            if (!m_UsingFfmpegContainer)
-            {
-                return false;
-            }
+            // Defer FFmpeg initialisation to the worker thread so it owns all encoder state.
+            m_UsingFfmpegContainer = true;
 
             return true;
         }
@@ -432,6 +418,7 @@ namespace Trident
             return false;
         }
 
+        // Ensure the frame buffer can be updated before scaling RGBA data into YUV420P.
         int32_t l_Result = av_frame_make_writable(m_FfmpegFrame);
         if (l_Result < 0)
         {
@@ -447,7 +434,8 @@ namespace Trident
 
         sws_scale(m_FfmpegSwsContext, l_Data, l_Linesize, 0, static_cast<int32_t>(m_OutputExtent.height), m_FfmpegFrame->data, m_FfmpegFrame->linesize);
 
-        m_FfmpegFrame->pts = static_cast<int64_t>(m_FrameCounter);
+        const uint64_t l_FrameNumber = m_FrameCounter;
+        m_FfmpegFrame->pts = static_cast<int64_t>(l_FrameNumber);
 
         l_Result = avcodec_send_frame(m_FfmpegCodecContext, m_FfmpegFrame);
         if (l_Result < 0)
@@ -484,11 +472,171 @@ namespace Trident
             }
         }
 
+        ++m_FrameCounter;
+
         return true;
+    }
+
+    bool VideoEncoder::StartFfmpegWorker()
+    {
+        // Ensure any previous worker is stopped before starting a new one.
+        StopFfmpegWorker();
+
+        {
+            std::lock_guard<std::mutex> l_QueueLock(m_FfmpegQueueMutex);
+            std::queue<RecordedFrame> l_EmptyQueue{};
+            std::swap(m_FfmpegFrameQueue, l_EmptyQueue);
+        }
+
+        m_FfmpegWorkerShouldStop = false;
+        m_FfmpegWorkerReady = false;
+        m_FfmpegWorkerInitialised = false;
+        m_FfmpegWorkerSessionSuccess = true;
+
+        m_FfmpegWorkerThread = std::thread(&VideoEncoder::FfmpegWorkerLoop, this);
+        m_FfmpegWorkerRunning = true;
+
+        // Wait for the worker to finish initialising the FFmpeg encoder before accepting frames.
+        std::unique_lock<std::mutex> l_StateLock(m_FfmpegWorkerStateMutex);
+        m_FfmpegWorkerStateCondition.wait(l_StateLock, [this]
+            {
+                return m_FfmpegWorkerReady;
+            });
+
+        if (!m_FfmpegWorkerInitialised)
+        {
+            m_FfmpegWorkerRunning = false;
+
+            if (m_FfmpegWorkerThread.joinable())
+            {
+                m_FfmpegWorkerThread.join();
+            }
+        }
+
+        return m_FfmpegWorkerInitialised;
+    }
+
+    void VideoEncoder::StopFfmpegWorker()
+    {
+        if (!m_FfmpegWorkerRunning)
+        {
+            return;
+        }
+
+        {
+            std::lock_guard<std::mutex> l_Lock(m_FfmpegQueueMutex);
+            m_FfmpegWorkerShouldStop = true;
+        }
+        m_FfmpegQueueCondition.notify_all();
+
+        if (m_FfmpegWorkerThread.joinable())
+        {
+            m_FfmpegWorkerThread.join();
+        }
+
+        m_FfmpegWorkerRunning = false;
+        m_FfmpegWorkerShouldStop = false;
+
+        // Clear any queued frames to ensure the next session starts cleanly.
+        std::lock_guard<std::mutex> l_QueueLock(m_FfmpegQueueMutex);
+        std::queue<RecordedFrame> l_EmptyQueue{};
+        std::swap(m_FfmpegFrameQueue, l_EmptyQueue);
+    }
+
+    void VideoEncoder::FfmpegWorkerLoop()
+    {
+        const bool l_Initialised = InitialiseFfmpegEncoder();
+        {
+            std::lock_guard<std::mutex> l_StateLock(m_FfmpegWorkerStateMutex);
+            m_FfmpegWorkerInitialised = l_Initialised;
+            m_FfmpegWorkerReady = true;
+            m_FfmpegWorkerSessionSuccess = l_Initialised;
+        }
+        m_FfmpegWorkerStateCondition.notify_all();
+
+        if (!l_Initialised)
+        {
+            return;
+        }
+
+        while (true)
+        {
+            RecordedFrame l_PendingFrame{};
+
+            {
+                std::unique_lock<std::mutex> l_Lock(m_FfmpegQueueMutex);
+                m_FfmpegQueueCondition.wait(l_Lock, [this]
+                    {
+                        return m_FfmpegWorkerShouldStop || !m_FfmpegFrameQueue.empty();
+                    });
+
+                if (m_FfmpegWorkerShouldStop && m_FfmpegFrameQueue.empty())
+                {
+                    break;
+                }
+
+                l_PendingFrame = std::move(m_FfmpegFrameQueue.front());
+                m_FfmpegFrameQueue.pop();
+            }
+
+            if (!WriteFrameToFfmpeg(l_PendingFrame))
+            {
+                m_FfmpegWorkerSessionSuccess = false;
+            }
+        }
+
+        bool l_FlushSuccess = true;
+        // Flush any buffered frames before writing the trailer so the container closes cleanly.
+        if (m_FfmpegCodecContext != nullptr && m_FfmpegPacket != nullptr)
+        {
+            const int32_t l_SendResult = avcodec_send_frame(m_FfmpegCodecContext, nullptr);
+            if (l_SendResult >= 0)
+            {
+                while (true)
+                {
+                    const int32_t l_ReceiveResult = avcodec_receive_packet(m_FfmpegCodecContext, m_FfmpegPacket);
+                    if (l_ReceiveResult == AVERROR(EAGAIN) || l_ReceiveResult == AVERROR_EOF)
+                    {
+                        break;
+                    }
+
+                    if (l_ReceiveResult < 0)
+                    {
+                        TR_CORE_WARN("Video encoder failed to flush buffered packets for {}.", m_OutputPath.string());
+
+                        l_FlushSuccess = false;
+                        break;
+                    }
+
+                    m_FfmpegPacket->stream_index = m_FfmpegStream->index;
+                    av_packet_rescale_ts(m_FfmpegPacket, m_FfmpegCodecContext->time_base, m_FfmpegStream->time_base);
+                    av_write_frame(m_FfmpegFormatContext, m_FfmpegPacket);
+                    av_packet_unref(m_FfmpegPacket);
+                }
+            }
+            else
+            {
+                l_FlushSuccess = false;
+            }
+
+            const int32_t l_TrailerResult = av_write_trailer(m_FfmpegFormatContext);
+            if (l_TrailerResult < 0)
+            {
+                TR_CORE_ERROR("Video encoder failed to finalize FFmpeg output at {} (error {}).", m_OutputPath.string(), l_TrailerResult);
+
+                l_FlushSuccess = false;
+            }
+        }
+
+        m_FfmpegWorkerSessionSuccess = m_FfmpegWorkerSessionSuccess && l_FlushSuccess;
+
+        CleanupFfmpegEncoder();
     }
 
     void VideoEncoder::ResetSession()
     {
+        StopFfmpegWorker();
+
         if (m_OutputStream.is_open())
         {
             m_OutputStream.close();
@@ -505,6 +653,9 @@ namespace Trident
         m_SessionStartTime = {};
         m_TargetFrameDuration = {};
         m_FrameCounter = 0;
+        m_FfmpegWorkerInitialised = false;
+        m_FfmpegWorkerReady = false;
+        m_FfmpegWorkerSessionSuccess = true;
     }
 
     void VideoEncoder::CleanupFfmpegEncoder()

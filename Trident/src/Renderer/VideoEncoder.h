@@ -6,6 +6,10 @@
 #include <filesystem>
 #include <chrono>
 #include <fstream>
+#include <condition_variable>
+#include <mutex>
+#include <queue>
+#include <thread>
 
 extern "C"
 {
@@ -48,6 +52,9 @@ namespace Trident
         bool WriteY4mHeader();
         bool WriteFrameToY4m(const RecordedFrame& frame);
         bool WriteFrameToFfmpeg(const RecordedFrame& frame);
+        bool StartFfmpegWorker();
+        void StopFfmpegWorker();
+        void FfmpegWorkerLoop();
         void CleanupFfmpegEncoder();
         void ResetSession();
         static uint8_t ClampChannel(double value);
@@ -70,5 +77,17 @@ namespace Trident
         SwsContext* m_FfmpegSwsContext = nullptr;
         AVFrame* m_FfmpegFrame = nullptr;
         AVPacket* m_FfmpegPacket = nullptr;
+
+        std::thread m_FfmpegWorkerThread{};
+        std::condition_variable m_FfmpegQueueCondition{};
+        std::mutex m_FfmpegQueueMutex{};
+        std::queue<RecordedFrame> m_FfmpegFrameQueue{};
+        std::condition_variable m_FfmpegWorkerStateCondition{};
+        std::mutex m_FfmpegWorkerStateMutex{};
+        bool m_FfmpegWorkerShouldStop = false;
+        bool m_FfmpegWorkerRunning = false;
+        bool m_FfmpegWorkerInitialised = false;
+        bool m_FfmpegWorkerReady = false;
+        bool m_FfmpegWorkerSessionSuccess = true;
     };
 }
