@@ -23,17 +23,26 @@ namespace EditorPanels
     {
         const bool l_WindowVisible = ImGui::Begin("Game Viewport");
         (void)l_WindowVisible;
-        // Keep submission unconditional so dockspace stress tests retain the runtime viewport node consistently.
 
-        const ImVec2 l_Available = ImGui::GetContentRegionAvail();
+        ImVec2 l_Available = ImGui::GetContentRegionAvail();
+
+        // [FIX 1] Force Even Dimensions immediately
+        // This ensures the Render Target, Readback Buffer, and Encoder all use the exact same resolution.
+        if ((static_cast<uint32_t>(l_Available.x) % 2) != 0) l_Available.x += 1.0f;
+        if ((static_cast<uint32_t>(l_Available.y) % 2) != 0) l_Available.y += 1.0f;
+
         m_ViewportInfo.Size = { l_Available.x, l_Available.y };
         Trident::RenderCommand::SetViewport(m_ViewportInfo.ViewportID, m_ViewportInfo);
 
-        SubmitViewportTexture(l_Available);
-        RenderFrameRateOverlay();
+        // [FIX 2] Update State BEFORE submission to prevent "Use-After-Free" validation crash
         UpdateExportState();
 
-        // Keep hover/focus state in sync with the render path so runtime shortcuts can respect ImGui focus rules.
+        // Submit the texture (ImGui will scale it slightly if it's 1px larger than the window, which is fine)
+        SubmitViewportTexture(l_Available);
+        RenderFrameRateOverlay();
+
+        // UpdateExportState(); <-- Remove this old call
+
         m_IsHovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows);
         m_IsFocused = ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows);
 

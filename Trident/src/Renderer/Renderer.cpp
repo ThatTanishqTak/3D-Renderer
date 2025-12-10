@@ -2435,8 +2435,16 @@ namespace Trident
         l_RequestedExtent.height = static_cast<uint32_t>(std::max(info.Size.y, 0.0f));
 
         l_Context.m_CachedExtent = l_RequestedExtent;
+
+        // Only allow readback resizing if we aren't recording, 
+        // or if this IS the viewport we are recording.
+        if (!m_ViewportRecordingEnabled || viewportID == m_RecordingViewportId)
+        {
+            RequestReadbackResize(l_RequestedExtent);
+        }
+
         // Request a readback resize whenever the viewport dimensions change so staging buffers track the active target.
-        RequestReadbackResize(l_RequestedExtent);
+        //RequestReadbackResize(l_RequestedExtent);
 
         if (l_RequestedExtent.width == 0 || l_RequestedExtent.height == 0)
         {
@@ -5801,6 +5809,13 @@ namespace Trident
             {
                 TR_CORE_WARN("Viewport recording extent {}x{} adjusted to {}x{} to satisfy even YUV420P dimensions.",
                     extent.width, extent.height, l_SanitizedExtent.width, l_SanitizedExtent.height);
+            }
+
+            if (ViewportContext* l_Context = FindViewportContext(viewportID))
+            {
+                CreateOrResizeOffscreenResources(l_Context->m_Target, l_SanitizedExtent);
+                // Update the cached info so the layout system doesn't immediately shrink it back.
+                l_Context->m_CachedExtent = l_SanitizedExtent;
             }
 
             // Ensure readback buffers exist and match the sanitized resolution so staging, readback, and encoder dimensions stay aligned.
