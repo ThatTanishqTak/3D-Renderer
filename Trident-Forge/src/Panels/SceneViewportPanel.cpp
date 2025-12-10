@@ -34,11 +34,13 @@ namespace EditorPanels
         {
             // Reassert the scene viewport as active so the renderer keeps the editor camera bound while the gizmo runs.
             // Without this, ImGuizmo might sample runtime camera matrices mid-motion and the gizmo would drift away.
-            //Trident::RenderCommand::SetViewport(m_ViewportInfo.ViewportID, m_ViewportInfo);
+            // Calling SetViewport right before requesting matrices guarantees ImGuizmo uses the editor camera when manipulating entities.
+            Trident::RenderCommand::SetViewport(m_ViewportInfo.ViewportID, m_ViewportInfo);
 
-            // Build the view and projection matrices from the renderer so the gizmo aligns with the scene camera.
-            const glm::mat4 l_ViewMatrix = Trident::RenderCommand::GetViewportViewMatrix(m_ViewportInfo.ViewportID);
-            const glm::mat4 l_ProjectionMatrix = Trident::RenderCommand::GetViewportProjectionMatrix(m_ViewportInfo.ViewportID);
+            // Pull view/projection directly from the editor camera to avoid runtime camera fallbacks that caused gizmos to drift
+            // as soon as the editor camera moved. Sampling the dedicated editor matrices keeps overlays locked to the entity.
+            const glm::mat4 l_ViewMatrix = Trident::RenderCommand::GetEditorCameraViewMatrix();
+            const glm::mat4 l_ProjectionMatrix = Trident::RenderCommand::GetEditorCameraProjectionMatrix();
 
             // Choose a single gizmo operation so ImGuizmo renders one mode at a time.
             ImGuizmo::OPERATION l_Operation = ImGuizmo::TRANSLATE;

@@ -153,6 +153,18 @@ namespace Trident
         return Startup::GetRenderer().GetViewportProjectionMatrix(viewportId);
     }
 
+    glm::mat4 RenderCommand::GetEditorCameraViewMatrix()
+    {
+        // Guaranteed editor camera matrices keep authoring overlays aligned even when runtime cameras become active elsewhere.
+        return Startup::GetRenderer().GetEditorCameraViewMatrix();
+    }
+
+    glm::mat4 RenderCommand::GetEditorCameraProjectionMatrix()
+    {
+        // Requesting the projection directly avoids drift when manipulating gizmos while the editor camera is in motion.
+        return Startup::GetRenderer().GetEditorCameraProjectionMatrix();
+    }
+
     std::vector<CameraOverlayInstance> RenderCommand::GetCameraOverlayInstances(uint32_t viewportId)
     {
         // Retrieve the projected overlay list so UI code can draw camera icons in screen-space.

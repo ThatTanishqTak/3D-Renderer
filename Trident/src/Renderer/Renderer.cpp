@@ -2228,6 +2228,30 @@ namespace Trident
         return l_Camera->GetProjectionMatrix();
     }
 
+    glm::mat4 Renderer::GetEditorCameraViewMatrix() const
+    {
+        // Always source the editor camera even when runtime cameras are active elsewhere to keep authoring overlays stable.
+        if (m_EditorCamera)
+        {
+            return m_EditorCamera->GetViewMatrix();
+        }
+
+        // Fallback to the currently active camera so callers receive something meaningful when no editor camera exists.
+        const Camera* l_Camera = GetActiveCamera();
+        return l_Camera ? l_Camera->GetViewMatrix() : glm::mat4{ 1.0f };
+    }
+
+    glm::mat4 Renderer::GetEditorCameraProjectionMatrix() const
+    {
+        if (m_EditorCamera)
+        {
+            return m_EditorCamera->GetProjectionMatrix();
+        }
+
+        const Camera* l_Camera = GetActiveCamera();
+        return l_Camera ? l_Camera->GetProjectionMatrix() : glm::mat4{ 1.0f };
+    }
+
     std::vector<CameraOverlayInstance> Renderer::GetCameraOverlayInstances(uint32_t viewportID) const
     {
         std::vector<CameraOverlayInstance> l_Instances{};

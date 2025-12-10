@@ -45,6 +45,8 @@ namespace Trident
         static VkDescriptorSet GetViewportTexture(uint32_t viewportId);
         static glm::mat4 GetViewportViewMatrix(uint32_t viewportId);
         static glm::mat4 GetViewportProjectionMatrix(uint32_t viewportId);
+        static glm::mat4 GetEditorCameraViewMatrix();
+        static glm::mat4 GetEditorCameraProjectionMatrix();
         static std::vector<CameraOverlayInstance> GetCameraOverlayInstances(uint32_t viewportId);
         static size_t GetCurrentFrame();
         // Expose the active clear colour so UI panels can stay in sync with renderer preferences.

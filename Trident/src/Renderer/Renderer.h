@@ -235,6 +235,8 @@ namespace Trident
         // Provide tooling with the matrices required for gizmo overlay composition.
         glm::mat4 GetViewportViewMatrix(uint32_t viewportId) const;
         glm::mat4 GetViewportProjectionMatrix(uint32_t viewportId) const;
+        glm::mat4 GetEditorCameraViewMatrix() const;
+        glm::mat4 GetEditorCameraProjectionMatrix() const;
         // Gather the projected positions of ECS cameras so UI overlays can render icons in 2D space.
         std::vector<CameraOverlayInstance> GetCameraOverlayInstances(uint32_t viewportId) const;
         const Camera* GetActiveCamera() const;
