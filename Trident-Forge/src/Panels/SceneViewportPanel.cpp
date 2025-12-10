@@ -28,21 +28,13 @@ namespace EditorPanels
 
         SubmitViewportTexture(l_Available);
 
-        //// Cache the screen-space bounds so external drop handlers can test OS-level cursor positions reliably
-        //const ImVec2 l_ContentMin = ImGui::GetWindowContentRegionMin();
-        //const ImVec2 l_ContentMax = ImGui::GetWindowContentRegionMax();
-        //const ImVec2 l_WindowPos = ImGui::GetWindowPos();
-
-        //m_BoundsMin = { l_WindowPos.x + l_ContentMin.x, l_WindowPos.y + l_ContentMin.y };
-        //m_BoundsMax = { l_WindowPos.x + l_ContentMax.x, l_WindowPos.y + l_ContentMax.y };
-
         // Draw an ImGuizmo-style overlay when the tool is enabled and the selected entity exposes a transform component.
         if (m_GizmoState != nullptr && m_GizmoState->m_ShowGizmos && m_Registry != nullptr && m_SelectedEntity != s_InvalidEntity
             && m_Registry->HasComponent<Trident::Transform>(m_SelectedEntity))
         {
             // Reassert the scene viewport as active so the renderer keeps the editor camera bound while the gizmo runs.
             // Without this, ImGuizmo might sample runtime camera matrices mid-motion and the gizmo would drift away.
-            Trident::RenderCommand::SetViewport(m_ViewportInfo.ViewportID, m_ViewportInfo);
+            //Trident::RenderCommand::SetViewport(m_ViewportInfo.ViewportID, m_ViewportInfo);
 
             // Build the view and projection matrices from the renderer so the gizmo aligns with the scene camera.
             const glm::mat4 l_ViewMatrix = Trident::RenderCommand::GetViewportViewMatrix(m_ViewportInfo.ViewportID);
@@ -71,8 +63,7 @@ namespace EditorPanels
                 glm::mat4 l_ModelMatrix = Trident::RenderCommand::GetWorldTransform(m_SelectedEntity);
 
                 // Apply ImGuizmo manipulation and sync edits back to the registry and renderer when authors adjust the gizmo.
-                if (ImGuizmo::Manipulate(glm::value_ptr(l_ViewMatrix), glm::value_ptr(l_ProjectionMatrix), l_Operation, ImGuizmo::LOCAL,
-                    glm::value_ptr(l_ModelMatrix)))
+                if (ImGuizmo::Manipulate(glm::value_ptr(l_ViewMatrix), glm::value_ptr(l_ProjectionMatrix), l_Operation, ImGuizmo::LOCAL, glm::value_ptr(l_ModelMatrix)))
                 {
                     glm::vec3 l_Translation{};
                     glm::vec3 l_Rotation{};
