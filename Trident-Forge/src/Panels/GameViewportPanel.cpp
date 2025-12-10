@@ -26,22 +26,19 @@ namespace EditorPanels
 
         ImVec2 l_Available = ImGui::GetContentRegionAvail();
 
-        // [FIX 1] Force Even Dimensions immediately
-        // This ensures the Render Target, Readback Buffer, and Encoder all use the exact same resolution.
+        // Force Even Dimensions immediately this ensures the Render Target, Readback Buffer, and Encoder all use the exact same resolution.
         if ((static_cast<uint32_t>(l_Available.x) % 2) != 0) l_Available.x += 1.0f;
         if ((static_cast<uint32_t>(l_Available.y) % 2) != 0) l_Available.y += 1.0f;
 
         m_ViewportInfo.Size = { l_Available.x, l_Available.y };
         Trident::RenderCommand::SetViewport(m_ViewportInfo.ViewportID, m_ViewportInfo);
 
-        // [FIX 2] Update State BEFORE submission to prevent "Use-After-Free" validation crash
+        // Update State BEFORE submission to prevent "Use-After-Free" validation crash
         UpdateExportState();
 
         // Submit the texture (ImGui will scale it slightly if it's 1px larger than the window, which is fine)
         SubmitViewportTexture(l_Available);
         RenderFrameRateOverlay();
-
-        // UpdateExportState(); <-- Remove this old call
 
         m_IsHovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows);
         m_IsFocused = ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows);
@@ -51,7 +48,7 @@ namespace EditorPanels
 
     void GameViewportPanel::Update()
     {
-        // Surface asset drops routed through ImGui (e.g., dragging levels from the content browser).
+        // Surface asset drops routed through ImGui
         if (m_OnAssetsDropped && ImGui::BeginDragDropTarget())
         {
             if (const ImGuiPayload* l_Payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM"))

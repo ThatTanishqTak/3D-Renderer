@@ -43,7 +43,7 @@ class TrainingConfig:
     early_stop_min_delta: float
     input_channels: int = 0
     skip_training: bool = False
-    opset_version: int = 17
+    opset_version: int = 12
     ir_version: int = 11
 
 

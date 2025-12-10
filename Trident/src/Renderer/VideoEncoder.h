@@ -58,12 +58,12 @@ namespace Trident
         void CleanupFfmpegEncoder();
         void ResetSession();
         static uint8_t ClampChannel(double value);
-        static void ConvertRgbaToYuv444(const std::vector<uint8_t>& a_InputRgba, VkExtent2D a_Extent, std::vector<uint8_t>& a_OutYuv);
+        static void ConvertRgbaToYuv444(const std::vector<uint8_t>& inputRGBA, VkExtent2D extent, std::vector<uint8_t>& outYUV);
 
         bool m_SessionActive = false;
         std::filesystem::path m_OutputPath{};
         VkExtent2D m_OutputExtent{ 0, 0 };
-        uint32_t m_TargetFps = 30;
+        uint32_t m_TargetFps = 24;
         bool m_UsingY4mContainer = false;
         bool m_UsingFfmpegContainer = false;
         std::ofstream m_OutputStream{};

@@ -713,25 +713,25 @@ namespace Trident
         return static_cast<uint8_t>(value);
     }
 
-    void VideoEncoder::ConvertRgbaToYuv444(const std::vector<uint8_t>& a_InputRgba, VkExtent2D a_Extent, std::vector<uint8_t>& a_OutYuv)
+    void VideoEncoder::ConvertRgbaToYuv444(const std::vector<uint8_t>& inputRGBA, VkExtent2D extent, std::vector<uint8_t>& outYUV)
     {
         // Basic RGBA to YUV444 conversion. Alpha channel is discarded because the container expects opaque frames.
-        const size_t l_PixelCount = static_cast<size_t>(a_Extent.width) * static_cast<size_t>(a_Extent.height);
+        const size_t l_PixelCount = static_cast<size_t>(extent.width) * static_cast<size_t>(extent.height);
         for (size_t l_Index = 0; l_Index < l_PixelCount; ++l_Index)
         {
             const size_t l_RgbaOffset = l_Index * 4ull;
-            const uint8_t l_R = a_InputRgba[l_RgbaOffset + 0];
-            const uint8_t l_G = a_InputRgba[l_RgbaOffset + 1];
-            const uint8_t l_B = a_InputRgba[l_RgbaOffset + 2];
+            const uint8_t l_R = inputRGBA[l_RgbaOffset + 0];
+            const uint8_t l_G = inputRGBA[l_RgbaOffset + 1];
+            const uint8_t l_B = inputRGBA[l_RgbaOffset + 2];
 
             // Use Rec. 601 full range conversion.
             const double l_Y = 0.299 * static_cast<double>(l_R) + 0.587 * static_cast<double>(l_G) + 0.114 * static_cast<double>(l_B);
             const double l_U = -0.169 * static_cast<double>(l_R) - 0.331 * static_cast<double>(l_G) + 0.5 * static_cast<double>(l_B) + 128.0;
             const double l_V = 0.5 * static_cast<double>(l_R) - 0.419 * static_cast<double>(l_G) - 0.081 * static_cast<double>(l_B) + 128.0;
 
-            a_OutYuv[l_Index] = ClampChannel(l_Y);
-            a_OutYuv[l_PixelCount + l_Index] = ClampChannel(l_U);
-            a_OutYuv[(2 * l_PixelCount) + l_Index] = ClampChannel(l_V);
+            outYUV[l_Index] = ClampChannel(l_Y);
+            outYUV[l_PixelCount + l_Index] = ClampChannel(l_U);
+            outYUV[(2 * l_PixelCount) + l_Index] = ClampChannel(l_V);
         }
     }
 }

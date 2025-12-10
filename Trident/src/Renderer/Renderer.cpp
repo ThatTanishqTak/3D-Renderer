@@ -5858,7 +5858,7 @@ namespace Trident
                 return false;
             }
 
-            const bool l_SessionStarted = m_VideoEncoder->BeginSession(outputPath, l_SanitizedExtent, 30);
+            const bool l_SessionStarted = m_VideoEncoder->BeginSession(outputPath, l_SanitizedExtent, 1);
             const bool l_SessionActive = l_SessionStarted && m_VideoEncoder->IsSessionActive();
 
             // Reject the start request if the encoder did not accept the session so the caller can surface an error.
