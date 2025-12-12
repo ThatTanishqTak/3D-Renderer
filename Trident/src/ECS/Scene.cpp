@@ -9,6 +9,7 @@
 #include "ECS/Components/MeshComponent.h"
 #include "ECS/Components/LightComponent.h"
 #include "ECS/Components/TagComponent.h"
+#include "ECS/Components/UUIDComponent.h"
 #include "ECS/Components/ScriptComponent.h"
 #include "ECS/Components/TextureComponent.h"
 #include "ECS/Components/AnimationComponent.h"
@@ -289,6 +290,12 @@ namespace Trident
         ECS::Registry& l_ActiveRegistry = GetActiveRegistry();
         stream << "Entity " << entity << "\n";
 
+        if (l_ActiveRegistry.HasComponent<UUIDComponent>(entity))
+        {
+            const UUIDComponent& l_UUID = l_ActiveRegistry.GetComponent<UUIDComponent>(entity);
+            stream << "UUID " << l_UUID.m_ID.GetValue() << "\n";
+        }
+
         if (l_ActiveRegistry.HasComponent<TagComponent>(entity))
         {
             const TagComponent& l_Tag = l_ActiveRegistry.GetComponent<TagComponent>(entity);
@@ -434,6 +441,17 @@ namespace Trident
         {
             if (l_Line.empty() || l_Line.front() == '#')
             {
+                continue;
+            }
+
+            if (l_Line.rfind("UUID ", 0) == 0)
+            {
+                uint64_t l_UUIDValue = 0;
+                std::istringstream l_TokenStream(l_Line.substr(5));
+                l_TokenStream >> l_UUIDValue;
+
+                l_TargetRegistry.AddComponent<UUIDComponent>(l_Entity, Utilities::UUID(l_UUIDValue));
+
                 continue;
             }
 

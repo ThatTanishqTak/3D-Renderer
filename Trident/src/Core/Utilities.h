@@ -184,7 +184,47 @@ namespace Trident
 			static size_t GetFrameCount();
 			static void* Malloc(std::size_t size, const char* file, int line);
 		};
+
+		//------------------------------------------------------------------------------------------------------------------------------------------------------//
+
+        /**
+         * @brief Strongly typed wrapper around a 64-bit identifier.
+         *
+         * The UUID class centralizes generation and comparison for entity identifiers. ImGui widgets use
+         * these values as stable IDs, preventing collisions when multiple entities share the same label.
+         */
+        class UUID
+        {
+        public:
+            /// @brief Constructs a new UUID with a randomly generated value.
+            UUID();
+
+            /// @brief Construct a UUID from a known raw value, typically during deserialization.
+            explicit UUID(uint64_t value);
+
+            /// @brief Accessor for the underlying numeric value.
+            [[nodiscard]] uint64_t GetValue() const;
+
+            /// @brief Equality comparison helper so UUIDs can participate in lookups and tests.
+            bool operator==(const UUID& other) const;
+
+        private:
+            uint64_t m_Value;
+        };
 	}
+}
+
+namespace std
+{
+    /// @brief Hash specialization enabling UUID usage in unordered containers.
+    template<>
+    struct hash<Trident::Utilities::UUID>
+    {
+        size_t operator()(const Trident::Utilities::UUID& uuid) const noexcept
+        {
+            return static_cast<size_t>(uuid.GetValue());
+        }
+    };
 }
 
 void* operator new(std::size_t size, const char* file, int line);

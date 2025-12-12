@@ -2,7 +2,9 @@
 
 #include <imgui.h>
 #include <string>
+
 #include "ECS/Components/TagComponent.h"
+#include "ECS/Components/UUIDComponent.h"
 
 namespace EditorPanels
 {
@@ -34,6 +36,14 @@ namespace EditorPanels
                 // Track selection using an explicit sentinel so entity ID 0 remains selectable (e.g. default camera).
                 const bool l_IsSelected = m_SelectedEntity != s_InvalidEntity && it_Entity == m_SelectedEntity;
 
+                // Apply a stable ImGui ID so entities with identical display names remain selectable without conflicts.
+                std::string l_NodeId = std::to_string(it_Entity);
+                if (m_Registry->HasComponent<Trident::UUIDComponent>(it_Entity))
+                {
+                    const Trident::UUIDComponent& l_UUIDComponent = m_Registry->GetComponent<Trident::UUIDComponent>(it_Entity);
+                    l_NodeId = std::to_string(l_UUIDComponent.m_ID.GetValue());
+                }
+
                 std::string l_Label;
                 if (m_Registry->HasComponent<Trident::TagComponent>(it_Entity))
                 {
@@ -49,10 +59,12 @@ namespace EditorPanels
                     l_Label = "Entity " + std::to_string(it_Entity);
                 }
 
+                ImGui::PushID(l_NodeId.c_str());
                 if (ImGui::Selectable(l_Label.c_str(), l_IsSelected))
                 {
                     m_SelectedEntity = it_Entity;
                 }
+                ImGui::PopID();
             }
         }
 

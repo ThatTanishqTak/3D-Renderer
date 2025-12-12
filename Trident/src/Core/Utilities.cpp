@@ -6,6 +6,8 @@
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/sinks/base_sink.h>
 
+#include <random>
+
 namespace Trident
 {
     namespace Utilities
@@ -29,6 +31,15 @@ namespace Trident
                     // The console buffer is memory backed, so there is nothing to flush explicitly.
                 }
             };
+
+            /// @brief Generates random 64-bit values for UUID construction.
+            uint64_t GenerateRandomValue()
+            {
+                static thread_local std::mt19937_64 s_Rng(std::random_device{}());
+                std::uniform_int_distribution<uint64_t> l_Distribution;
+
+                return l_Distribution(s_Rng);
+            }
         }
 
         std::shared_ptr<spdlog::logger> Log::s_CoreLogger;
@@ -445,6 +456,28 @@ namespace Trident
             Increment();
 
             return std::malloc(size);
+        }
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------//
+
+        UUID::UUID() : m_Value(GenerateRandomValue())
+        {
+
+        }
+
+        UUID::UUID(uint64_t value) : m_Value(value)
+        {
+
+        }
+
+        uint64_t UUID::GetValue() const
+        {
+            return m_Value;
+        }
+
+        bool UUID::operator==(const UUID& other) const
+        {
+            return m_Value == other.m_Value;
         }
     }
 }

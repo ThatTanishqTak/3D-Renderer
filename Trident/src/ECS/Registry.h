@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ECS/Entity.h"
+#include "ECS/Components/UUIDComponent.h"
 
 #include <unordered_map>
 #include <typeindex>
@@ -30,7 +31,14 @@ namespace Trident
             template<typename... Args>
             T& Emplace(Entity entity, Args&&... args)
             {
-                return m_Components.emplace(entity, T{ std::forward<Args>(args)... }).first->second;
+                auto a_Constructed = T{ std::forward<Args>(args)... };
+                auto a_InsertResult = m_Components.emplace(entity, a_Constructed);
+                if (!a_InsertResult.second)
+                {
+                    a_InsertResult.first->second = std::move(a_Constructed);
+                }
+
+                return a_InsertResult.first->second;
             }
 
             bool Has(Entity entity) const
@@ -72,6 +80,9 @@ namespace Trident
             {
                 Entity l_Entity = m_NextEntity++;
                 m_ActiveEntities.push_back(l_Entity);
+
+                // Attach a UUID immediately so editor tooling always has a stable identifier to reference.
+                AddComponent<UUIDComponent>(l_Entity);
 
                 return l_Entity;
             }
