@@ -32,6 +32,19 @@ namespace EditorPanels
         // Render the texture from the GPU
         SubmitViewportTexture(l_Available);
 
+        // Handle Asset Drag & Drop from Content Browser while the viewport item is active
+        // so the drop target matches the visible viewport bounds.
+        if (m_OnAssetsDropped && ImGui::BeginDragDropTarget())
+        {
+            if (const ImGuiPayload* l_Payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM"))
+            {
+                const std::string l_Path(reinterpret_cast<const char*>(l_Payload->Data), l_Payload->DataSize);
+                m_OnAssetsDropped({ l_Path });
+            }
+
+            ImGui::EndDragDropTarget();
+        }
+
         // Check if Gizmos are enabled, a valid entity is selected, and it has a Transform component
         if (m_GizmoState != nullptr && m_GizmoState->m_ShowGizmos && m_Registry != nullptr && m_SelectedEntity != s_InvalidEntity
             && m_Registry->HasComponent<Trident::Transform>(m_SelectedEntity))
@@ -97,17 +110,7 @@ namespace EditorPanels
 
     void SceneViewportPanel::Update()
     {
-        // Handle Asset Drag & Drop from Content Browser
-        if (m_OnAssetsDropped && ImGui::BeginDragDropTarget())
-        {
-            if (const ImGuiPayload* l_Payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM"))
-            {
-                const std::string l_Path(reinterpret_cast<const char*>(l_Payload->Data), l_Payload->DataSize);
-                m_OnAssetsDropped({ l_Path });
-            }
 
-            ImGui::EndDragDropTarget();
-        }
     }
 
     // Getters and Setters implementation
