@@ -31,6 +31,7 @@ namespace EditorPanels
 
     private:
         void RefreshEntries();
+        std::string FormatPayloadPath(const std::filesystem::directory_entry& entry) const;
 
     private:
         std::filesystem::path m_RootDirectory{};

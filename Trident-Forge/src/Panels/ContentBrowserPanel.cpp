@@ -1,5 +1,7 @@
 #include "ContentBrowserPanel.h"
 
+#include "Core/Utilities.h"
+
 #include <imgui.h>
 
 #include <algorithm>
@@ -105,6 +107,26 @@ namespace EditorPanels
         m_EntriesDirty = false;
     }
 
+    std::string ContentBrowserPanel::FormatPayloadPath(const std::filesystem::directory_entry& entry) const
+    {
+        // Ensure the payload string includes the root prefix so the importer can open the real file on disk instead of
+        // receiving a truncated relative path.
+        std::filesystem::path l_RelativePath = entry.path().lexically_relative(m_RootDirectory);
+
+        // Fallback to the full entry path when relative conversion fails so drag payloads still reference a readable file.
+        std::filesystem::path l_PayloadPath = l_RelativePath.empty() ? entry.path() : m_RootDirectory / l_RelativePath;
+
+        std::string l_PayloadText = Trident::Utilities::FileManagement::NormalizePath(l_PayloadPath.string());
+
+        // Append a trailing slash for directories so payloads are distinct from files and remain easy to spot in the tooltip.
+        if (entry.is_directory() && !l_PayloadText.empty() && l_PayloadText.back() != '/')
+        {
+            l_PayloadText.push_back('/');
+        }
+
+        return l_PayloadText;
+    }
+
     void ContentBrowserPanel::Render()
     {
         const bool l_WindowVisible = ImGui::Begin("Content Browser");
@@ -172,6 +194,18 @@ namespace EditorPanels
                         m_OnAssetActivated(it_Entry.path());
                     }
                 }
+            }
+
+            // Surface the current entry as a drag source with a payload string the viewport can consume.
+            if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
+            {
+                const std::string l_PayloadText = FormatPayloadPath(it_Entry);
+
+                // Provide the payload and a readable tooltip to distinguish files from directories.
+                ImGui::SetDragDropPayload("CONTENT_BROWSER_ITEM", l_PayloadText.c_str(), l_PayloadText.size());
+                ImGui::TextUnformatted(l_PayloadText.c_str());
+
+                ImGui::EndDragDropSource();
             }
         }
 
