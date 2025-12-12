@@ -176,10 +176,14 @@ namespace EditorPanels
         for (const auto& it_Entry : m_Entries)
         {
             const bool l_IsDirectory = it_Entry.is_directory();
-            const std::string l_Name = it_Entry.path().filename().string();
+            const std::filesystem::path l_EntryPath = it_Entry.path();
+            const std::string l_Name = l_EntryPath.filename().string();
             std::string l_Label = l_IsDirectory ? l_Name + "/" : l_Name;
+            // Use the full normalized path as a unique ImGui ID so entries with identical display names do not conflict.
+            const std::string l_EntryPathId = Trident::Utilities::FileManagement::NormalizePath(l_EntryPath.string());
 
             const bool l_Selected = false;
+            ImGui::PushID(l_EntryPathId.c_str());
             if (ImGui::Selectable(l_Label.c_str(), l_Selected, ImGuiSelectableFlags_AllowDoubleClick))
             {
                 if (ImGui::IsMouseDoubleClicked(0))
@@ -207,7 +211,10 @@ namespace EditorPanels
 
                 ImGui::EndDragDropSource();
             }
+
+            ImGui::PopID();
         }
+
 
         ImGui::End();
     }
