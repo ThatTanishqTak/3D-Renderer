@@ -7,13 +7,17 @@
 #include <functional>
 #include <vector>
 
+#undef GetCurrentTime
+#undef GetTickCount
+#undef GetCurrentTime64
+
 namespace Trident
 {
     namespace ECS
     {
-        AnimationSystem::AnimationSystem()
-            : m_Player(Animation::AnimationAssetService::Get())
+        AnimationSystem::AnimationSystem() : m_Player(Animation::AnimationAssetService::Get())
         {
+
         }
 
         void AnimationSystem::RefreshCachedHandles(AnimationComponent& component, Animation::AnimationAssetService& service)
