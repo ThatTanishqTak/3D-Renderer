@@ -4,6 +4,11 @@
 #include "ECS/Components/TransformComponent.h"
 #include "ECS/Components/MeshComponent.h"
 #include "ECS/Components/CameraComponent.h"
+#include "ECS/Components/LightComponent.h"
+#include "ECS/Components/SpriteComponent.h"
+#include "ECS/Components/TextureComponent.h"
+#include "ECS/Components/AnimationComponent.h"
+#include "ECS/Components/ScriptComponent.h"
 
 #include <imgui.h>
 #include <string>
@@ -52,6 +57,103 @@ namespace EditorPanels
             ImGui::TextWrapped("No entity selected.");
             ImGui::End();
             return;
+        }
+
+        // Center the add-component button by offsetting the cursor with half of the remaining content width.
+        const float l_ContentWidth = ImGui::GetContentRegionAvail().x;
+        const ImVec2 l_ButtonLabelSize = ImGui::CalcTextSize("Add Component");
+        const ImVec2 l_FramePadding = ImGui::GetStyle().FramePadding;
+        const float l_ButtonWidth = l_ButtonLabelSize.x + (l_FramePadding.x * 2.0f);
+        const float l_ButtonOffset = (l_ContentWidth - l_ButtonWidth) * 0.5f;
+        if (l_ButtonOffset > 0.0f)
+        {
+            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + l_ButtonOffset);
+        }
+
+        if (ImGui::Button("Add Component"))
+        {
+            // Use a stable popup name so ImGui can manage the menu state across frames.
+            ImGui::OpenPopup("AddComponentPopup");
+        }
+
+        if (ImGui::BeginPopup("AddComponentPopup"))
+        {
+            // Disable menu items when the entity already owns the component to prevent duplicates.
+            const bool l_HasCamera = m_Registry->HasComponent<Trident::CameraComponent>(m_SelectedEntity);
+            ImGui::BeginDisabled(l_HasCamera);
+            if (ImGui::MenuItem("Camera Component"))
+            {
+                Trident::CameraComponent& l_Camera = m_Registry->AddComponent<Trident::CameraComponent>(m_SelectedEntity);
+                l_Camera.m_Primary = false;
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndDisabled();
+
+            const bool l_HasMesh = m_Registry->HasComponent<Trident::MeshComponent>(m_SelectedEntity);
+            ImGui::BeginDisabled(l_HasMesh);
+            if (ImGui::MenuItem("Mesh Component"))
+            {
+                Trident::MeshComponent& l_Mesh = m_Registry->AddComponent<Trident::MeshComponent>(m_SelectedEntity);
+                l_Mesh.m_Visible = true;
+                l_Mesh.m_Primitive = Trident::MeshComponent::PrimitiveType::None;
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndDisabled();
+
+            const bool l_HasLight = m_Registry->HasComponent<Trident::LightComponent>(m_SelectedEntity);
+            ImGui::BeginDisabled(l_HasLight);
+            if (ImGui::MenuItem("Light Component"))
+            {
+                Trident::LightComponent& l_Light = m_Registry->AddComponent<Trident::LightComponent>(m_SelectedEntity);
+                l_Light.m_Enabled = true;
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndDisabled();
+
+            const bool l_HasSprite = m_Registry->HasComponent<Trident::SpriteComponent>(m_SelectedEntity);
+            ImGui::BeginDisabled(l_HasSprite);
+            if (ImGui::MenuItem("Sprite Component"))
+            {
+                Trident::SpriteComponent& l_Sprite = m_Registry->AddComponent<Trident::SpriteComponent>(m_SelectedEntity);
+                l_Sprite.m_Visible = true;
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndDisabled();
+
+            const bool l_HasTexture = m_Registry->HasComponent<Trident::TextureComponent>(m_SelectedEntity);
+            ImGui::BeginDisabled(l_HasTexture);
+            if (ImGui::MenuItem("Texture Component"))
+            {
+                Trident::TextureComponent& l_Texture = m_Registry->AddComponent<Trident::TextureComponent>(m_SelectedEntity);
+                l_Texture.m_IsDirty = true;
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndDisabled();
+
+            const bool l_HasAnimation = m_Registry->HasComponent<Trident::AnimationComponent>(m_SelectedEntity);
+            ImGui::BeginDisabled(l_HasAnimation);
+            if (ImGui::MenuItem("Animation Component"))
+            {
+                Trident::AnimationComponent& l_Animation = m_Registry->AddComponent<Trident::AnimationComponent>(m_SelectedEntity);
+                l_Animation.m_IsPlaying = true;
+                l_Animation.m_IsLooping = true;
+                l_Animation.InvalidateCachedAssets();
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndDisabled();
+
+            const bool l_HasScript = m_Registry->HasComponent<Trident::ScriptComponent>(m_SelectedEntity);
+            ImGui::BeginDisabled(l_HasScript);
+            if (ImGui::MenuItem("Script Component"))
+            {
+                Trident::ScriptComponent& l_Script = m_Registry->AddComponent<Trident::ScriptComponent>(m_SelectedEntity);
+                l_Script.m_AutoStart = true;
+                l_Script.m_IsRunning = false;
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndDisabled();
+
+            ImGui::EndPopup();
         }
 
         bool l_HasAnyComponent = false;
