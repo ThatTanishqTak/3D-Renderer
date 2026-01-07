@@ -3448,7 +3448,8 @@ namespace Trident
 
         // Try loading a pre-authored cubemap from disk. This keeps the renderer flexible and allows
         // artists to swap between KTX packages and loose face images without touching the code.
-        const std::filesystem::path l_DefaultSkyboxRoot = std::filesystem::path("Trident-Forge") / "Assets" / "Skyboxes";
+        // Assets are copied next to the executable under Assets/ (see Trident-Forge/CMakeLists.txt post-build copy).
+        const std::filesystem::path l_DefaultSkyboxRoot = std::filesystem::path("Assets") / "Skyboxes";
         const std::filesystem::path l_DefaultKtx = l_DefaultSkyboxRoot / "DefaultSkybox.ktx";
         std::error_code l_FileError{};
         if (std::filesystem::exists(l_DefaultKtx, l_FileError))
@@ -3989,6 +3990,7 @@ namespace Trident
         {
             TR_CORE_CRITICAL("Failed to allocate skybox descriptor sets");
             m_SkyboxDescriptorSets.clear();
+
             return;
         }
 
