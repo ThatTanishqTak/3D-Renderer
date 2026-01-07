@@ -97,7 +97,8 @@ namespace
         l_Vertices[3].TexCoord = { 0.0f, 1.0f };
 
         l_Mesh.Vertices.assign(l_Vertices.begin(), l_Vertices.end());
-        l_Mesh.Indices = { 0, 2, 1, 0, 3, 2 };
+        // Counter clockwise winding to match the front face definition with the projection Y flip.
+        l_Mesh.Indices = { 0, 1, 2, 0, 2, 3 };
 
         return l_Mesh;
     }
