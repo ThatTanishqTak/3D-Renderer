@@ -199,6 +199,12 @@ namespace Trident
         return Startup::GetRenderer().ResolveTextureSlot(texturePath);
     }
 
+    size_t RenderCommand::GetOrCreatePrimitiveMeshIndex(MeshComponent::PrimitiveType primitiveType)
+    {
+        // Resolve primitive meshes so entities can draw without waiting on manual imports.
+        return Startup::GetRenderer().GetOrCreatePrimitiveMeshIndex(primitiveType);
+    }
+
     Renderer::AiDebugStats RenderCommand::GetAiDebugStats()
     {
         // Surface the AI instrumentation so panels can visualise inference timing and queue depth without duplicating logic.

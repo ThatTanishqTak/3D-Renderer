@@ -41,6 +41,7 @@
 #include <glm/gtc/matrix_inverse.hpp>
 #include <glm/gtx/matrix_decompose.hpp>
 #include <glm/gtx/quaternion.hpp>
+#include <glm/gtc/constants.hpp>
 #include <imgui_impl_vulkan.h>
 
 namespace
@@ -67,6 +68,181 @@ namespace
         int64_t m_Width = -1;                // Width component extracted from the tensor shape.
         int64_t m_Channels = -1;             // Channel count derived from the tensor shape.
     };
+
+    Trident::Geometry::Mesh BuildPrimitiveQuadMesh()
+    {
+        Trident::Geometry::Mesh l_Mesh{};
+
+        std::array<Vertex, 4> l_Vertices{};
+        l_Vertices[0].Position = { -0.5f, -0.5f, 0.0f };
+        l_Vertices[1].Position = { 0.5f, -0.5f, 0.0f };
+        l_Vertices[2].Position = { 0.5f, 0.5f, 0.0f };
+        l_Vertices[3].Position = { -0.5f, 0.5f, 0.0f };
+
+        const glm::vec3 l_Normal{ 0.0f, 0.0f, 1.0f };
+        const glm::vec3 l_Tangent{ 1.0f, 0.0f, 0.0f };
+        const glm::vec3 l_Bitangent{ 0.0f, 1.0f, 0.0f };
+
+        for (Vertex& it_Vertex : l_Vertices)
+        {
+            it_Vertex.Normal = l_Normal;
+            it_Vertex.Tangent = l_Tangent;
+            it_Vertex.Bitangent = l_Bitangent;
+            it_Vertex.Color = { 1.0f, 1.0f, 1.0f };
+        }
+
+        l_Vertices[0].TexCoord = { 0.0f, 0.0f };
+        l_Vertices[1].TexCoord = { 1.0f, 0.0f };
+        l_Vertices[2].TexCoord = { 1.0f, 1.0f };
+        l_Vertices[3].TexCoord = { 0.0f, 1.0f };
+
+        l_Mesh.Vertices.assign(l_Vertices.begin(), l_Vertices.end());
+        l_Mesh.Indices = { 0, 2, 1, 0, 3, 2 };
+
+        return l_Mesh;
+    }
+
+    Trident::Geometry::Mesh BuildPrimitiveCubeMesh()
+    {
+        Trident::Geometry::Mesh l_Mesh{};
+
+        struct PrimitiveFace
+        {
+            glm::vec3 m_Normal{};
+            glm::vec3 m_Tangent{};
+            glm::vec3 m_Bitangent{};
+            std::array<glm::vec3, 4> m_Positions{};
+        };
+
+        const std::array<PrimitiveFace, 6> l_Faces
+        { {
+            { { 0.0f, 0.0f, 1.0f }, { 1.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f },
+                { glm::vec3{ -0.5f, -0.5f, 0.5f }, glm::vec3{ 0.5f, -0.5f, 0.5f },
+                  glm::vec3{ 0.5f, 0.5f, 0.5f }, glm::vec3{ -0.5f, 0.5f, 0.5f } } },
+            { { 0.0f, 0.0f, -1.0f }, { -1.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f },
+                { glm::vec3{ 0.5f, -0.5f, -0.5f }, glm::vec3{ -0.5f, -0.5f, -0.5f },
+                  glm::vec3{ -0.5f, 0.5f, -0.5f }, glm::vec3{ 0.5f, 0.5f, -0.5f } } },
+            { { 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, -1.0f }, { 0.0f, 1.0f, 0.0f },
+                { glm::vec3{ 0.5f, -0.5f, 0.5f }, glm::vec3{ 0.5f, -0.5f, -0.5f },
+                  glm::vec3{ 0.5f, 0.5f, -0.5f }, glm::vec3{ 0.5f, 0.5f, 0.5f } } },
+            { { -1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 1.0f }, { 0.0f, 1.0f, 0.0f },
+                { glm::vec3{ -0.5f, -0.5f, -0.5f }, glm::vec3{ -0.5f, -0.5f, 0.5f },
+                  glm::vec3{ -0.5f, 0.5f, 0.5f }, glm::vec3{ -0.5f, 0.5f, -0.5f } } },
+            { { 0.0f, 1.0f, 0.0f }, { 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, -1.0f },
+                { glm::vec3{ -0.5f, 0.5f, 0.5f }, glm::vec3{ 0.5f, 0.5f, 0.5f },
+                  glm::vec3{ 0.5f, 0.5f, -0.5f }, glm::vec3{ -0.5f, 0.5f, -0.5f } } },
+            { { 0.0f, -1.0f, 0.0f }, { 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 1.0f },
+                { glm::vec3{ -0.5f, -0.5f, -0.5f }, glm::vec3{ 0.5f, -0.5f, -0.5f },
+                  glm::vec3{ 0.5f, -0.5f, 0.5f }, glm::vec3{ -0.5f, -0.5f, 0.5f } } }
+        } };
+
+        l_Mesh.Vertices.reserve(l_Faces.size() * 4);
+        l_Mesh.Indices.reserve(l_Faces.size() * 6);
+
+        uint32_t l_VertexOffset = 0;
+        for (const PrimitiveFace& it_Face : l_Faces)
+        {
+            const std::array<glm::vec2, 4> l_TexCoords
+            { {
+                { 0.0f, 0.0f }, { 1.0f, 0.0f }, { 1.0f, 1.0f }, { 0.0f, 1.0f }
+            } };
+
+            for (size_t it_Vertex = 0; it_Vertex < it_Face.m_Positions.size(); ++it_Vertex)
+            {
+                Vertex l_Vertex{};
+                l_Vertex.Position = it_Face.m_Positions[it_Vertex];
+                l_Vertex.Normal = it_Face.m_Normal;
+                l_Vertex.Tangent = it_Face.m_Tangent;
+                l_Vertex.Bitangent = it_Face.m_Bitangent;
+                l_Vertex.Color = { 1.0f, 1.0f, 1.0f };
+                l_Vertex.TexCoord = l_TexCoords[it_Vertex];
+                l_Mesh.Vertices.push_back(l_Vertex);
+            }
+
+            l_Mesh.Indices.push_back(l_VertexOffset + 0);
+            l_Mesh.Indices.push_back(l_VertexOffset + 2);
+            l_Mesh.Indices.push_back(l_VertexOffset + 1);
+            l_Mesh.Indices.push_back(l_VertexOffset + 0);
+            l_Mesh.Indices.push_back(l_VertexOffset + 3);
+            l_Mesh.Indices.push_back(l_VertexOffset + 2);
+            l_VertexOffset += 4;
+        }
+
+        return l_Mesh;
+    }
+
+    Trident::Geometry::Mesh BuildPrimitiveSphereMesh()
+    {
+        Trident::Geometry::Mesh l_Mesh{};
+
+        const uint32_t l_RingCount = 16;
+        const uint32_t l_SegmentCount = 24;
+        const float l_Radius = 0.5f;
+
+        l_Mesh.Vertices.reserve((l_RingCount + 1) * (l_SegmentCount + 1));
+        l_Mesh.Indices.reserve(l_RingCount * l_SegmentCount * 6);
+
+        for (uint32_t it_Ring = 0; it_Ring <= l_RingCount; ++it_Ring)
+        {
+            const float l_V = static_cast<float>(it_Ring) / static_cast<float>(l_RingCount);
+            const float l_Phi = l_V * glm::pi<float>();
+
+            for (uint32_t it_Segment = 0; it_Segment <= l_SegmentCount; ++it_Segment)
+            {
+                const float l_U = static_cast<float>(it_Segment) / static_cast<float>(l_SegmentCount);
+                const float l_Theta = l_U * glm::two_pi<float>();
+
+                const float l_SinPhi = std::sin(l_Phi);
+                const float l_CosPhi = std::cos(l_Phi);
+                const float l_SinTheta = std::sin(l_Theta);
+                const float l_CosTheta = std::cos(l_Theta);
+
+                glm::vec3 l_Position{ l_Radius * l_SinPhi * l_CosTheta, l_Radius * l_CosPhi, l_Radius * l_SinPhi * l_SinTheta };
+                glm::vec3 l_Normal = glm::normalize(l_Position);
+                glm::vec3 l_Tangent{ -l_SinTheta, 0.0f, l_CosTheta };
+                if (glm::length(l_Tangent) < 0.0001f)
+                {
+                    l_Tangent = { 1.0f, 0.0f, 0.0f };
+                }
+                l_Tangent = glm::normalize(l_Tangent);
+                glm::vec3 l_Bitangent = glm::normalize(glm::cross(l_Normal, l_Tangent));
+                if (glm::length(l_Bitangent) < 0.0001f)
+                {
+                    l_Bitangent = { 0.0f, 1.0f, 0.0f };
+                }
+
+                Vertex l_Vertex{};
+                l_Vertex.Position = l_Position;
+                l_Vertex.Normal = l_Normal;
+                l_Vertex.Tangent = l_Tangent;
+                l_Vertex.Bitangent = l_Bitangent;
+                l_Vertex.Color = { 1.0f, 1.0f, 1.0f };
+                l_Vertex.TexCoord = { l_U, 1.0f - l_V };
+                l_Mesh.Vertices.push_back(l_Vertex);
+            }
+        }
+
+        const uint32_t l_RowVertexCount = l_SegmentCount + 1;
+        for (uint32_t it_Ring = 0; it_Ring < l_RingCount; ++it_Ring)
+        {
+            for (uint32_t it_Segment = 0; it_Segment < l_SegmentCount; ++it_Segment)
+            {
+                const uint32_t l_Idx0 = it_Ring * l_RowVertexCount + it_Segment;
+                const uint32_t l_Idx1 = (it_Ring + 1) * l_RowVertexCount + it_Segment;
+                const uint32_t l_Idx2 = (it_Ring + 1) * l_RowVertexCount + it_Segment + 1;
+                const uint32_t l_Idx3 = it_Ring * l_RowVertexCount + it_Segment + 1;
+
+                l_Mesh.Indices.push_back(l_Idx0);
+                l_Mesh.Indices.push_back(l_Idx2);
+                l_Mesh.Indices.push_back(l_Idx1);
+                l_Mesh.Indices.push_back(l_Idx0);
+                l_Mesh.Indices.push_back(l_Idx3);
+                l_Mesh.Indices.push_back(l_Idx2);
+            }
+        }
+
+        return l_Mesh;
+    }
 
     SwapchainFormatInfo QuerySwapchainFormatInfo(VkFormat format)
     {
@@ -1605,10 +1781,163 @@ namespace Trident
         UploadMeshFromCache();
     }
 
+    size_t Renderer::GetOrCreatePrimitiveMeshIndex(MeshComponent::PrimitiveType primitiveType)
+    {
+        const size_t l_InvalidMeshIndex = std::numeric_limits<size_t>::max();
+        if (primitiveType == MeshComponent::PrimitiveType::None)
+        {
+            return l_InvalidMeshIndex;
+        }
+
+        const size_t l_PrimitiveSlot = static_cast<size_t>(primitiveType) - 1;
+        if (l_PrimitiveSlot >= m_PrimitiveMeshIndices.size())
+        {
+            return l_InvalidMeshIndex;
+        }
+
+        const size_t l_ExistingIndex = m_PrimitiveMeshIndices[l_PrimitiveSlot];
+        if (l_ExistingIndex != l_InvalidMeshIndex && l_ExistingIndex < m_GeometryCache.size())
+        {
+            return l_ExistingIndex;
+        }
+
+        const size_t l_PrimitiveIndex = CreatePrimitiveMeshInCache(primitiveType);
+        if (l_PrimitiveIndex == l_InvalidMeshIndex)
+        {
+            return l_InvalidMeshIndex;
+        }
+
+        if (!m_IsUploadingMeshes)
+        {
+            // Upload the new primitive geometry now so draw calls can reference valid buffers.
+            UploadMeshFromCache();
+        }
+
+        return l_PrimitiveIndex;
+    }
+
+    size_t Renderer::CreatePrimitiveMeshInCache(MeshComponent::PrimitiveType primitiveType)
+    {
+        const size_t l_InvalidMeshIndex = std::numeric_limits<size_t>::max();
+        if (primitiveType == MeshComponent::PrimitiveType::None)
+        {
+            return l_InvalidMeshIndex;
+        }
+
+        const size_t l_PrimitiveSlot = static_cast<size_t>(primitiveType) - 1;
+        if (l_PrimitiveSlot >= m_PrimitiveMeshIndices.size())
+        {
+            return l_InvalidMeshIndex;
+        }
+
+        const size_t l_ExistingIndex = m_PrimitiveMeshIndices[l_PrimitiveSlot];
+        if (l_ExistingIndex != l_InvalidMeshIndex && l_ExistingIndex < m_GeometryCache.size())
+        {
+            return l_ExistingIndex;
+        }
+
+        Geometry::Mesh l_PrimitiveMesh{};
+        switch (primitiveType)
+        {
+        case MeshComponent::PrimitiveType::Cube:
+            l_PrimitiveMesh = BuildPrimitiveCubeMesh();
+            break;
+        case MeshComponent::PrimitiveType::Sphere:
+            l_PrimitiveMesh = BuildPrimitiveSphereMesh();
+            break;
+        case MeshComponent::PrimitiveType::Quad:
+            l_PrimitiveMesh = BuildPrimitiveQuadMesh();
+            break;
+        default:
+            return l_InvalidMeshIndex;
+        }
+
+        const int32_t l_MaterialIndex = static_cast<int32_t>(m_Materials.size());
+        Geometry::Material l_Material{};
+        l_Material.BaseColorFactor = { 1.0f, 1.0f, 1.0f, 1.0f };
+        l_Material.MetallicFactor = 0.0f;
+        l_Material.RoughnessFactor = 1.0f;
+        l_Material.BaseColorTextureSlot = 0;
+        m_Materials.push_back(l_Material);
+
+        l_PrimitiveMesh.MaterialIndex = l_MaterialIndex;
+        m_GeometryCache.push_back(std::move(l_PrimitiveMesh));
+
+        const size_t l_NewIndex = m_GeometryCache.size() - 1;
+        m_PrimitiveMeshIndices[l_PrimitiveSlot] = l_NewIndex;
+        return l_NewIndex;
+    }
+
+    void Renderer::EnsurePrimitiveMeshesInCache()
+    {
+        if (!m_Registry)
+        {
+            return;
+        }
+
+        const auto& l_Entities = m_Registry->GetEntities();
+        const size_t l_InvalidMeshIndex = std::numeric_limits<size_t>::max();
+
+        for (ECS::Entity it_Entity : l_Entities)
+        {
+            if (!m_Registry->HasComponent<MeshComponent>(it_Entity))
+            {
+                continue;
+            }
+
+            MeshComponent& l_Component = m_Registry->GetComponent<MeshComponent>(it_Entity);
+            if (l_Component.m_Primitive == MeshComponent::PrimitiveType::None)
+            {
+                continue;
+            }
+
+            if (l_Component.m_MeshIndex != l_InvalidMeshIndex && l_Component.m_MeshIndex < m_GeometryCache.size())
+            {
+                continue;
+            }
+
+            const size_t l_PrimitiveSlot = static_cast<size_t>(l_Component.m_Primitive) - 1;
+            if (l_PrimitiveSlot < m_PrimitiveMeshIndices.size())
+            {
+                const size_t l_KnownIndex = m_PrimitiveMeshIndices[l_PrimitiveSlot];
+                if (l_KnownIndex != l_InvalidMeshIndex && l_KnownIndex < m_GeometryCache.size())
+                {
+                    // Reuse the cached primitive mesh so entities can render without reimporting assets.
+                    l_Component.m_MeshIndex = l_KnownIndex;
+                    continue;
+                }
+            }
+
+            const size_t l_NewIndex = CreatePrimitiveMeshInCache(l_Component.m_Primitive);
+            if (l_NewIndex != l_InvalidMeshIndex)
+            {
+                // Primitives now cache mesh indices so upload and draw paths can treat them like imported meshes.
+                l_Component.m_MeshIndex = l_NewIndex;
+            }
+        }
+    }
+
     void Renderer::UploadMeshFromCache()
     {
+        struct UploadGuard
+        {
+            bool& m_Flag;
+            explicit UploadGuard(bool& flag) : m_Flag(flag)
+            {
+                m_Flag = true;
+            }
+            ~UploadGuard()
+            {
+                m_Flag = false;
+            }
+        };
+
+        UploadGuard l_UploadGuard(m_IsUploadingMeshes);
         // Ensure no GPU operations are using the old buffers before reallocating resources.
         vkWaitForFences(Startup::GetDevice(), 1, &m_ResourceFence, VK_TRUE, UINT64_MAX);
+        
+        // Prebuild primitive meshes so this upload includes their geometry and draw metadata.
+        EnsurePrimitiveMeshesInCache();
 
         // Ensure the GPU-visible material table matches the CPU cache before geometry uploads begin.
         EnsureMaterialBufferCapacity(m_Materials.size());
@@ -1718,7 +2047,7 @@ namespace Trident
                 MeshComponent& l_Component = m_Registry->GetComponent<MeshComponent>(it_Entity);
                 if (l_Component.m_Primitive != MeshComponent::PrimitiveType::None && l_Component.m_MeshIndex == std::numeric_limits<size_t>::max())
                 {
-                    // TODO: Generate renderer-side draw info when procedural primitives acquire baked geometry.
+                    // Primitives are expected to resolve mesh indices during cache preparation.
                     continue;
                 }
 
@@ -2561,8 +2890,12 @@ namespace Trident
 
             if (l_MeshComponent.m_Primitive != MeshComponent::PrimitiveType::None && l_MeshComponent.m_MeshIndex == std::numeric_limits<size_t>::max())
             {
-                // TODO: Once primitives upload procedural vertex/index buffers, enqueue them here.
-                continue;
+                // Ensure primitives have mesh indices so they can participate in draw command gathering.
+                l_MeshComponent.m_MeshIndex = GetOrCreatePrimitiveMeshIndex(l_MeshComponent.m_Primitive);
+                if (l_MeshComponent.m_MeshIndex == std::numeric_limits<size_t>::max())
+                {
+                    continue;
+                }
             }
 
             if (l_MeshComponent.m_MeshIndex >= m_MeshDrawInfo.size())

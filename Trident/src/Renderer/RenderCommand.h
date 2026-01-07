@@ -56,6 +56,8 @@ namespace Trident
         static size_t GetModelCount();
         // Allow editor tooling to resolve texture slots on demand when authors request explicit reloads.
         static int32_t ResolveTextureSlot(const std::string& texturePath);
+        // Provide mesh indices for primitives so authoring actions can spawn immediately renderable shapes.
+        static size_t GetOrCreatePrimitiveMeshIndex(MeshComponent::PrimitiveType primitiveType);
         // Mirror the AI debug stats so UI panels can surface runtime information without poking renderer internals.
         static Renderer::AiDebugStats GetAiDebugStats();
         // Allow tooling to adjust the AI blend strength without reaching into the renderer singleton directly.

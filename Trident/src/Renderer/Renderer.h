@@ -161,6 +161,9 @@ namespace Trident
         // when necessary. This keeps editor tooling responsive when authors tweak materials.
         int32_t ResolveTextureSlot(const std::string& texturePath);
 
+        // Provide a mesh index for editor primitives so draw data can be generated immediately.
+        size_t GetOrCreatePrimitiveMeshIndex(MeshComponent::PrimitiveType primitiveType);
+
         // Lightweight wrapper describing an ImGui-ready texture along with the Vulkan
         // resources required to keep it alive for the duration of the renderer.
         struct ImGuiTexture
@@ -330,6 +333,8 @@ namespace Trident
         void EnsureSkinningBufferCapacity(size_t requiredMatrices);
         void RefreshBonePaletteDescriptors();
         void PrepareBonePaletteBuffer(uint32_t imageIndex);
+        size_t CreatePrimitiveMeshInCache(MeshComponent::PrimitiveType primitiveType);
+        void EnsurePrimitiveMeshesInCache();
 
         // Swapchain
         Swapchain m_Swapchain;
@@ -387,6 +392,9 @@ namespace Trident
         std::vector<MeshDrawInfo> m_MeshDrawInfo;           // Cached draw metadata for each uploaded mesh.
         std::vector<MeshDrawCommand> m_MeshDrawCommands;    // Mesh draw list gathered per-frame from the ECS registry.
         std::vector<Geometry::Mesh> m_GeometryCache;        // CPU-side copy of uploaded meshes for incremental rebuilds.
+        std::array<size_t, 3> m_PrimitiveMeshIndices{ std::numeric_limits<size_t>::max(),
+        std::numeric_limits<size_t>::max(), std::numeric_limits<size_t>::max() };
+        bool m_IsUploadingMeshes = false;
 
         // Storage for ImGui textures (such as file icons) so their Vulkan resources
         // remain valid until the renderer explicitly destroys them.

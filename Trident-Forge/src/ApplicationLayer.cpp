@@ -698,7 +698,7 @@ void ApplicationLayer::CreatePrimitiveEntity(PrimitiveType type)
     // Attach a mesh component so the renderer recognises the entity as drawable geometry.
     Trident::MeshComponent& l_MeshComponent = l_Registry.AddComponent<Trident::MeshComponent>(l_NewEntity);
     l_MeshComponent.m_Visible = true;
-    // TODO: Wire specific mesh indices once the renderer exposes procedural primitives for these shapes.
+
     switch (type)
     {
     case PrimitiveType::Cube:
@@ -714,7 +714,8 @@ void ApplicationLayer::CreatePrimitiveEntity(PrimitiveType type)
         l_MeshComponent.m_Primitive = Trident::MeshComponent::PrimitiveType::None;
         break;
     }
-    // TODO: Promote primitives into a dedicated authoring path once automatic mesh assignment is available.
+    // Assign a mesh index immediately so primitives can build draw info and render without special cases.
+    l_MeshComponent.m_MeshIndex = Trident::RenderCommand::GetOrCreatePrimitiveMeshIndex(l_MeshComponent.m_Primitive);
 
     // Assign a tag that reads clearly in the hierarchy, ensuring duplicates receive numbered suffixes.
     std::string l_BaseTag = "Primitive";
