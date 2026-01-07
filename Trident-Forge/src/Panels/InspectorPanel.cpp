@@ -306,6 +306,159 @@ namespace EditorPanels
             }
         }
 
+        // Light component UI shows light type, color, intensity, and direction or range controls.
+        if (m_Registry->HasComponent<Trident::LightComponent>(m_SelectedEntity))
+        {
+            l_HasAnyComponent = true;
+
+            auto& l_Light = m_Registry->GetComponent<Trident::LightComponent>(m_SelectedEntity);
+            if (ImGui::CollapsingHeader("Light"))
+            {
+                int l_TypeIndex = (l_Light.m_Type == Trident::LightComponent::Type::Directional) ? 0 : 1;
+                const char* l_TypeItems[] = { "Directional", "Point" };
+                if (ImGui::Combo("Type", &l_TypeIndex, l_TypeItems, 2))
+                {
+                    l_Light.m_Type = (l_TypeIndex == 0)
+                        ? Trident::LightComponent::Type::Directional
+                        : Trident::LightComponent::Type::Point;
+                }
+
+                ImGui::ColorEdit3("Color", &l_Light.m_Color.x);
+                ImGui::DragFloat("Intensity", &l_Light.m_Intensity, 0.1f, 0.0f, 100.0f);
+                ImGui::Checkbox("Enabled", &l_Light.m_Enabled);
+                ImGui::Checkbox("Shadow Caster", &l_Light.m_ShadowCaster);
+
+                if (l_Light.m_Type == Trident::LightComponent::Type::Directional)
+                {
+                    ImGui::DragFloat3("Direction", &l_Light.m_Direction.x, 0.1f);
+                }
+                else
+                {
+                    ImGui::DragFloat("Range", &l_Light.m_Range, 0.1f, 0.0f, 1000.0f);
+                }
+            }
+        }
+
+        // Sprite component UI shows texture binding, tint, UV settings, and atlas controls.
+        if (m_Registry->HasComponent<Trident::SpriteComponent>(m_SelectedEntity))
+        {
+            l_HasAnyComponent = true;
+
+            auto& l_Sprite = m_Registry->GetComponent<Trident::SpriteComponent>(m_SelectedEntity);
+            if (ImGui::CollapsingHeader("Sprite"))
+            {
+                ImGui::Checkbox("Visible", &l_Sprite.m_Visible);
+                ImGui::ColorEdit4("Tint", &l_Sprite.m_TintColor.x);
+                ImGui::DragFloat2("UV Scale", &l_Sprite.m_UVScale.x, 0.01f);
+                ImGui::DragFloat2("UV Offset", &l_Sprite.m_UVOffset.x, 0.01f);
+                ImGui::DragFloat("Tiling Factor", &l_Sprite.m_TilingFactor, 0.01f, 0.0f, 100.0f);
+
+                char l_TextureBuffer[256];
+                std::memset(l_TextureBuffer, 0, sizeof(l_TextureBuffer));
+                std::strncpy(l_TextureBuffer, l_Sprite.m_TextureId.c_str(), sizeof(l_TextureBuffer) - 1);
+                if (ImGui::InputText("Texture Id", l_TextureBuffer, sizeof(l_TextureBuffer)))
+                {
+                    l_Sprite.m_TextureId = l_TextureBuffer;
+                }
+
+                ImGui::Checkbox("Use Material Override", &l_Sprite.m_UseMaterialOverride);
+
+                char l_MaterialBuffer[256];
+                std::memset(l_MaterialBuffer, 0, sizeof(l_MaterialBuffer));
+                std::strncpy(l_MaterialBuffer, l_Sprite.m_MaterialOverrideId.c_str(), sizeof(l_MaterialBuffer) - 1);
+                if (ImGui::InputText("Material Id", l_MaterialBuffer, sizeof(l_MaterialBuffer)))
+                {
+                    l_Sprite.m_MaterialOverrideId = l_MaterialBuffer;
+                }
+
+                ImGui::InputInt2("Atlas Tiles", &l_Sprite.m_AtlasTiles.x);
+                ImGui::InputInt("Atlas Index", &l_Sprite.m_AtlasIndex);
+                ImGui::DragFloat("Animation Speed", &l_Sprite.m_AnimationSpeed, 0.01f, 0.0f, 100.0f);
+                ImGui::DragFloat("Sort Offset", &l_Sprite.m_SortOffset, 0.01f, -1000.0f, 1000.0f);
+            }
+        }
+
+        // Texture component UI shows the texture path, slot assignment, and dirty state.
+        if (m_Registry->HasComponent<Trident::TextureComponent>(m_SelectedEntity))
+        {
+            l_HasAnyComponent = true;
+
+            auto& l_Texture = m_Registry->GetComponent<Trident::TextureComponent>(m_SelectedEntity);
+            if (ImGui::CollapsingHeader("Texture"))
+            {
+                char l_PathBuffer[256];
+                std::memset(l_PathBuffer, 0, sizeof(l_PathBuffer));
+                std::strncpy(l_PathBuffer, l_Texture.m_TexturePath.c_str(), sizeof(l_PathBuffer) - 1);
+                if (ImGui::InputText("Texture Path", l_PathBuffer, sizeof(l_PathBuffer)))
+                {
+                    l_Texture.m_TexturePath = l_PathBuffer;
+                }
+
+                ImGui::InputInt("Texture Slot", &l_Texture.m_TextureSlot);
+                ImGui::Checkbox("Dirty", &l_Texture.m_IsDirty);
+            }
+        }
+
+        // Animation component UI shows asset identifiers, playback state, and timing controls.
+        if (m_Registry->HasComponent<Trident::AnimationComponent>(m_SelectedEntity))
+        {
+            l_HasAnyComponent = true;
+
+            auto& l_Animation = m_Registry->GetComponent<Trident::AnimationComponent>(m_SelectedEntity);
+            if (ImGui::CollapsingHeader("Animation"))
+            {
+                char l_SkeletonBuffer[256];
+                std::memset(l_SkeletonBuffer, 0, sizeof(l_SkeletonBuffer));
+                std::strncpy(l_SkeletonBuffer, l_Animation.m_SkeletonAssetId.c_str(), sizeof(l_SkeletonBuffer) - 1);
+                if (ImGui::InputText("Skeleton Asset", l_SkeletonBuffer, sizeof(l_SkeletonBuffer)))
+                {
+                    l_Animation.m_SkeletonAssetId = l_SkeletonBuffer;
+                }
+
+                char l_AnimationBuffer[256];
+                std::memset(l_AnimationBuffer, 0, sizeof(l_AnimationBuffer));
+                std::strncpy(l_AnimationBuffer, l_Animation.m_AnimationAssetId.c_str(), sizeof(l_AnimationBuffer) - 1);
+                if (ImGui::InputText("Animation Asset", l_AnimationBuffer, sizeof(l_AnimationBuffer)))
+                {
+                    l_Animation.m_AnimationAssetId = l_AnimationBuffer;
+                }
+
+                char l_ClipBuffer[256];
+                std::memset(l_ClipBuffer, 0, sizeof(l_ClipBuffer));
+                std::strncpy(l_ClipBuffer, l_Animation.m_CurrentClip.c_str(), sizeof(l_ClipBuffer) - 1);
+                if (ImGui::InputText("Current Clip", l_ClipBuffer, sizeof(l_ClipBuffer)))
+                {
+                    l_Animation.m_CurrentClip = l_ClipBuffer;
+                }
+
+                ImGui::DragFloat("Current Time", &l_Animation.m_CurrentTime, 0.01f, 0.0f, 10000.0f);
+                ImGui::DragFloat("Playback Speed", &l_Animation.m_PlaybackSpeed, 0.01f, 0.0f, 10.0f);
+                ImGui::Checkbox("Looping", &l_Animation.m_IsLooping);
+                ImGui::Checkbox("Playing", &l_Animation.m_IsPlaying);
+            }
+        }
+
+        // Script component UI shows script path and runtime execution flags.
+        if (m_Registry->HasComponent<Trident::ScriptComponent>(m_SelectedEntity))
+        {
+            l_HasAnyComponent = true;
+
+            auto& l_Script = m_Registry->GetComponent<Trident::ScriptComponent>(m_SelectedEntity);
+            if (ImGui::CollapsingHeader("Script"))
+            {
+                char l_ScriptBuffer[256];
+                std::memset(l_ScriptBuffer, 0, sizeof(l_ScriptBuffer));
+                std::strncpy(l_ScriptBuffer, l_Script.m_ScriptPath.c_str(), sizeof(l_ScriptBuffer) - 1);
+                if (ImGui::InputText("Script Path", l_ScriptBuffer, sizeof(l_ScriptBuffer)))
+                {
+                    l_Script.m_ScriptPath = l_ScriptBuffer;
+                }
+
+                ImGui::Checkbox("Auto Start", &l_Script.m_AutoStart);
+                ImGui::Checkbox("Running", &l_Script.m_IsRunning);
+            }
+        }
+
         if (!l_HasAnyComponent)
         {
             ImGui::TextWrapped("Selected entity has no recognised components.");
