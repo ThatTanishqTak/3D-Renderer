@@ -611,6 +611,15 @@ def export_model(a_Model: InterpolationUNet, a_Config: TrainingConfig) -> None:
     # Export with a conservative opset so the bundled MSVC/VS2022 runtime (IR 11)
     # can parse the graph. If the runtime is upgraded we can revisit the cap to
     # take advantage of newer operator kernels.
+    # onnxscript is required by torch.onnx.export; check early to give a clear fix.
+    try:
+        import onnxscript  # noqa: F401
+    except ImportError as l_Error:
+        raise SystemExit(
+            "onnxscript is required to export the ONNX model. "
+            "Install it with: pip install onnxscript"
+        ) from l_Error
+
     torch.onnx.export(
         l_WrappedModel,
         l_DummyInput,

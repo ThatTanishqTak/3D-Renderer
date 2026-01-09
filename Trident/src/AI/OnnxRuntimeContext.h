@@ -48,6 +48,18 @@ namespace Trident
             void ConfigureThreading(uint32_t interOpThreads, uint32_t intraOpThreads);
 
             /**
+             * Configure the runtime from a settings file so projects can tune
+             * threading and execution provider selection without recompiling.
+             */
+            void ConfigureFromSettingsFile(const std::filesystem::path& settingsPath);
+
+            /**
+             * Select the execution provider by name. Use "auto" to pick a GPU
+             * provider when available, otherwise fall back to CPU.
+             */
+            void ConfigureExecutionProvider(std::string_view providerName);
+
+            /**
              * Load (or fetch from cache) the ONNX model stored at the provided
              * path. When successful the model becomes addressable via
              * modelName.
@@ -94,11 +106,20 @@ namespace Trident
             std::filesystem::path SanitizeModelPath(const std::filesystem::path& modelPath) const;
             bool HandleModelLoadFailure(const std::filesystem::path& modelPath, const Ort::Exception& runtimeError) const;
             std::optional<uint64_t> ParseMaxSupportedIrVersion(std::string_view runtimeMessage) const;
+            void ResetSessionOptions();
+            void ApplyThreadingToSessionOptions();
+            bool TryConfigureGpuExecutionProvider();
+            std::vector<std::string> QueryAvailableProviders() const;
+            std::string NormalizeProviderName(std::string_view providerName) const;
+            void LogRuntimeConfiguration() const;
 
             Ort::Env m_Environment;
             Ort::SessionOptions m_DefaultSessionOptions;
             std::unordered_map<std::string, std::shared_ptr<Ort::Session>> m_Sessions;
             std::mutex m_SessionMutex;
+            std::string m_SelectedExecutionProvider;
+            uint32_t m_InterOpThreads = s_DefaultInterOpThreads;
+            uint32_t m_IntraOpThreads = s_DefaultIntraOpThreads;
 
             static constexpr OrtLoggingLevel s_DefaultLogLevel = ORT_LOGGING_LEVEL_WARNING;
             static constexpr uint32_t s_DefaultInterOpThreads = 1;

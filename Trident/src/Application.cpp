@@ -1,9 +1,11 @@
-﻿#include "Application.h"
+﻿﻿#include "Application.h"
 
 #include "Renderer/RenderCommand.h"
 #include "Events/ApplicationEvents.h"
 #include "Application/Input.h"
+#include "AI/OnnxRuntimeContext.h"
 
+#include <filesystem>
 #include <utility>
 #include <stdexcept>
 
@@ -41,6 +43,10 @@ namespace Trident
                 OnEvent(event);
             });
         m_Startup = std::make_unique<Startup>(*m_Window);
+
+        // Configure ONNX runtime settings early so AI sessions inherit the desired provider and threading setup.
+        const std::filesystem::path l_OnnxSettingsPath = "TridentOnnxRuntime.ini";
+        AI::OnnxRuntimeContext::Get().ConfigureFromSettingsFile(l_OnnxSettingsPath);
 
         RenderCommand::Init();
 

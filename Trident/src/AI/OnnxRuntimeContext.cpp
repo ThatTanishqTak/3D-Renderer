@@ -1,7 +1,10 @@
 #include "AI/OnnxRuntimeContext.h"
 
+#include "Core/Utilities.h"
+
 #include <algorithm>
 #include <charconv>
+#include <cctype>
 #include <fstream>
 #include <functional>
 #include <numeric>
@@ -20,7 +23,7 @@ namespace Trident
             return s_Instance;
         }
 
-        OnnxRuntimeContext::OnnxRuntimeContext() : m_Environment{ s_DefaultLogLevel, "TridentOnnx" }, m_DefaultSessionOptions{}
+        OnnxRuntimeContext::OnnxRuntimeContext() : m_Environment{ s_DefaultLogLevel, "TridentOnnx" }, m_DefaultSessionOptions{}, m_SelectedExecutionProvider("CPUExecutionProvider")
         {
             // Configure a predictable baseline that we can tweak via ConfigureThreading.
             m_DefaultSessionOptions.SetInterOpNumThreads(s_DefaultInterOpThreads);
@@ -34,8 +37,139 @@ namespace Trident
             const uint32_t l_InterOp = std::max<uint32_t>(1, interOpThreads);
             const uint32_t l_IntraOp = std::max<uint32_t>(1, intraOpThreads);
 
-            m_DefaultSessionOptions.SetInterOpNumThreads(static_cast<int>(l_InterOp));
-            m_DefaultSessionOptions.SetIntraOpNumThreads(static_cast<int>(l_IntraOp));
+            m_InterOpThreads = l_InterOp;
+            m_IntraOpThreads = l_IntraOp;
+            ApplyThreadingToSessionOptions();
+            LogRuntimeConfiguration();
+        }
+
+        void OnnxRuntimeContext::ConfigureFromSettingsFile(const std::filesystem::path& settingsPath)
+        {
+            // Read a simple key=value file so users can tune threading and provider selection without recompiling.
+            std::ifstream l_Stream(settingsPath);
+            if (!l_Stream)
+            {
+                TR_CORE_INFO("ONNX runtime settings file '{}' was not found. Defaults will be used.", settingsPath.string());
+                LogRuntimeConfiguration();
+                return;
+            }
+
+            std::optional<uint32_t> l_InterOpThreads;
+            std::optional<uint32_t> l_IntraOpThreads;
+            std::optional<std::string> l_Provider;
+            std::string l_Line;
+
+            while (std::getline(l_Stream, l_Line))
+            {
+                // Strip whitespace so key parsing is forgiving for hand edited files.
+                l_Line.erase(std::remove_if(l_Line.begin(), l_Line.end(), [](unsigned char it_Char)
+                    {
+                        return std::isspace(it_Char) != 0;
+                    }), l_Line.end());
+
+                if (l_Line.empty() || l_Line[0] == '#' || l_Line[0] == ';')
+                {
+                    continue;
+                }
+
+                const size_t l_Equals = l_Line.find('=');
+                if (l_Equals == std::string::npos)
+                {
+                    continue;
+                }
+
+                const std::string l_Key = l_Line.substr(0, l_Equals);
+                const std::string l_Value = l_Line.substr(l_Equals + 1);
+
+                if (l_Key == "onnx.inter_op_threads")
+                {
+                    uint32_t l_Parsed = 0;
+                    const char* l_Begin = l_Value.c_str();
+                    const char* l_End = l_Begin + l_Value.size();
+                    const std::from_chars_result l_Result = std::from_chars(l_Begin, l_End, l_Parsed);
+                    if (l_Result.ec == std::errc{})
+                    {
+                        l_InterOpThreads = l_Parsed;
+                    }
+                }
+                else if (l_Key == "onnx.intra_op_threads")
+                {
+                    uint32_t l_Parsed = 0;
+                    const char* l_Begin = l_Value.c_str();
+                    const char* l_End = l_Begin + l_Value.size();
+                    const std::from_chars_result l_Result = std::from_chars(l_Begin, l_End, l_Parsed);
+                    if (l_Result.ec == std::errc{})
+                    {
+                        l_IntraOpThreads = l_Parsed;
+                    }
+                }
+                else if (l_Key == "onnx.execution_provider")
+                {
+                    l_Provider = l_Value;
+                }
+            }
+
+            if (l_InterOpThreads || l_IntraOpThreads)
+            {
+                const uint32_t l_ResolvedInterOp = l_InterOpThreads.value_or(m_InterOpThreads);
+                const uint32_t l_ResolvedIntraOp = l_IntraOpThreads.value_or(m_IntraOpThreads);
+                ConfigureThreading(l_ResolvedInterOp, l_ResolvedIntraOp);
+            }
+
+            if (l_Provider)
+            {
+                ConfigureExecutionProvider(*l_Provider);
+            }
+            else
+            {
+                LogRuntimeConfiguration();
+            }
+        }
+
+        void OnnxRuntimeContext::ConfigureExecutionProvider(std::string_view providerName)
+        {
+            std::string l_ProviderLower(providerName);
+            std::transform(l_ProviderLower.begin(), l_ProviderLower.end(), l_ProviderLower.begin(), [](unsigned char it_Char)
+                {
+                    return static_cast<char>(std::tolower(it_Char));
+                });
+
+            const std::string l_Normalized = NormalizeProviderName(providerName);
+
+            if (l_ProviderLower == "auto" || l_ProviderLower == "gpu")
+            {
+                if (!TryConfigureGpuExecutionProvider())
+                {
+                    m_SelectedExecutionProvider = "CPUExecutionProvider";
+                    ResetSessionOptions();
+                }
+
+                LogRuntimeConfiguration();
+                return;
+            }
+
+            ResetSessionOptions();
+
+            const std::vector<std::string> l_AvailableProviders = QueryAvailableProviders();
+            const auto l_It = std::find(l_AvailableProviders.begin(), l_AvailableProviders.end(), l_Normalized);
+            if (l_It == l_AvailableProviders.end())
+            {
+                TR_CORE_WARN("Requested ONNX execution provider '{}' was not available. Falling back to CPU.", l_Normalized);
+                m_SelectedExecutionProvider = "CPUExecutionProvider";
+                ResetSessionOptions();
+                LogRuntimeConfiguration();
+                return;
+            }
+
+            const OrtApi& l_Api = Ort::GetApi();
+            const OrtStatus* l_Status = l_Api.SessionOptionsAppendExecutionProvider(m_DefaultSessionOptions, l_Normalized.c_str(), nullptr);
+            if (l_Status != nullptr)
+            {
+                Ort::ThrowOnError(l_Status);
+            }
+
+            m_SelectedExecutionProvider = l_Normalized;
+            LogRuntimeConfiguration();
         }
 
         const Ort::Session& OnnxRuntimeContext::LoadModel(std::string_view modelName, const std::filesystem::path& modelPath)
@@ -281,6 +415,114 @@ namespace Trident
             }
 
             return l_MaxSupportedIr;
+        }
+
+        void OnnxRuntimeContext::ResetSessionOptions()
+        {
+            // Rebuild session options so execution provider changes do not accumulate stale providers.
+            m_DefaultSessionOptions = Ort::SessionOptions{};
+            ApplyThreadingToSessionOptions();
+            m_DefaultSessionOptions.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_EXTENDED);
+        }
+
+        void OnnxRuntimeContext::ApplyThreadingToSessionOptions()
+        {
+            // Apply the cached thread counts to the session options.
+            m_DefaultSessionOptions.SetInterOpNumThreads(static_cast<int>(m_InterOpThreads));
+            m_DefaultSessionOptions.SetIntraOpNumThreads(static_cast<int>(m_IntraOpThreads));
+        }
+
+        bool OnnxRuntimeContext::TryConfigureGpuExecutionProvider()
+        {
+#ifdef _WIN32
+            const std::vector<std::string> l_AvailableProviders = QueryAvailableProviders();
+
+            auto l_FindProvider = [&](std::string_view providerName) -> bool
+                {
+                    return std::find(l_AvailableProviders.begin(), l_AvailableProviders.end(), providerName) != l_AvailableProviders.end();
+                };
+
+            const std::string l_DmlProviderName = "DmlExecutionProvider";
+            const std::string l_DmlShortName = "DML";
+
+            std::string l_SelectedProvider;
+            if (l_FindProvider(l_DmlProviderName))
+            {
+                l_SelectedProvider = l_DmlProviderName;
+            }
+            else if (l_FindProvider(l_DmlShortName))
+            {
+                l_SelectedProvider = l_DmlShortName;
+            }
+
+            if (l_SelectedProvider.empty())
+            {
+                TR_CORE_INFO("No GPU execution provider was reported by ONNX runtime. Falling back to CPU.");
+                return false;
+            }
+
+            ResetSessionOptions();
+
+            const OrtApi& l_Api = Ort::GetApi();
+            const OrtStatus* l_Status = l_Api.SessionOptionsAppendExecutionProvider(m_DefaultSessionOptions, l_SelectedProvider.c_str(), nullptr);
+            if (l_Status != nullptr)
+            {
+                Ort::ThrowOnError(l_Status);
+            }
+
+            m_SelectedExecutionProvider = l_SelectedProvider;
+            return true;
+#else
+            TR_CORE_INFO("GPU execution providers are only checked on Windows. Falling back to CPU.");
+            return false;
+#endif
+        }
+
+        std::vector<std::string> OnnxRuntimeContext::QueryAvailableProviders() const
+        {
+            // Query the provider list so configuration can validate the requested provider.
+            char** l_ProviderNames = nullptr;
+            int l_ProviderCount = 0;
+            const OrtApi& l_Api = Ort::GetApi();
+            Ort::ThrowOnError(l_Api.GetAvailableProviders(&l_ProviderNames, &l_ProviderCount));
+
+            std::vector<std::string> l_Providers;
+            l_Providers.reserve(static_cast<size_t>(l_ProviderCount));
+            for (int it_Index = 0; it_Index < l_ProviderCount; ++it_Index)
+            {
+                l_Providers.emplace_back(l_ProviderNames[it_Index]);
+            }
+
+            l_Api.ReleaseAvailableProviders(l_ProviderNames, l_ProviderCount);
+            return l_Providers;
+        }
+
+        std::string OnnxRuntimeContext::NormalizeProviderName(std::string_view providerName) const
+        {
+            // Normalize strings so configuration remains case insensitive.
+            std::string l_Normalized(providerName);
+            std::transform(l_Normalized.begin(), l_Normalized.end(), l_Normalized.begin(), [](unsigned char it_Char)
+                {
+                    return static_cast<char>(std::tolower(it_Char));
+                });
+
+            if (l_Normalized == "dml" || l_Normalized == "directml")
+            {
+                return "DmlExecutionProvider";
+            }
+
+            if (l_Normalized == "cpu")
+            {
+                return "CPUExecutionProvider";
+            }
+
+            return std::string(providerName);
+        }
+
+        void OnnxRuntimeContext::LogRuntimeConfiguration() const
+        {
+            TR_CORE_INFO("ONNX runtime configured provider '{}' with inter-op threads {} and intra-op threads {}.",
+                m_SelectedExecutionProvider, m_InterOpThreads, m_IntraOpThreads);
         }
     }
 }
