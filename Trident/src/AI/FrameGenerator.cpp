@@ -96,6 +96,12 @@ namespace Trident
                 return false;
             }
 
+            if (!m_InputBindings.empty())
+            {
+                m_InputStagingBuffer.resize(m_InputBindings.front().m_ElementCount);
+            }
+
+
             // The model metadata is ready, so spin up the background worker that will service inference jobs.
             m_WorkerShouldStop = false;
             m_WorkerThread = std::thread(&FrameGenerator::WorkerLoop, this);
@@ -126,13 +132,48 @@ namespace Trident
                 return false;
             }
 
+            std::vector<float> l_StagingBuffer;
+            {
+                // The staging buffer is shared with the worker thread through the pool, so guard it with the queue mutex.
+                std::scoped_lock l_Lock(m_QueueMutex);
+                if (!m_InputStagingBuffer.empty())
+                {
+                    l_StagingBuffer = std::move(m_InputStagingBuffer);
+                }
+                else if (!m_InputBufferPool.empty())
+                {
+                    l_StagingBuffer = std::move(m_InputBufferPool.front());
+                    m_InputBufferPool.pop_front();
+                }
+            }
+
+            if (l_StagingBuffer.size() != l_PrimaryInput.m_ElementCount)
+            {
+                l_StagingBuffer.resize(l_PrimaryInput.m_ElementCount);
+            }
+
+            // Copy the frame into a reusable staging buffer so we do not allocate a new vector each frame.
+            std::copy(frameData.begin(), frameData.end(), l_StagingBuffer.begin());
+
             FrameJob l_Job{};
-            l_Job.m_InputTensor.assign(frameData.begin(), frameData.end()); // Copy into a stable buffer the worker thread can consume.
+            l_Job.m_InputTensor = std::move(l_StagingBuffer);
 
             {
                 std::scoped_lock l_Lock(m_QueueMutex);
                 m_PendingJobs.emplace_back(std::move(l_Job));
                 m_PendingJobCount = m_PendingJobs.size();
+                if (m_InputStagingBuffer.empty())
+                {
+                    if (!m_InputBufferPool.empty())
+                    {
+                        m_InputStagingBuffer = std::move(m_InputBufferPool.front());
+                        m_InputBufferPool.pop_front();
+                    }
+                    else
+                    {
+                        m_InputStagingBuffer.resize(l_PrimaryInput.m_ElementCount);
+                    }
+                }
             }
             m_QueueCondition.notify_one();
 
@@ -153,8 +194,14 @@ namespace Trident
                 return false;
             }
 
-            a_OutOutput = std::move(m_CompletedOutputs.front());
+            std::vector<float> l_CompletedBuffer = std::move(m_CompletedOutputs.front());
             m_CompletedOutputs.pop_front();
+
+            // Swap buffers so the caller keeps the output while the old caller buffer returns to the pool for reuse.
+            std::vector<float> l_RecycledBuffer = std::move(a_OutOutput);
+            a_OutOutput = std::move(l_CompletedBuffer);
+            l_RecycledBuffer.clear();
+            m_OutputBufferPool.emplace_back(std::move(l_RecycledBuffer));
 
             return true;
         }
@@ -270,6 +317,8 @@ namespace Trident
             {
                 std::scoped_lock l_Lock(m_QueueMutex);
                 m_PendingJobs.clear();
+                m_InputBufferPool.clear();
+                m_InputStagingBuffer.clear();
                 m_WorkerShouldStop = false;
                 m_PendingJobCount = 0;
             }
@@ -277,6 +326,7 @@ namespace Trident
             {
                 std::scoped_lock l_Lock(m_OutputMutex);
                 m_CompletedOutputs.clear();
+                m_OutputBufferPool.clear();
                 m_LastOutputTensor.clear();
                 m_LastInferenceMilliseconds = 0.0;
                 m_TotalInferenceMilliseconds = 0.0;
@@ -290,6 +340,8 @@ namespace Trident
 
         void FrameGenerator::WorkerLoop()
         {
+            const Ort::MemoryInfo l_CpuMemoryInfo = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
+
             // Process frames submitted by the renderer until shutdown is requested.
             while (true)
             {
@@ -333,7 +385,9 @@ namespace Trident
                     l_InputTensors.reserve(m_InputBindings.size());
 
                     // TODO: Extend this to support multi-input models when the engine begins to leverage them.
-                    Ort::Value l_FrameTensor = m_RuntimeContext->CreateTensorFloat(l_Job.m_InputTensor, m_InputBindings.front().m_Shape);
+                    // The input buffer must stay alive for the duration of the Run call, so it lives in l_Job until after inference finishes.
+                    Ort::Value l_FrameTensor = Ort::Value::CreateTensor<float>(l_CpuMemoryInfo, l_Job.m_InputTensor.data(), l_Job.m_InputTensor.size(),
+                        m_InputBindings.front().m_Shape.data(), m_InputBindings.front().m_Shape.size());
                     l_InputTensors.emplace_back(std::move(l_FrameTensor));
 
                     std::vector<const char*> l_OutputNames;
@@ -341,6 +395,28 @@ namespace Trident
                     for (const TensorBinding& it_Binding : m_OutputBindings)
                     {
                         l_OutputNames.push_back(it_Binding.m_Name.c_str());
+                    }
+
+                    {
+                        // The output buffer pool is shared with the main thread, so always hold the output mutex.
+                        std::scoped_lock l_Lock(m_OutputMutex);
+                        if (!m_OutputBufferPool.empty())
+                        {
+                            l_CombinedOutput = std::move(m_OutputBufferPool.front());
+                            m_OutputBufferPool.pop_front();
+                        }
+                    }
+
+                    l_CombinedOutput.clear();
+                    size_t l_ExpectedOutputElementCount = 0;
+                    for (const TensorBinding& it_Binding : m_OutputBindings)
+                    {
+                        l_ExpectedOutputElementCount += it_Binding.m_ElementCount;
+                    }
+
+                    if (l_ExpectedOutputElementCount > 0)
+                    {
+                        l_CombinedOutput.reserve(l_ExpectedOutputElementCount);
                     }
 
                     // Capture the inference duration so the renderer can expose accurate timing data for debugging.
@@ -370,12 +446,26 @@ namespace Trident
                 catch (const Ort::Exception& l_Exception)
                 {
                     TR_CORE_ERROR("ONNX runtime rejected a frame submission: {}", l_Exception.what());
+                    {
+                        std::scoped_lock l_Lock(m_QueueMutex);
+                        m_InputBufferPool.emplace_back(std::move(l_Job.m_InputTensor));
+                    }
                     continue;
                 }
                 catch (const std::exception& l_Exception)
                 {
                     TR_CORE_ERROR("Unexpected failure during AI frame processing: {}", l_Exception.what());
+                    {
+                        std::scoped_lock l_Lock(m_QueueMutex);
+                        m_InputBufferPool.emplace_back(std::move(l_Job.m_InputTensor));
+                    }
                     continue;
+                }
+
+                {
+                    // Return the input buffer to the pool now that the runtime no longer reads from it.
+                    std::scoped_lock l_Lock(m_QueueMutex);
+                    m_InputBufferPool.emplace_back(std::move(l_Job.m_InputTensor));
                 }
 
                 if (l_CombinedOutput.empty())
@@ -386,14 +476,18 @@ namespace Trident
                         m_LastInferenceMilliseconds = l_RunMilliseconds;
                     }
 
+                    // Recycle the output buffer because no results were produced.
+                    std::scoped_lock l_Lock(m_OutputMutex);
+                    m_OutputBufferPool.emplace_back(std::move(l_CombinedOutput));
                     continue;
                 }
 
                 std::vector<float> l_FinalOutput = std::move(l_CombinedOutput);
                 {
+                    // Output buffers live in the completed queue until consumers pull them, so the pool only holds unused buffers.
                     std::scoped_lock l_Lock(m_OutputMutex);
                     m_LastOutputTensor = l_FinalOutput;
-                    m_CompletedOutputs.emplace_back(l_FinalOutput);
+                    m_CompletedOutputs.emplace_back(std::move(l_FinalOutput));
                     if (l_RecordedTiming)
                     {
                         m_LastInferenceMilliseconds = l_RunMilliseconds;

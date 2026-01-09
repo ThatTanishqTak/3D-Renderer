@@ -128,6 +128,9 @@ namespace Trident
             std::vector<TensorBinding> m_InputBindings;                  // Cached description of model inputs.
             std::vector<TensorBinding> m_OutputBindings;                 // Cached description of model outputs.
             std::vector<float> m_LastOutputTensor;                       // Flattened buffer storing the latest AI result.
+            std::vector<float> m_InputStagingBuffer;                     // Preallocated CPU buffer used to stage incoming frames.
+            std::deque<std::vector<float>> m_InputBufferPool;            // Reusable buffers returned by the worker thread after inference completes.
+            std::deque<std::vector<float>> m_OutputBufferPool;           // Reusable buffers for output aggregation to reduce allocations.
             std::deque<FrameJob> m_PendingJobs;                          // Queue of frames waiting to be processed asynchronously.
             std::deque<std::vector<float>> m_CompletedOutputs;           // Queue of freshly generated AI outputs awaiting consumption.
             mutable std::mutex m_QueueMutex;                             // Guards pending job access. Marked mutable so const inspectors can lock safely.

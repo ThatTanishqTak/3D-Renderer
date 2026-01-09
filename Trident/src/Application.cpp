@@ -1,4 +1,4 @@
-﻿﻿#include "Application.h"
+﻿#include "Application.h"
 
 #include "Renderer/RenderCommand.h"
 #include "Events/ApplicationEvents.h"
