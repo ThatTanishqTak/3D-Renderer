@@ -290,11 +290,12 @@ def parse_arguments() -> TrainingConfig:
         dest="early_stop_min_delta",
         help="Minimum PSNR improvement required to reset the early stopping counter.",
     )
-    #l_Parser.add_argument(
-    #    "--skip-training",
-    #    action="store_true",
-    #    help="Skip dataset loading and emit an untrained export (useful for CI asset refreshes).",
-    #)
+    l_Parser.add_argument(
+        "--skip-training",
+        action="store_true",
+        dest="skip_training",
+        help="Skip dataset loading and emit an untrained export (useful for CI asset refreshes).",
+    )
     l_Parser.add_argument(
         "--input-channels",
         type=int,
@@ -318,8 +319,28 @@ def parse_arguments() -> TrainingConfig:
     )
     l_Args = l_Parser.parse_args()
 
-    #if not l_Args.skip_training and l_Args.dataset is None:
-    #    raise SystemExit("Dataset path is required unless --skip-training is supplied.")
+    # Require dataset input unless skip training is explicitly enabled.
+    if not l_Args.skip_training and l_Args.dataset is None:
+        raise SystemExit("Dataset path is required unless --skip-training is supplied.")
+
+    # Validate dataset contents early to avoid a deeper stack trace during training.
+    if not l_Args.skip_training and l_Args.dataset is not None:
+        l_DatasetRoot = l_Args.dataset
+        if not l_DatasetRoot.exists():
+            raise SystemExit(f"Dataset path does not exist: {l_DatasetRoot}")
+
+        l_HasTriplets = False
+        for it_Sequence in [it_Path for it_Path in l_DatasetRoot.glob("**/*") if it_Path.is_dir()]:
+            l_Frames = sorted(it_Sequence.glob("*.png")) + sorted(it_Sequence.glob("*.jpg"))
+            if len(l_Frames) >= 3:
+                l_HasTriplets = True
+                break
+
+        if not l_HasTriplets:
+            raise SystemExit(
+                "Dataset root does not contain frame sequences with at least three frames. "
+                "Provide extracted frames or use --skip-training to export an untrained model."
+            )
 
     random.seed(l_Args.seed)
     torch.manual_seed(l_Args.seed)
