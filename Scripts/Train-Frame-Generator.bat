@@ -7,10 +7,10 @@ rem          model plus a training checkpoint asset.
 rem Usage:   Train-Frame-Generator.bat <dataset_path>
 rem ============================================================================
 
-rem Prefer an explicit dataset path argument, otherwise default to ../Dataset.
+rem Prefer an explicit dataset path argument, otherwise default to ../Dataset/frame_00*.png.
 set DATASET_PATH=%~1
 if "%DATASET_PATH%"=="" (
-    set DATASET_PATH=%~dp0..\Dataset
+    set DATASET_PATH=%~dp0..\Dataset\frame_00*.png
     echo No dataset argument provided. Using default: %DATASET_PATH%.
     echo Usage: Train-Frame-Generator.bat ^<dataset_path^>
 )

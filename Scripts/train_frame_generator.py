@@ -9,6 +9,7 @@ ONNX so the renderer can load it via ``Renderer::ResolveAiModelPath`` or the
 from __future__ import annotations
 
 import argparse
+import glob
 import json
 import random
 from dataclasses import dataclass
@@ -28,6 +29,7 @@ class TrainingConfig:
     """Container describing the training hyper-parameters."""
 
     dataset_root: Optional[Path]
+    frame_paths: Optional[List[Path]]
     batch_size: int
     epochs: int
     learning_rate: float
@@ -50,18 +52,24 @@ class TrainingConfig:
 class ConsecutiveFrameDataset(Dataset):
     """Dataset that yields pairs of consecutive frames and the ground truth middle frame."""
 
-    def __init__(self, dataset_root: Path, image_size: int) -> None:
+    def __init__(self, dataset_root: Optional[Path], image_size: int, frame_paths: Optional[List[Path]] = None) -> None:
         super().__init__()
         self.m_DatasetRoot = dataset_root
         self.m_ImageSize = image_size
         self.m_Triplets: List[Tuple[Path, Path, Path]] = []
+        self.m_FramePaths = frame_paths
         self.m_Transform = transforms.Compose(
             [
                 transforms.Resize((self.m_ImageSize, self.m_ImageSize)),
                 transforms.ToTensor(),
             ]
         )
-        self._discover_triplets()
+        if self.m_FramePaths is not None:
+            # Use the explicit frame list when a glob pattern is provided.
+            self._discover_triplets_from_frames()
+        else:
+            # Fall back to scanning the dataset root for frame sequences.
+            self._discover_triplets()
 
     def _discover_triplets(self) -> None:
         """Scan the dataset root for frame triplets.
@@ -70,6 +78,9 @@ class ConsecutiveFrameDataset(Dataset):
         names are lexicographically sorted. Any directory with at least three frames
         contributes sliding triplets ``(frame_i, frame_{i+1}, frame_{i+2})``.
         """
+
+        if self.m_DatasetRoot is None:
+            raise FileNotFoundError("Dataset root must be provided when frame paths are not supplied.")
 
         l_Sequences: List[Path] = [it_Path for it_Path in self.m_DatasetRoot.glob("**/*") if it_Path.is_dir()]
         if not l_Sequences:
@@ -91,6 +102,24 @@ class ConsecutiveFrameDataset(Dataset):
             raise FileNotFoundError(
                 f"Dataset root {self.m_DatasetRoot} did not contain any usable frame triplets."
             )
+
+    def _discover_triplets_from_frames(self) -> None:
+        """Build triplets from a flat list of consecutive frames."""
+
+        if self.m_FramePaths is None:
+            raise FileNotFoundError("Frame list must be provided when using a glob dataset pattern.")
+
+        if len(self.m_FramePaths) < 3:
+            raise FileNotFoundError("Frame pattern did not resolve to at least three frames.")
+
+        for l_Index in range(len(self.m_FramePaths) - 2):
+            l_First = self.m_FramePaths[l_Index]
+            l_Second = self.m_FramePaths[l_Index + 1]
+            l_Third = self.m_FramePaths[l_Index + 2]
+            self.m_Triplets.append((l_First, l_Second, l_Third))
+
+        if not self.m_Triplets:
+            raise FileNotFoundError("Frame pattern did not produce any usable frame triplets.")
 
     def __len__(self) -> int:
         return len(self.m_Triplets)
@@ -244,7 +273,12 @@ def parse_arguments() -> TrainingConfig:
     """Parse CLI arguments into a TrainingConfig."""
 
     l_Parser = argparse.ArgumentParser(description=__doc__)
-    l_Parser.add_argument("dataset", type=Path, nargs="?", help="Root directory containing consecutive frame folders.")
+    l_Parser.add_argument(
+        "dataset",
+        type=str,
+        nargs="?",
+        help="Root directory containing consecutive frame folders or a frame glob pattern.",
+    )
     l_Parser.add_argument("--batch-size", type=int, default=8, dest="batch_size")
     l_Parser.add_argument("--epochs", type=int, default=20)
     l_Parser.add_argument("--learning-rate", type=float, default=1e-4, dest="learning_rate")
@@ -323,30 +357,43 @@ def parse_arguments() -> TrainingConfig:
     if not l_Args.skip_training and l_Args.dataset is None:
         raise SystemExit("Dataset path is required unless --skip-training is supplied.")
 
+    l_DatasetRoot: Optional[Path] = None
+    l_FramePaths: Optional[List[Path]] = None
+
     # Validate dataset contents early to avoid a deeper stack trace during training.
     if not l_Args.skip_training and l_Args.dataset is not None:
-        l_DatasetRoot = l_Args.dataset
-        if not l_DatasetRoot.exists():
-            raise SystemExit(f"Dataset path does not exist: {l_DatasetRoot}")
+        l_DatasetInput = l_Args.dataset
+        l_HasWildcard = any(it_Char in l_DatasetInput for it_Char in ["*", "?", "["])
+        if l_HasWildcard:
+            # Treat the dataset input as a glob pattern.
+            l_FramePaths = [Path(it_Path) for it_Path in glob.glob(l_DatasetInput)]
+            l_FramePaths.sort()
+            if len(l_FramePaths) < 3:
+                raise SystemExit("Dataset pattern did not resolve to at least three frames.")
+        else:
+            l_DatasetRoot = Path(l_DatasetInput)
+            if not l_DatasetRoot.exists():
+                raise SystemExit(f"Dataset path does not exist: {l_DatasetRoot}")
 
-        l_HasTriplets = False
-        for it_Sequence in [it_Path for it_Path in l_DatasetRoot.glob("**/*") if it_Path.is_dir()]:
-            l_Frames = sorted(it_Sequence.glob("*.png")) + sorted(it_Sequence.glob("*.jpg"))
-            if len(l_Frames) >= 3:
-                l_HasTriplets = True
-                break
+            l_HasTriplets = False
+            for it_Sequence in [it_Path for it_Path in l_DatasetRoot.glob("**/*") if it_Path.is_dir()]:
+                l_Frames = sorted(it_Sequence.glob("*.png")) + sorted(it_Sequence.glob("*.jpg"))
+                if len(l_Frames) >= 3:
+                    l_HasTriplets = True
+                    break
 
-        if not l_HasTriplets:
-            raise SystemExit(
-                "Dataset root does not contain frame sequences with at least three frames. "
-                "Provide extracted frames or use --skip-training to export an untrained model."
-            )
+            if not l_HasTriplets:
+                raise SystemExit(
+                    "Dataset root does not contain frame sequences with at least three frames. "
+                    "Provide extracted frames or use --skip-training to export an untrained model."
+                )
 
     random.seed(l_Args.seed)
     torch.manual_seed(l_Args.seed)
 
     return TrainingConfig(
-        dataset_root=l_Args.dataset,
+        dataset_root=l_DatasetRoot,
+        frame_paths=l_FramePaths,
         batch_size=l_Args.batch_size,
         epochs=l_Args.epochs,
         learning_rate=l_Args.learning_rate,
@@ -370,10 +417,10 @@ def parse_arguments() -> TrainingConfig:
 def create_dataloaders(a_Config: TrainingConfig) -> Tuple[DataLoader, DataLoader]:
     """Create training and validation data loaders using a configurable split."""
 
-    if a_Config.dataset_root is None:
+    if a_Config.dataset_root is None and a_Config.frame_paths is None:
         raise RuntimeError("Dataset root must be provided when training is enabled.")
 
-    l_Dataset = ConsecutiveFrameDataset(a_Config.dataset_root, a_Config.image_size)
+    l_Dataset = ConsecutiveFrameDataset(a_Config.dataset_root, a_Config.image_size, a_Config.frame_paths)
     if len(l_Dataset) == 0:
         raise RuntimeError("Dataset did not yield any samples.")
 

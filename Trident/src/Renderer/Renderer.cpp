@@ -1230,8 +1230,8 @@ namespace Trident
         m_FrameReadbackChannelMapping = l_FormatInfo.m_ChannelMapping;
         m_ReadbackConfigurationWarningIssued = false;
 
-        TR_CORE_TRACE("Frame readback staging resized to {}x{} ({} bytes per pixel, {} buffers)", l_TargetExtent.width, l_TargetExtent.height,
-            l_FormatInfo.m_BytesPerPixel, l_ImageCount);
+        //TR_CORE_TRACE("Frame readback staging resized to {}x{} ({} bytes per pixel, {} buffers)", l_TargetExtent.width, l_TargetExtent.height,
+        //    l_FormatInfo.m_BytesPerPixel, l_ImageCount);
     }
 
     void Renderer::DestroyReadbackResources()
@@ -4808,7 +4808,7 @@ namespace Trident
         target.m_CurrentLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         target.m_DepthLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
-        TR_CORE_TRACE("Offscreen render target resized to {}x{}", extent.width, extent.height);
+        //TR_CORE_TRACE("Offscreen render target resized to {}x{}", extent.width, extent.height);
     }
 
     bool Renderer::AcquireNextImage(uint32_t& imageIndex, VkFence inFlightFence)
