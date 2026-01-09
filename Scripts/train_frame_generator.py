@@ -290,11 +290,11 @@ def parse_arguments() -> TrainingConfig:
         dest="early_stop_min_delta",
         help="Minimum PSNR improvement required to reset the early stopping counter.",
     )
-    l_Parser.add_argument(
-        "--skip-training",
-        action="store_true",
-        help="Skip dataset loading and emit an untrained export (useful for CI asset refreshes).",
-    )
+    #l_Parser.add_argument(
+    #    "--skip-training",
+    #    action="store_true",
+    #    help="Skip dataset loading and emit an untrained export (useful for CI asset refreshes).",
+    #)
     l_Parser.add_argument(
         "--input-channels",
         type=int,
@@ -318,8 +318,8 @@ def parse_arguments() -> TrainingConfig:
     )
     l_Args = l_Parser.parse_args()
 
-    if not l_Args.skip_training and l_Args.dataset is None:
-        raise SystemExit("Dataset path is required unless --skip-training is supplied.")
+    #if not l_Args.skip_training and l_Args.dataset is None:
+    #    raise SystemExit("Dataset path is required unless --skip-training is supplied.")
 
     random.seed(l_Args.seed)
     torch.manual_seed(l_Args.seed)
