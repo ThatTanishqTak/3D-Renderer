@@ -21,6 +21,7 @@ python "%SCRIPT_DIR%generate_ai_sample_model.py" --output "%MODEL_PATH%"
 
 if errorlevel 1 (
     echo Model generation failed. Please review the Python output above for details.
+    pause
     exit /b 1
 )
 

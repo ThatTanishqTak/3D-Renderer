@@ -7,11 +7,14 @@ namespace Trident
     /**
      * @brief Describes a high-level script attachment for runtime behaviour.
      *
-     * Each entity can reference an external script (Lua, Python, C#, etc.) via a
-     * file path or identifier. The engine does not execute the script directly yet;
+     * Each entity can reference an external script (Lua) via a
+     * file path or identifier. The engine does not execute the script directly yet
      * instead, the Scene runtime toggles the execution flags so a scripting layer
      * can consume the state. Future work can integrate a scripting VM that looks up
      * and executes the referenced asset when m_IsRunning becomes true.
+     * 
+     * THIS WAS PLANNED BUT NOT WORKED UPON AS IT'S NOT NEECESSARY FOR THE PROJECT
+     * 
      */
     struct ScriptComponent
     {

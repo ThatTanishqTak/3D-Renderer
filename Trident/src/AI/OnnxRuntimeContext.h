@@ -27,7 +27,7 @@ namespace Trident
          * top when the engine eventually grows more demanding machine learning
          * features.
          */
-        class OnnxRuntimeContext final
+        class OnnxRuntimeContext
         {
         public:
             /**

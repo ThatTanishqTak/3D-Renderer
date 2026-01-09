@@ -76,7 +76,7 @@ private:
     bool SaveScene(const std::filesystem::path& path);
     bool LoadScene(const std::filesystem::path& path);
 
-    // Unity-like helpers
+    // helpers
     void FrameSelection();
     static glm::vec3 ForwardFromYawPitch(float yawDeg, float pitchDeg);
     void HandleSceneHierarchyContextMenu(const ImVec2& min, const ImVec2& max);

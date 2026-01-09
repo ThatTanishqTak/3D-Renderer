@@ -721,10 +721,10 @@ void ApplicationLayer::CreatePrimitiveEntity(PrimitiveType type)
     std::string l_BaseTag = "Primitive";
     switch (type)
     {
-    case PrimitiveType::Cube: l_BaseTag = "Cube"; break;
-    case PrimitiveType::Sphere: l_BaseTag = "Sphere"; break;
-    case PrimitiveType::Quad: l_BaseTag = "Quad"; break;
-    default: break;
+        case PrimitiveType::Cube: l_BaseTag = "Cube"; break;
+        case PrimitiveType::Sphere: l_BaseTag = "Sphere"; break;
+        case PrimitiveType::Quad: l_BaseTag = "Quad"; break;
+        default: break;
     }
 
     Trident::TagComponent& l_TagComponent = l_Registry.AddComponent<Trident::TagComponent>(l_NewEntity);

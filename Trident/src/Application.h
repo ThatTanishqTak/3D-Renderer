@@ -32,7 +32,7 @@ namespace Trident
         void OnEvent(Events& event);
 
         /**
-        Allows hosts to swap in their own layer before Run() executes, keeping the core engine agnostic of gameplay code.
+         Allows hosts to swap in their own layer before Run() executes, keeping the core engine agnostic of gameplay code.
          */
         void SetActiveLayer(std::unique_ptr<Layer> layer);
 

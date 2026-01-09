@@ -8,27 +8,27 @@ rem          project generation so asset/model creation can be handled by
 rem          dedicated tooling.
 rem ============================================================================
 
-set SCRIPT_DIR=%~dp0
-set SOURCE_DIR=%SCRIPT_DIR%..\
-set BUILD_DIR=%SCRIPT_DIR%..\Build
+setlocal
+
+rem Use local variables with explicit quoting to avoid argument parsing issues.
+set "ScriptDir=%~dp0"
+set "SourceDir=%ScriptDir%.."
+set "BuildDir=%ScriptDir%..\Build"
 
 rem Ensure the build directory exists before invoking CMake.
-if not exist "%BUILD_DIR%" (
-    echo Creating build directory at %BUILD_DIR%.
-    mkdir "%BUILD_DIR%"
+if not exist "%BuildDir%" (
+    echo Creating build directory at %BuildDir%.
+    mkdir "%BuildDir%"
 )
 
 rem Generate the Visual Studio 2022 project files targeting the MSVC toolset
 rem with C++20 language features enabled.
-cmake -S "%SOURCE_DIR%" -B "%BUILD_DIR%" ^
-    -G "Visual Studio 17 2022" ^
-    -A x64 ^
-    -DCMAKE_CXX_STANDARD=20 ^
-    -DCMAKE_CXX_STANDARD_REQUIRED=ON
+rem Run CMake as a single line to prevent caret or spacing issues on Windows.
+cmake -S "%SourceDir%" -B "%BuildDir%" -G "Visual Studio 17 2022" -A x64 -DCMAKE_CXX_STANDARD=20 -DCMAKE_CXX_STANDARD_REQUIRED=ON
 
 if errorlevel 1 (
     echo Project generation failed. Please review the output above for details.
-    pase
+    pause
     exit /b 1
 )
 

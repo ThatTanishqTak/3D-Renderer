@@ -121,6 +121,7 @@ namespace Trident
             void ResetState();
             void WorkerLoop();
 
+        private:
             std::string m_ModelKey{};                                   // Identifier supplied to OnnxRuntimeContext.
             AI::OnnxRuntimeContext* m_RuntimeContext = nullptr;          // Pointer to the shared runtime controller.
             bool m_IsInitialised = false;                                // Guard flag checked before scheduling inference.
