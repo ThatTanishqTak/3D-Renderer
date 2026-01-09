@@ -162,7 +162,7 @@ namespace Trident
             }
 
             const OrtApi& l_Api = Ort::GetApi();
-            const OrtStatus* l_Status = l_Api.SessionOptionsAppendExecutionProvider(m_DefaultSessionOptions, l_Normalized.c_str(), nullptr);
+            const OrtStatus* l_Status = l_Api.SessionOptionsAppendExecutionProvider(m_DefaultSessionOptions, l_Normalized.c_str(), nullptr, nullptr, 0);
             if (l_Status != nullptr)
             {
                 //Ort::ThrowOnError(l_Status);
@@ -464,7 +464,7 @@ namespace Trident
             ResetSessionOptions();
 
             const OrtApi& l_Api = Ort::GetApi();
-            const OrtStatus* l_Status = l_Api.SessionOptionsAppendExecutionProvider(m_DefaultSessionOptions, l_SelectedProvider.c_str(), nullptr);
+            const OrtStatus* l_Status = l_Api.SessionOptionsAppendExecutionProvider(m_DefaultSessionOptions, l_SelectedProvider.c_str(), nullptr, nullptr, 0);
             if (l_Status != nullptr)
             {
                 //Ort::ThrowOnError(l_Status);
