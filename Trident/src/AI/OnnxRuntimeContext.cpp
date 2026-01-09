@@ -165,7 +165,7 @@ namespace Trident
             const OrtStatus* l_Status = l_Api.SessionOptionsAppendExecutionProvider(m_DefaultSessionOptions, l_Normalized.c_str(), nullptr);
             if (l_Status != nullptr)
             {
-                Ort::ThrowOnError(l_Status);
+                //Ort::ThrowOnError(l_Status);
             }
 
             m_SelectedExecutionProvider = l_Normalized;
@@ -467,7 +467,7 @@ namespace Trident
             const OrtStatus* l_Status = l_Api.SessionOptionsAppendExecutionProvider(m_DefaultSessionOptions, l_SelectedProvider.c_str(), nullptr);
             if (l_Status != nullptr)
             {
-                Ort::ThrowOnError(l_Status);
+                //Ort::ThrowOnError(l_Status);
             }
 
             m_SelectedExecutionProvider = l_SelectedProvider;

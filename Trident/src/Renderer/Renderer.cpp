@@ -838,6 +838,9 @@ namespace Trident
 
     void Renderer::ProcessAiFrame()
     {
+        // Attempt to release readback buffers when they were disabled without forcing a device-wide wait.
+        TryCompleteReadbackDestroy();
+
         m_AiDebugStats.m_ModelInitialised = m_FrameGenerator.IsInitialised();
         m_AiDebugStats.m_BlendStrength = m_AiBlendStrength;
         m_AiDebugStats.m_TextureReady = m_AiTextureReady;
@@ -926,6 +929,15 @@ namespace Trident
         }
 
         UploadAiInterpolationToGpu();
+
+        const auto l_Now = std::chrono::steady_clock::now();
+        if (l_Now < m_NextAiInferenceTime)
+        {
+            // Skip submission to throttle AI workload and keep the last valid output active.
+            return;
+        }
+
+        m_NextAiInferenceTime = l_Now + m_AiInferenceThrottleInterval;
 
         std::vector<float> l_FrameReadback;
         if (!TryAcquireRenderedFrame(l_FrameReadback))
@@ -1101,6 +1113,7 @@ namespace Trident
         // Toggle CPU readback resources based on the current feature requirements.
         if (m_ReadbackEnabled == enabled)
         {
+            TryCompleteReadbackDestroy();
             return;
         }
 
@@ -1108,17 +1121,18 @@ namespace Trident
 
         if (m_ReadbackEnabled)
         {
+            m_ReadbackDestroyPending = false;
             RequestReadbackResize(resizeTarget, true);
             ApplyPendingReadbackResize();
 
             return;
         }
 
-        // Clear pending resize requests and release staging buffers when readback is disabled.
-        vkDeviceWaitIdle(Startup::GetDevice());
+        // Clear pending resize requests and schedule staging buffers for deferred release.
         m_ReadbackResizePending = false;
         m_FrameReadbackPending.assign(m_FrameReadbackPending.size(), false);
-        DestroyReadbackResources();
+        m_ReadbackDestroyPending = true;
+        TryCompleteReadbackDestroy();
     }
 
     void Renderer::RequestReadbackResize(VkExtent2D targetExtent, bool force)
@@ -1260,6 +1274,28 @@ namespace Trident
         m_PendingFrameReadbackBytes.clear();
     }
 
+    void Renderer::TryCompleteReadbackDestroy()
+    {
+        if (!m_ReadbackDestroyPending)
+        {
+            return;
+        }
+
+        const uint32_t l_FrameCount = m_Commands.GetFrameCount();
+        VkDevice l_Device = Startup::GetDevice();
+        for (uint32_t it_Frame = 0; it_Frame < l_FrameCount; ++it_Frame)
+        {
+            VkFence l_Fence = m_Commands.GetInFlightFence(it_Frame);
+            if (vkGetFenceStatus(l_Device, l_Fence) == VK_NOT_READY)
+            {
+                return;
+            }
+        }
+
+        DestroyReadbackResources();
+        m_ReadbackDestroyPending = false;
+    }
+
     void Renderer::ResolvePendingReadback(uint32_t imageIndex, std::chrono::system_clock::time_point captureTimestamp)
     {
         if (!m_ReadbackEnabled)
@@ -1274,6 +1310,13 @@ namespace Trident
 
         if (!m_FrameReadbackPending[imageIndex])
         {
+            return;
+        }
+
+        const auto l_Now = std::chrono::steady_clock::now();
+        if (l_Now < m_NextReadbackTime)
+        {
+            // Leave the pending flag set so the newest frame can be resolved later.
             return;
         }
 
@@ -1342,6 +1385,7 @@ namespace Trident
         vkUnmapMemory(l_Device, m_FrameReadbackMemory[imageIndex]);
         m_FrameReadbackPending[imageIndex] = false;
         m_LastReadbackTimestamp = captureTimestamp;
+        m_NextReadbackTime = l_Now + m_ReadbackThrottleInterval;
     }
 
     bool Renderer::EnsureAiTextureResources(VkExtent2D extent)

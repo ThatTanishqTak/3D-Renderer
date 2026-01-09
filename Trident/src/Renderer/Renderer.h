@@ -517,7 +517,12 @@ namespace Trident
         bool m_FrameDatasetCaptureEnabled = false;             // Indicates whether dataset capture is currently running.
         uint32_t m_FrameDatasetCaptureInterval = 1;            // Frequency at which frames are sampled for dataset capture.
         std::filesystem::path m_FrameDatasetCaptureDirectory;  // Target directory for captured dataset artefacts.
+        std::chrono::steady_clock::time_point m_NextReadbackTime{ std::chrono::steady_clock::time_point::min() }; // Next time a readback resolve is allowed.
+        std::chrono::steady_clock::time_point m_NextAiInferenceTime{ std::chrono::steady_clock::time_point::min() }; // Next time an AI inference is allowed.
+        std::chrono::milliseconds m_ReadbackThrottleInterval{ 66 }; // Throttle interval for readback resolves to reduce per-frame overhead.
+        std::chrono::milliseconds m_AiInferenceThrottleInterval{ 66 }; // Throttle interval for AI submissions to decouple from the render loop.
         bool m_ReadbackEnabled = false;                       // Indicates whether CPU readback is currently required by AI or recording.
+        bool m_ReadbackDestroyPending = false;               // True when readback buffers should be destroyed once GPU work completes.
         bool m_ViewportRecordingEnabled = false;               // Tracks whether viewport capture is active.
         uint32_t m_RecordingViewportId = s_InvalidViewportId;  // Active viewport being recorded.
         VkExtent2D m_RecordingExtent{ 0, 0 };                  // Resolution locked for the recording session.
@@ -540,6 +545,7 @@ namespace Trident
         void CreateOrResizeReadbackResources();
         void CreateOrResizeReadbackResources(VkExtent2D targetExtent);
         void DestroyReadbackResources();
+        void TryCompleteReadbackDestroy();
         void ResolvePendingReadback(uint32_t imageIndex, std::chrono::system_clock::time_point captureTimestamp);
         bool EnsureAiTextureResources(VkExtent2D extent);
         void DestroyAiResources();
