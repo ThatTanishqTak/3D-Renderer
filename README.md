@@ -1,6 +1,6 @@
 # 3D-Renderer
 
-![](/Screenshots/Screenshot1.jpg?raw=true)
-![](/Screenshots/Screenshot2.jpg?raw=true)
-![](/Screenshots/Screenshot3.jpg?raw=true)
-![](/Screenshots/Screenshot4.jpg?raw=true)
+![](/Screenshots/Screenshot1.png?raw=true)
+![](/Screenshots/Screenshot2.png?raw=true)
+![](/Screenshots/Screenshot3.png?raw=true)
+![](/Screenshots/Screenshot4.png?raw=true)
