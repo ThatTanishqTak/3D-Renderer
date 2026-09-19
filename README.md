@@ -1,55 +1,101 @@
-# 3D-Renderer
+# 3D Renderer — Trident
 
-3D-Renderer is a C++ real-time rendering project built around a custom engine (`Trident`) and an editor application (`Trident-Forge`). It focuses on modern graphics workflows with Vulkan, interactive tooling through ImGui-based panels, and a content pipeline for assets, shaders, and runtime systems.
+A **C++20/Vulkan rendering project** consisting of the `Trident` engine and the `Trident-Forge` editor.
 
-## Project Structure
+The project explores the systems surrounding an interactive renderer: asset loading, scene editing, animation, frame capture and experimental machine-learning integration.
 
-- `Trident/`: Core rendering and runtime engine.
-- `Trident-Forge/`: Editor executable that uses `Trident` for scene and tooling workflows.
-- `Dataset/`: Project data used by the renderer/editor workflows.
-- `Scripts/`: Utility scripts for setup and project tasks.
-- `Screenshots/`: Captured editor/runtime visuals.
+## Features
 
-## Core Technologies
+* Vulkan mesh rendering with physically based lighting.
+* Directional and point lights.
+* Material colour, metallic and roughness parameters.
+* Skybox and text rendering.
+* Model importing through Assimp.
+* Entity/component scene organisation.
+* Skeletal animation playback, pose evaluation and state-machine infrastructure.
+* Dockable ImGui editor panels and ImGuizmo transform controls.
+* Separate scene and game viewports.
+* Scene saving and loading.
+* Performance capture and FFmpeg-based viewport recording.
+* Dataset capture and experimental ONNX Runtime frame-processing integration.
 
-- Graphics API: Vulkan
-- Language: C++ (CMake-based project)
-- UI/Tools: ImGui + ImGuizmo
-- Asset and media stack: Assimp, FFmpeg, stb, tinyexr, KTX
-- ML runtime integration: ONNX Runtime
+[View editor screenshots](https://github.com/ThatTanishqTak/3D-Renderer/tree/main/Screenshots).
 
-## Build Environment
+## Architecture
 
-This project is intended to be built with CMake on Windows using MSVC.
+| Directory        | Responsibility                                                               |
+| ---------------- | ---------------------------------------------------------------------------- |
+| `Trident/`       | Rendering engine, scene systems, animation, asset loading and AI integration |
+| `Trident-Forge/` | Editor application, panels, shaders and assets                               |
+| `cmake/`         | Dependency setup and compiler tooling                                        |
+| `Scripts/`       | Project utilities                                                            |
+| `Dataset/`       | Captured project data                                                        |
+| `Screenshots/`   | Editor screenshots                                                           |
 
-### Prerequisites
+`Trident` builds as a static library. `Trident-Forge` is the editor executable.
 
-- Visual Studio with MSVC toolchain
-- CMake 3.20+
-- Vulkan SDK (`VULKAN_SDK` environment variable must be set)
+## Requirements
 
-### Configure
+The current dependency setup primarily targets **Windows x64 with MSVC**.
 
-```bash
+* Visual Studio 2022 with C++ development tools.
+* CMake 3.20 or newer.
+* Vulkan SDK with `VULKAN_SDK` configured.
+* `glslangValidator` available for shader compilation.
+* Git and Git LFS.
+* Network access during dependency configuration.
+
+The build combines Git submodules, CMake-fetched dependencies and bundled SDK files. GLFW and ImGui are fetched during configuration; FFmpeg may also be downloaded if its development files are missing.
+
+## Build
+
+```powershell
+git clone --recurse-submodules https://github.com/ThatTanishqTak/3D-Renderer.git
+cd 3D-Renderer
+git lfs pull
+
 cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+cmake --build build --config Release --target Trident-Forge
 ```
 
-### Build
+Run the editor from its output directory:
 
-```bash
-cmake --build build --config Release
+```powershell
+cd build/Trident-Forge/Release
+.\Trident-Forge.exe
 ```
 
-## What You Get
+Keep `Assets` beside the executable. Required ONNX Runtime, FFmpeg and KTX runtime libraries must also be available beside the executable or through `PATH`.
 
-- A reusable rendering engine library (`Trident`)
-- An editor/runtime executable (`Trident-Forge`)
-- Shader and asset staging integrated into the build pipeline
-- Runtime dependency copying for editor execution
+If configuration reports a Git LFS pointer instead of a library, run `git lfs pull` before retrying.
 
-## Screenshots
+## Using the Editor
 
-![Screenshot 1](/Screenshots/Screenshot1.png?raw=true)
-![Screenshot 2](/Screenshots/Screenshot2.png?raw=true)
-![Screenshot 3](/Screenshots/Screenshot3.png?raw=true)
-![Screenshot 4](/Screenshots/Screenshot4.png?raw=true)
+* Use the scene hierarchy and inspector to inspect entities and components.
+* Use viewport gizmos to adjust transforms.
+* Browse assets through the content browser.
+* Open and save scenes through the File menu.
+* Use the toolbar to control scene playback.
+* Configure dataset capture or clip export through the toolbar controls.
+
+Clip export requires a runtime camera and a valid game viewport.
+
+## Experimental ONNX Integration
+
+The engine includes model discovery, inference, diagnostics and frame-dataset recording.
+
+**A trained `.onnx` model is not included in the repository.** The default discovery path looks for `Assets/AI/frame_generator.onnx` under its search roots. A supplied model must match the input/output conventions expected by the implementation.
+
+This integration should be treated as experimental. Its presence does not establish a particular frame-generation quality or performance result.
+
+## Current Limitations
+
+* The build depends on several Windows-specific SDK and library conventions.
+* Some material texture channels remain unfinished.
+* Animation tooling and AI workflows are still evolving.
+* Runtime dependency staging needs further consolidation.
+* Rendering performance and model behaviour depend on the supplied scene, assets and hardware.
+
+## License
+
+Licensed under the [Apache License 2.0](LICENSE). Dependencies and bundled third-party components retain their respective licences.
